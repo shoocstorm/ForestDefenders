@@ -20,14 +20,19 @@ export class HUD {
         .fd-gold{color:#ffd24a;font-size:20px;font-weight:800;}
         .fd-gold.pulse{animation:fdpulse .35s ease;}
         @keyframes fdpulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-        #fd-cross{position:absolute;left:50%;top:50%;width:18px;height:18px;
-          transform:translate(-50%,-50%);}
+        #fd-reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+          transition:transform .12s ease;will-change:left,top;}
+        #fd-cross{position:absolute;left:-9px;top:-9px;width:18px;height:18px;}
         #fd-cross::before,#fd-cross::after{content:"";position:absolute;background:#eaf7dfcc;
-          box-shadow:0 0 3px #000a;}
+          box-shadow:0 0 3px #000a;transition:background .12s;}
         #fd-cross::before{left:8px;top:0;width:2px;height:18px;}
         #fd-cross::after{top:8px;left:0;height:2px;width:18px;}
-        #fd-dot{position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;
-          background:#ff5a5a;transform:translate(-50%,-50%);box-shadow:0 0 4px #000;}
+        #fd-dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;
+          background:#ff5a5a;box-shadow:0 0 4px #000;transition:background .12s;}
+        #fd-reticle.locked{transform:translate(-50%,-50%) scale(1.3);}
+        #fd-reticle.locked #fd-cross::before,#fd-reticle.locked #fd-cross::after{
+          background:#ff7a4a;box-shadow:0 0 7px #ff3a1acc;}
+        #fd-reticle.locked #fd-dot{background:#ffe04a;box-shadow:0 0 6px #ffae00;}
         #fd-vignette{position:absolute;inset:0;pointer-events:none;opacity:0;
           box-shadow:inset 0 0 160px 40px #c01818;transition:opacity .1s;}
         .fd-shwrap{width:180px;height:8px;background:#00000055;border-radius:6px;overflow:hidden;
@@ -69,7 +74,7 @@ export class HUD {
         <div style="font-size:16px;font-weight:800;" id="fd-weapon">Acorn Gun</div>
         <div class="fd-label">AMMO <span id="fd-ammo">&infin;</span> &middot; NATURE</div>
       </div>
-      <div id="fd-cross"></div><div id="fd-dot"></div>
+      <div id="fd-reticle"><div id="fd-cross"></div><div id="fd-dot"></div></div>
     `;
     document.body.appendChild(root);
     this.root = root;
@@ -86,8 +91,24 @@ export class HUD {
     this.waveEl = root.querySelector('#fd-wave');
     this.savedEl = root.querySelector('#fd-saved');
     this.banner = root.querySelector('#fd-banner');
+    this.reticle = root.querySelector('#fd-reticle');
     this._lastGold = 0;
     this._lastBuffs = '';
+    this._lastLock = false;
+  }
+
+  // Position the reticle at a screen pixel (x, y); `locked` highlights it when an
+  // enemy is targeted; hidden when the aim point is behind the camera / off-screen.
+  setCrosshair(x, y, locked, visible) {
+    const r = this.reticle;
+    if (!visible) { r.style.display = 'none'; return; }
+    r.style.display = '';
+    r.style.left = x + 'px';
+    r.style.top = y + 'px';
+    if (locked !== this._lastLock) {
+      r.classList.toggle('locked', locked);
+      this._lastLock = locked;
+    }
   }
 
   showBanner(text) {

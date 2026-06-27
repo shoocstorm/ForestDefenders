@@ -107,6 +107,21 @@ export const COMBAT = {
   GOLD_MIN: 1, GOLD_MAX: 5,
 };
 
+// Aim assist (soft lock-on): each step the view is gently rotated so the crosshair
+// settles onto the enemy nearest screen-center (within a forward cone + range), and
+// the shot is fired from the muzzle straight at that enemy so it connects. The pull
+// strengthens as the target nears the crosshair (sticky) and releases when you look
+// away, so mouse-look stays in control.
+export const AIM_ASSIST = {
+  ENABLED: true,
+  CONE_DEG: 16,        // half-angle of the assist cone around the camera aim ray
+  RANGE: 55,           // max target distance (world units)
+  TARGET_Y: 1.0,       // aim height above an enemy's foot position (torso)
+  PULL_MIN: 4,         // crosshair pull (damp λ) at the cone edge
+  PULL_MAX: 16,        // crosshair pull (damp λ) dead-centre (firm lock)
+  RETICLE_DIST: 40,    // reticle distance down the aim ray when no enemy is locked
+};
+
 export const JUICE = {
   IMPACT_FREEZE: 0.05, IMPACT_RESTORE: 0.07,
   HIT_STOP: 0.04, HIT_STOP_DUR: 0.08,
@@ -141,6 +156,10 @@ export const BUFFS = {
   SPEED_MULT: 1.15,     // Rabbit: +15% move speed
   // REVEAL: Bird → enemies marked on HUD (flag only)
 };
+
+// Instant reward when an animal is freed: gold + HP healed (on top of its buff).
+// Per-animal overrides via ANIMALS.*.rewardGold / rewardHp.
+export const RESCUE_REWARD = { GOLD: 15, HP: 25 };
 
 // Rescue scoring (ANIMALS_SPEC §6): saved/total → rank → bonus gold.
 export const RESCUE_RANKS = [

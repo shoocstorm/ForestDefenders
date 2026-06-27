@@ -65,12 +65,17 @@ export class EnemyBase {
     if (def.scale) this.group.scale.setScalar(def.scale); // boss is a bigger body
   }
 
-  // Subclasses call this with a buildMushroom(...) result.
-  attachModel({ group, capPivot, emissives }) {
+  // Subclasses call this with a buildMushroom(...) result. The optional
+  // `mixer`/`actions` let authored GLB clips (idle/walk/attack/hit) drive the
+  // enemy; when present, the manual cap bob is skipped to avoid fighting the clip.
+  attachModel({ group, capPivot, emissives, mixer, actions }) {
     this.root = group;
-    this.capPivot = capPivot;
+    this.capPivot = mixer ? null : capPivot; // clip owns the bob when animating
     this._emissives = emissives;
     this._baseEmissive = emissives.map((m) => m.emissiveIntensity ?? 0);
+    this.mixer = mixer || null;
+    this.actions = actions || {};
+    this._hasAnim = !!mixer;
     this.group.add(group);
   }
 
@@ -82,7 +87,10 @@ export class EnemyBase {
     const final = baseDamage * mult;
     this.health.takeDamage(final);
     this._hitFlash = 1;
-    if (this._deathT < 0) this._squash = 1;
+    if (this._deathT < 0) {
+      this._squash = 1;
+      this._playClip('hit', 0.05);
+    }
 
     let label = null, color = '#ffffff';
     if (mult >= 2.0) { label = 'WEAK!'; color = '#7fff6a'; }
@@ -135,6 +143,7 @@ export class EnemyBase {
     if (this.state === STATE.ATTACK && this._attackTimer <= 0) {
       this.performAttack(ctx, target, _to, dist);
       this._attackTimer = this.attackCooldown;
+      this._playClip('attack');
     }
 
     // Face the player (XZ).
@@ -207,7 +216,21 @@ export class EnemyBase {
     return out;
   }
 
-  // --- Visual feedback: idle cap bob, hit flash decay, hit squash spring. ---
+  // Crossfade to an authored clip if present (one-shots reset + clamp).
+  _playClip(name, fade = 0.18) {
+    const a = this.actions[name];
+    if (!a || a === this._curClip) return;
+    if (name === 'attack' || name === 'hit' || name === 'dying') {
+      a.reset().setLoop(THREE.LoopOnce, 1).clampWhenFinished = true;
+    }
+    if (this._curClip) this._curClip.fadeOut(fade);
+    a.setEffectiveWeight(1).fadeIn(fade).play();
+    this._curClip = a;
+    this._curName = name;
+    this._curIsOneShot = name === 'attack' || name === 'hit' || name === 'dying';
+  }
+
+  // --- Visual feedback: authored clips, hit flash decay, hit squash spring. ---
   _animate(dt) {
     // Hit flash → spike emissive then decay.
     if (this._hitFlash > 0) {
@@ -222,9 +245,19 @@ export class EnemyBase {
       const sq = this._squash;
       this.root?.scale.set(1 + 0.3 * sq, 1 - 0.35 * sq, 1 + 0.3 * sq);
     }
-    // Idle cap breathing bob + recover any attack lunge tilt.
-    if (this.capPivot) {
-      this.capPivot.position.y = 0.7 + Math.sin(this._animTime * 3) * 0.04;
+    // Authored clips: walk while pursuing, idle otherwise (the clip bobs the cap).
+    if (this.mixer) {
+      this.mixer.update(dt);
+      // Don't let locomotion cut a playing attack/hit one-shot short.
+      const oneShotBusy = this._curIsOneShot && this._curClip?.isRunning();
+      if (this._deathT < 0 && !oneShotBusy && this.actions.walk && this.actions.idle) {
+        const moving = this.state === STATE.PURSUE && this.velocity.lengthSq() > 0.5;
+        this._playClip(moving ? 'walk' : 'idle', 0.2);
+      }
+    } else if (this.capPivot) {
+      // Fallback procedural bob for models without authored clips.
+      this.capPivot.position.y = (this.capPivot.userData.baseY ?? this.capPivot.position.y) +
+        Math.sin(this._animTime * 3) * 0.04;
       this.capPivot.rotation.x = damp(this.capPivot.rotation.x, 0, 8, dt);
     }
   }
@@ -243,6 +276,8 @@ export class EnemyBase {
     else ctx.juice.impactFreeze();
     ctx.onEnemyDied?.(this);
     this._deathT = 0;
+    // Freeze authored clips so the manual squash-flop death owns the pose.
+    this.mixer?.stopAllAction();
   }
 
   // Keyframed squash → stretch → bounce → pop, then retire (JUICE_SPEC §9).

@@ -55,7 +55,8 @@ src/
     Player.js           camera-relative movement, jump+double-jump, facing, locomotion animator; holds hp/maxHp; owns Acorn weapon + takeDamage (i-framed, respawns at 0)
     EnemyBase.js        HealthComponent + PURSUE/ATTACK AI, boids separation, anti-stuck veer, hit-squash/flash, death sequence (gold+spore+freeze+squash-flop), level scaling
     enemies/
-      MushroomModel.js  buildMushroom() — shared procedural cap/stem/face/gills/spots/prop (twig|flame)
+      MushroomModel.js  buildMushroom() — wood/boss/glow clone their GLB; FIRE/EARTH dispatch to ProceduralMushroom
+      ProceduralMushroom.js  buildProceduralMushroom() — fire/earth built from primitives (cap/stem/face/legs/arms/prop) with real AnimationClips (idle/walk/attack/hit/dying) on a mixer; replaces the >2MB fire/earth GLBs
       WoodShroom.js     WOOD melee (vine slash)
       FireShroom.js     FIRE ranged (lobs enemy-team fireball projectile)
   combat/

@@ -10,10 +10,7 @@ export class WoodShroom extends EnemyBase {
   }
 
   buildModel() {
-    this.attachModel(buildMushroom({
-      capColor: 0x3f8f3a, stemColor: 0x7a6a45, spotColor: 0xbfe88a,
-      emissiveColor: 0x2f7a1a, prop: 'twig',
-    }));
+    this.attachModel(buildMushroom('WOOD_SHROOM'));
   }
 
   performAttack(ctx, target, toTarget, dist) {

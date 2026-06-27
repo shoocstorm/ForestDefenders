@@ -14,10 +14,7 @@ export class FireShroom extends EnemyBase {
   }
 
   buildModel() {
-    this.attachModel(buildMushroom({
-      capColor: 0xc0392b, stemColor: 0x8a4a3a, spotColor: 0xffb24a,
-      emissiveColor: 0xff5a1a, prop: 'flame',
-    }));
+    this.attachModel(buildMushroom('FIRE_SHROOM'));
   }
 
   performAttack(ctx, target, toTarget, dist) {

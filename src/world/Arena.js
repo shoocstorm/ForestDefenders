@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { ARENA } from '../config/Constants.js';
+import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
+import { toon } from '../materials/CelMaterial.js';
+import { clone } from '../core/Assets.js';
 import { Vegetation } from './Vegetation.js';
 import { Water } from './Water.js';
 import { Lanterns } from './Lanterns.js';
-import { BLOOM_LAYER } from '../config/Constants.js';
 
 // Misty Forest arena (LEVELS_SPEC L1). M1 scope: ground, sky, fog, lighting,
 // boundary, scattered trees, a raised central platform with stairs, and a
@@ -69,7 +70,7 @@ export class Arena {
     // --- Ground ---
     const groundGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH, 1, 1);
     groundGeo.rotateX(-Math.PI / 2);
-    const groundMat = new THREE.MeshToonMaterial({ color: 0x4f7a3a });
+    const groundMat = toon({ color: 0x4f7a3a, rim: { color: 0x8fcf6a, intensity: 0.3 } });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.receiveShadow = true;
     scene.add(ground);
@@ -77,7 +78,7 @@ export class Arena {
     // Stone path down the center lane (visual).
     const pathGeo = new THREE.PlaneGeometry(4.2, ARENA.LENGTH - 6);
     pathGeo.rotateX(-Math.PI / 2);
-    const path = new THREE.Mesh(pathGeo, new THREE.MeshToonMaterial({ color: 0x7d8a72 }));
+    const path = new THREE.Mesh(pathGeo, toon({ color: 0x8a9a7e, rim: { color: 0xcfe0c0, intensity: 0.35 } }));
     path.position.y = 0.01;
     path.receiveShadow = true;
     scene.add(path);
@@ -96,6 +97,9 @@ export class Arena {
     // --- Raised central platform + stairs ---
     this._platform();
 
+    // --- Scattered GLB props: landmark trees, rocks, stumps, ferns (set pieces) ---
+    this._scatterProps();
+
     // --- Boss-end landmark: giant violet mushroom ---
     this._bossLandmark();
 
@@ -110,7 +114,7 @@ export class Arena {
   }
 
   _boundary() {
-    const mat = new THREE.MeshToonMaterial({ color: 0x2f5a2c });
+    const mat = toon({ color: 0x2f5a2c, rim: { color: 0x4f8a3c, intensity: 0.3 } });
     const hx = ARENA.WIDTH / 2, hz = ARENA.LENGTH / 2;
     const make = (w, d, x, z) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), mat);
@@ -163,7 +167,7 @@ export class Arena {
     const h = ARENA.PLATFORM_HEIGHT;
     const top = new THREE.Mesh(
       new THREE.BoxGeometry(10, h, 10),
-      new THREE.MeshToonMaterial({ color: 0x6b7d5a })
+      toon({ color: 0x6b7d5a, rim: { color: 0xcfe0b0, intensity: 0.35 } })
     );
     top.position.set(0, h / 2, 4);
     top.castShadow = true; top.receiveShadow = true;
@@ -171,7 +175,7 @@ export class Arena {
     // Mossy top cap
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(10.2, 0.2, 10.2),
-      new THREE.MeshToonMaterial({ color: 0x5a8a3f })
+      toon({ color: 0x5a8a3f, rim: { color: 0xbfe88a, intensity: 0.4 }, wind: { base: 0.0, freq: 2.4, amp: 0.02 } })
     );
     cap.position.set(0, h + 0.1, 4);
     this.scene.add(cap);
@@ -179,7 +183,7 @@ export class Arena {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const pil = new THREE.Mesh(
         new THREE.CylinderGeometry(0.4, 0.45, h + 1.2, 8),
-        new THREE.MeshToonMaterial({ color: 0x8a8475 })
+        toon({ color: 0x8a8475, rim: { color: 0xcfe0c0, intensity: 0.3 } })
       );
       pil.position.set(sx * 4.4, (h + 1.2) / 2, 4 + sz * 4.4);
       pil.castShadow = true;
@@ -198,7 +202,7 @@ export class Arena {
       const z = 4 - 5 - i * 1.0;
       const step = new THREE.Mesh(
         new THREE.BoxGeometry(3, sh, 1.0),
-        new THREE.MeshToonMaterial({ color: 0x7d7363 })
+        toon({ color: 0x7d7363, rim: { color: 0xcfe0c0, intensity: 0.3 } })
       );
       step.position.set(0, sh / 2, z);
       step.castShadow = true; step.receiveShadow = true;
@@ -208,40 +212,78 @@ export class Arena {
     this.platform = top;
   }
 
+  // "Corrupted Spore Grove" — a colossal mushroom at the east end (LEVELS_SPEC §5.2).
+  // Built from the authored boss_mushroom.glb, scaled to a towering landmark and
+  // bathed in a violet bloom + point light so it reads as the corrupted source.
   _bossLandmark() {
-    const g = new THREE.Group();
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.2, 1.8, 7, 12),
-      new THREE.MeshToonMaterial({ color: 0xe8dcc0 })
-    );
-    stem.position.y = 3.5;
-    stem.castShadow = true;
-    g.add(stem);
-    const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(4.5, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshToonMaterial({ color: 0x7a3fa0, emissive: 0x5a1f80, emissiveIntensity: 1.1 })
-    );
-    cap.position.y = 7;
-    cap.castShadow = true;
-    cap.layers.enable(BLOOM_LAYER);
-    g.add(cap);
-    // Glowing spots (bloom accents)
-    for (let i = 0; i < 10; i++) {
-      const spot = new THREE.Mesh(
-        new THREE.SphereGeometry(randRange(0.3, 0.6), 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xc89bff })
-      );
-      const a = randRange(0, Math.PI * 2), r = randRange(1.5, 3.8);
-      spot.position.set(Math.cos(a) * r, 7 + randRange(0.5, 2.5), Math.sin(a) * r * 0.5);
-      spot.layers.enable(BLOOM_LAYER);
-      g.add(spot);
-    }
-    g.position.set(0, 0, ARENA.LENGTH / 2 - 4);
-    this.scene.add(g);
-    // Eerie glow light
-    const glow = new THREE.PointLight(0xa060ff, 30, 30, 2);
-    glow.position.set(0, 8, ARENA.LENGTH / 2 - 4);
+    const boss = clone('bossShroom');
+    const box = new THREE.Box3().setFromObject(boss);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const targetH = 7.5;
+    const s = targetH / Math.max(0.001, size.y);
+    boss.scale.setScalar(s);
+    boss.position.y = -box.min.y * s;
+    boss.position.z = ARENA.LENGTH / 2 - 5;
+    // Put every mesh on the bloom layer so its emissive surfaces glow.
+    boss.traverse((o) => {
+      if (o.isMesh) {
+        o.layers.enable(BLOOM_LAYER);
+        if (o.material) {
+          o.material.emissive = new THREE.Color(0x6a1f9a);
+          o.material.emissiveIntensity = Math.max(0.6, o.material.emissiveIntensity ?? 0);
+        }
+      }
+    });
+    this.scene.add(boss);
+    // Eerie violet glow light over the grove.
+    const glow = new THREE.PointLight(0xa060ff, 40, 34, 2);
+    glow.position.set(0, 6, ARENA.LENGTH / 2 - 5);
     this.scene.add(glow);
+    // Orbiting spore motes for atmosphere (bloom accents).
+    const moteGeo = new THREE.SphereGeometry(0.16, 8, 8);
+    for (let i = 0; i < 14; i++) {
+      const mote = new THREE.Mesh(moteGeo, new THREE.MeshBasicMaterial({ color: 0xc89bff }));
+      const a = randRange(0, Math.PI * 2), r = randRange(1.5, 4.5);
+      mote.position.set(Math.cos(a) * r, 3 + randRange(0, 4.5), ARENA.LENGTH / 2 - 5 + Math.sin(a) * r * 0.5);
+      mote.layers.enable(BLOOM_LAYER);
+      this.scene.add(mote);
+    }
+  }
+
+  // Scatter authored GLB props across the glades (LEVELS_SPEC §5.6 clustered
+  // foliage + §3 obstacles). Landmark ancient trees flank the platform; rocks,
+  // mossy stumps and ferns break up the ground. Colliders added for the big ones.
+  _scatterProps() {
+    const scene = this.scene;
+    const place = (key, x, z, s, rot, colliderR = 0) => {
+      const g = clone(key);
+      const box = new THREE.Box3().setFromObject(g);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const sc = s / Math.max(0.001, size.y);
+      g.scale.setScalar(sc);
+      g.position.set(x, -box.min.y * sc, z);
+      g.rotation.y = rot;
+      scene.add(g);
+      if (colliderR > 0) this.colliders.push({ type: 'cylinder', x, z, r: colliderR });
+      return g;
+    };
+
+    // Two towering ancient trees flanking the central platform (landmarks).
+    place('ancientTree', -8, 4, 5.5, 0.6, 0.6);
+    place('ancientTree', 8, 4, 5.5, -0.5, 0.6);
+    // A few pines near the player start for framing.
+    place('pine', -4, -26, 4.0, 0.3, 0.4);
+    place('pine', 5, -24, 4.6, -0.2, 0.4);
+
+    // Scatter smaller props (rocks, stumps, ferns) off the lane — no colliders.
+    const propKeys = ['rock', 'mossStump', 'fern', 'fern', 'grass', 'rock', 'crystalRock'];
+    for (let i = 0; i < 26; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const x = side * randRange(4.5, ARENA.WIDTH / 2 - 1);
+      const z = randRange(-ARENA.LENGTH / 2 + 5, ARENA.LENGTH / 2 - 8);
+      const key = propKeys[Math.floor(Math.random() * propKeys.length)];
+      place(key, x, z, randRange(0.6, 1.2), Math.random() * Math.PI * 2);
+    }
   }
 
   _spawnRing(x, z) {

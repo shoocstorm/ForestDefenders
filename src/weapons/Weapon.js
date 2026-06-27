@@ -11,6 +11,7 @@ export class Weapon {
     this.element = def.element;
     this._cd = 0;          // seconds until next shot allowed
     this._wasFiring = false;
+    this.justFired = false; // set true on the step a shot actually fires (read+reset by caller)
   }
 
   // dt: scaled sim delta. firing: trigger held this step. ctx: fire context
@@ -18,9 +19,11 @@ export class Weapon {
   update(dt, firing, ctx) {
     if (this._cd > 0) this._cd -= dt;
     const edge = firing && !this._wasFiring;
+    this.justFired = false;
     if (firing && this._cd <= 0 && (this.def.automatic || edge)) {
       this._fire(ctx);
       this._cd = this.def.cooldown;
+      this.justFired = true;
     }
     this._wasFiring = firing;
   }

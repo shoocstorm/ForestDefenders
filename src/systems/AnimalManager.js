@@ -10,10 +10,13 @@ export class AnimalManager {
     this.total = 3;
     this.animals = ['HEDGEHOG', 'BIRD', 'RABBIT'].map((k) => new Animal(scene, ANIMALS[k]));
     this.nearestCaged = null; // current [E] FREE prompt target
+    this.rescued = 0;         // animals freed (removed from the list, so tallied here)
   }
 
-  get savedCount() { return this.animals.filter((a) => a.state !== 'DEAD').length; }
-  get freedCount() { return this.animals.filter((a) => a.state === 'FREE').length; }
+  // Rescued animals are removed once they float away, so they're counted via the
+  // tally; still-caged animals remain safe and count too.
+  get savedCount() { return this.rescued + this.animals.filter((a) => a.state === 'CAGED').length; }
+  get freedCount() { return this.rescued; }
 
   update(dt, ctx) {
     ctx.animals = this.animals;
@@ -34,6 +37,7 @@ export class AnimalManager {
     if (this.nearestCaged && ctx.input &&
         (ctx.input.wasPressed('KeyE') || ctx.input.wasPressed('KeyF'))) {
       this.nearestCaged.free(ctx);
+      this.rescued += 1;
       this.nearestCaged = null;
     }
   }

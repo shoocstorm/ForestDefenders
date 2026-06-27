@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA, VEGETATION } from '../config/Constants.js';
+import { toon } from '../materials/CelMaterial.js';
 
 // Stylized procedural trees (threejs-procedural-vegetation, adapted to the cel look).
 // A tree is a growth hierarchy — a curved segmented trunk, branches at stratified
 // heights with permuted angles, and rounded canopy clumps — merged into two
 // geometries (bark + foliage) per tree for a tight draw-call budget. Variation is
-// deterministic from a seed (controlled variation, not species drift). Wind is a
-// single explicit scope: whole-tree base sway, applied per-tree in update().
+// deterministic from a seed (controlled variation, not species drift). Wind is
+// shader-driven canopy sway (CelMaterial wind), so update() only advances time.
 
 function mulberry32(a) {
   return function () {
@@ -17,8 +18,6 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-const toon = (color, opts = {}) => new THREE.MeshToonMaterial({ color, ...opts });
 
 // Species table (length/radius/taper/branch/canopy character).
 const SPECIES = {
@@ -126,7 +125,7 @@ export class Vegetation {
 
   _outline(mesh) {
     const o = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({ color: 0x12200f, side: THREE.BackSide }));
-    o.scale.setScalar(1.04);
+    o.scale.setScalar(1.035);
     mesh.add(o);
   }
 
@@ -140,34 +139,34 @@ export class Vegetation {
       const x = side * (lane + this.rng() * (ARENA.WIDTH / 2 - lane - 1.2));
       const z = -ARENA.LENGTH / 2 + 4 + this.rng() * (ARENA.LENGTH - 12);
 
-      const { barkGeo, leafGeo, trunkR } = this._buildTree(spec, scale);
+      const { barkGeo, leafGeo, trunkR, trunkH } = this._buildTree(spec, scale);
       const group = new THREE.Group();
       group.position.set(x, 0, z);
       group.rotation.y = this.rng() * Math.PI * 2;
 
-      const barkMesh = new THREE.Mesh(barkGeo, toon(spec.bark));
+      const barkMesh = new THREE.Mesh(barkGeo, toon({ color: spec.bark, rim: { color: 0x88aa66, intensity: 0.3 } }));
       barkMesh.castShadow = true; barkMesh.receiveShadow = true;
       this._outline(barkMesh);
       group.add(barkMesh);
 
-      const leafMesh = new THREE.Mesh(leafGeo, toon(this.rng() < 0.5 ? spec.leaf : spec.leaf2));
+      // Canopy gets shader-driven wind sway (CelMaterial wind) keyed to the
+      // instance world position so trees don't sync up, plus an ambient-green rim.
+      const leafC = this.rng() < 0.5 ? spec.leaf : spec.leaf2;
+      const leafMesh = new THREE.Mesh(leafGeo, toon({
+        color: leafC, rim: { color: 0xbfe88a, intensity: 0.45 },
+        wind: { base: trunkH * 0.45, freq: 1.5 + this.rng() * 0.6, amp: 0.07 },
+      }));
       leafMesh.castShadow = true;
       this._outline(leafMesh);
       group.add(leafMesh);
 
       this.scene.add(group);
-      this.trees.push({ group, phase: this.rng() * Math.PI * 2, amp: 0.012 + this.rng() * 0.014 });
+      this.trees.push({ group, phase: this.rng() * Math.PI * 2 });
       this.colliders.push({ type: 'cylinder', x, z, r: Math.max(0.4, trunkR * 1.4) });
     }
   }
 
-  // Whole-tree base sway (explicit single wind scope).
-  update(dt) {
-    this._t += dt;
-    for (const t of this.trees) {
-      const s = Math.sin(this._t * 1.1 + t.phase) * t.amp;
-      t.group.rotation.x = s;
-      t.group.rotation.z = Math.cos(this._t * 0.9 + t.phase) * t.amp * 0.7;
-    }
-  }
+  // Wind is shader-driven (CelMaterial.updateTime advances all wind materials);
+  // here we just keep a time reference in case per-tree variation is needed later.
+  update(dt) { this._t += dt; }
 }

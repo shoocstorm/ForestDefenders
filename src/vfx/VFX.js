@@ -61,6 +61,28 @@ export class VFX {
     this.rings.push({ mesh, life, maxLife: life, maxRadius });
   }
 
+  // Chunky debris flung outward with angular spin (VFX_SPEC §2.4).
+  _debris(pos, color, count = 8, size = 0.12, speed = 6) {
+    const chunks = [];
+    const vels = [];
+    const rots = [];
+    for (let i = 0; i < count; i++) {
+      const geo = new THREE.DodecahedronGeometry(size * (0.7 + Math.random() * 0.6), 0);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8, emissive: color, emissiveIntensity: 0.4 });
+      const m = new THREE.Mesh(geo, mat);
+      m.position.copy(pos);
+      m.castShadow = true;
+      this.scene.add(m);
+      const theta = Math.random() * Math.PI * 2;
+      const v = speed * (0.5 + Math.random() * 0.8);
+      vels.push(Math.cos(theta) * v, 4 + Math.random() * speed, Math.sin(theta) * v);
+      rots.push(Math.random() * 10, Math.random() * 10, Math.random() * 10);
+      chunks.push(m);
+    }
+    this.debris = this.debris || [];
+    this.debris.push({ chunks, vels, rots, life: 1.2, maxLife: 1.2, gravity: 14 });
+  }
+
   muzzleFlash(pos, color = 0xc7e08a) {
     this._burst(pos, { count: 10, color, size: 0.16, speed: 4, spread: 0.6, life: 0.18 });
     this._flash(pos, color, 6, 5);
@@ -70,15 +92,18 @@ export class VFX {
     this._burst(pos, { count: 12, color, size: 0.13, speed: 5, spread: 1, life: 0.25 });
   }
 
-  // Simplified universal spore explosion (full version is M4).
+  // Universal spore explosion (VFX_SPEC §2 + ENEMIES_SPEC §7): twin flash
+  // lights, ~520 additive particles (lime + magenta + white-hot core + accent),
+  // 3 stacked shockwaves, and chunky debris. The signature kill moment.
   spore(pos, accentColor = 0xffffff) {
     this._flash(pos, 0xffffff, 26, 15);
     this._flash(pos, accentColor, 18, 11);
-    this._burst(pos, { count: 60, color: 0x9bff5a, size: 0.3, speed: 7, spread: 1, life: 0.6 });
-    this._burst(pos, { count: 50, color: 0xff5ad0, size: 0.26, speed: 6, spread: 1, life: 0.6 });
-    this._burst(pos, { count: 28, color: 0xffffff, size: 0.18, speed: 9, spread: 1, life: 0.45 });
-    this._burst(pos, { count: 24, color: accentColor, size: 0.22, speed: 5, spread: 1, life: 0.55 });
-    for (let i = 0; i < 3; i++) this._shockwave(pos, accentColor, 5.0, 0.4 + i * 0.12);
+    this._burst(pos, { count: 180, color: 0x9bff5a, size: 0.28, speed: 8, spread: 1, life: 0.65 });
+    this._burst(pos, { count: 150, color: 0xff5ad0, size: 0.24, speed: 7, spread: 1, life: 0.6 });
+    this._burst(pos, { count: 110, color: 0xffffff, size: 0.16, speed: 11, spread: 1, life: 0.4 });
+    this._burst(pos, { count: 80, color: accentColor, size: 0.2, speed: 6, spread: 1, life: 0.55 });
+    this._debris(pos, accentColor, 10, 0.14, 7);
+    for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : accentColor, 5.0 + i * 0.5, 0.4 + i * 0.12);
   }
 
   // Celebratory burst when an animal is freed (ANIMALS_SPEC §8) — gold + pink.
@@ -133,6 +158,32 @@ export class VFX {
         const t = 1 - r.life / r.maxLife;
         r.mesh.scale.setScalar(0.5 + t * r.maxRadius);
         r.mesh.material.opacity = 0.7 * (1 - t);
+      }
+    }
+
+    // Debris: fling + spin + gravity + fade, then retire (VFX_SPEC §2.4).
+    if (this.debris) {
+      for (let i = this.debris.length - 1; i >= 0; i--) {
+        const d = this.debris[i];
+        d.life -= dt;
+        if (d.life <= 0) {
+          for (const c of d.chunks) { this.scene.remove(c); c.geometry.dispose(); c.material.dispose(); }
+          this.debris.splice(i, 1);
+          continue;
+        }
+        const fade = d.life / d.maxLife;
+        for (let j = 0; j < d.chunks.length; j++) {
+          const c = d.chunks[j];
+          d.vels[j * 3 + 1] -= d.gravity * dt;
+          c.position.x += d.vels[j * 3] * dt;
+          c.position.y += d.vels[j * 3 + 1] * dt;
+          c.position.z += d.vels[j * 3 + 2] * dt;
+          if (c.position.y < 0.1) { c.position.y = 0.1; d.vels[j * 3 + 1] *= -0.3; }
+          c.rotation.x += d.rots[j * 3] * dt;
+          c.rotation.y += d.rots[j * 3 + 1] * dt;
+          c.material.opacity = fade;
+          c.material.transparent = true;
+        }
       }
     }
   }

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { PLAYER, CAMERA, ARENA, COMBAT } from '../config/Constants.js';
+import { PLAYER, CAMERA, ARENA, COMBAT, AIM_ASSIST } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
 import { Acorn } from '../weapons/Acorn.js';
 import { resolveCircleColliders } from '../util/Collision.js';
-import { clamp, dampAngle } from '../util/MathUtils.js';
+import { clamp, damp, dampAngle } from '../util/MathUtils.js';
 
 // Player character controller: camera-relative movement, jump + double-jump,
 // run, facing toward movement/aim, and a lightweight procedural locomotion
@@ -36,7 +36,65 @@ export class Player {
     this._right = new THREE.Vector3();
     this._wish = new THREE.Vector3();
     this._aim = new THREE.Vector3();
+    this._fireDir = new THREE.Vector3();
+    this._aimTarget = new THREE.Vector3();
+    this._toEnemy = new THREE.Vector3();
+
+    // World-space point the reticle marks (locked enemy torso, else a point down
+    // the aim ray). The HUD projects this so the crosshair sits on the real aim,
+    // not pinned to screen-center (which overlaps the hero in third-person).
+    this.aimPoint = new THREE.Vector3();
+    this.hasLock = false;
   }
+
+  // Find the alive enemy nearest the crosshair: smallest angle to `dir` as seen
+  // from `origin`, within the assist cone + range. Stores cos(angle) in _lockAlign
+  // (for pull strength). Returns the enemy or null.
+  _acquireTarget(origin, dir, ctx) {
+    this._lockAlign = -1;
+    if (!AIM_ASSIST.ENABLED || !ctx?.enemies) return null;
+
+    const coneCos = Math.cos((AIM_ASSIST.CONE_DEG * Math.PI) / 180);
+    const rangeSq = AIM_ASSIST.RANGE * AIM_ASSIST.RANGE;
+    let best = null, bestAlign = coneCos;
+
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      this._aimTarget.copy(e.position).setY(e.position.y + AIM_ASSIST.TARGET_Y);
+      this._toEnemy.subVectors(this._aimTarget, origin);
+      const distSq = this._toEnemy.lengthSq();
+      if (distSq > rangeSq || distSq < 1e-4) continue;
+      this._toEnemy.multiplyScalar(1 / Math.sqrt(distSq));
+      const align = this._toEnemy.dot(dir); // cos of angle to the crosshair
+      if (align > bestAlign) { bestAlign = align; best = e; }
+    }
+    if (best) this._lockAlign = bestAlign;
+    return best;
+  }
+
+  // Soft lock-on: rotate the view so the crosshair settles onto the enemy nearest
+  // screen-center. Pull strengthens as it nears centre (sticky) and releases when
+  // you look away. Drives rig.yaw/pitch directly (mouse-look still composes).
+  _focusCrosshair(dt, ctx, rig) {
+    if (!AIM_ASSIST.ENABLED || rig.mode === CAMERA.TOP) return;
+    const cam = rig.camera.position;
+    const camDir = rig.getAimDirection(this._aim);
+    const target = this._acquireTarget(cam, camDir, ctx);
+    if (!target) return;
+
+    // Desired look direction: from the camera to the target's torso.
+    this._aimTarget.copy(target.position).setY(target.position.y + AIM_ASSIST.TARGET_Y);
+    const d = this._fireDir.subVectors(this._aimTarget, cam).normalize();
+    const desiredYaw = Math.atan2(-d.x, -d.z);
+    const desiredPitch = Math.asin(clamp(d.y, -1, 1));
+
+    const coneCos = Math.cos((AIM_ASSIST.CONE_DEG * Math.PI) / 180);
+    const t = clamp((this._lockAlign - coneCos) / (1 - coneCos), 0, 1);
+    const lambda = AIM_ASSIST.PULL_MIN + (AIM_ASSIST.PULL_MAX - AIM_ASSIST.PULL_MIN) * t;
+    rig.yaw = dampAngle(rig.yaw, desiredYaw, lambda, dt);
+    rig.pitch = clamp(damp(rig.pitch, desiredPitch, lambda, dt), CAMERA.PITCH_MIN, CAMERA.PITCH_MAX);
+  }
+
 
   // Incoming enemy damage (i-framed). Shield (Hedgehog buff) soaks first; at 0 HP
   // the player dies → defeat screen via ctx.onPlayerDeath (COMBAT_SPEC §4).
@@ -54,9 +112,19 @@ export class Player {
     }
   }
 
+  // Restore HP (clamped to max), e.g. as an animal-rescue reward.
+  heal(amount) {
+    if (this.dead || amount <= 0) return;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+  }
+
   update(dt, input, ctx) {
     const rig = this.cameraRig;
     if (this._invuln > 0) this._invuln -= dt;
+
+    // --- Aim assist: pull the crosshair onto the targeted enemy (before basis +
+    // firing so movement and the shot use the focused view). ---
+    this._focusCrosshair(dt, ctx, rig);
 
     // --- Build camera-relative basis on the ground plane ---
     rig.getAimDirection(this._fwd);
@@ -86,9 +154,11 @@ export class Player {
         this.velocity.y = PLAYER.JUMP_VELOCITY;
         this.grounded = false;
         this.jumpsLeft = this.hasDoubleJump ? 1 : 0;
+        this.model.playJump?.();
       } else if (this.jumpsLeft > 0) {
         this.velocity.y = PLAYER.DOUBLE_JUMP_VELOCITY;
         this.jumpsLeft -= 1;
+        this.model.playJump?.();
       }
     }
 
@@ -136,26 +206,39 @@ export class Player {
     // --- Apply transform to model ---
     this.model.group.position.copy(this.position);
     this.model.group.rotation.y = this.facing;
-    // First-person "viewmodel": keep the body/arms/gun/tail visible so the player
-    // can see what they control, but hide just the head — the camera sits inside
-    // it and would otherwise look at the head's (black) outline shell.
-    this.model.pivots.head.visible = rig.mode !== CAMERA.FP;
+    // First-person: hide the whole hero model so the camera (at eye height inside
+    // the head) never sees the inside of its mesh. Firing feedback still comes
+    // from the muzzle flash + projectile + camera recoil.
+    this.model.setFirstPerson?.(rig.mode === CAMERA.FP);
 
-    // --- Animation ---
+    // --- Animation: authored clips via the model's AnimationMixer. ---
     const planarSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     this.speedScale = planarSpeed / PLAYER.SPEED;
-    this._animate(dt, moving, running, planarSpeed);
+    this.model.setLocomotion?.({ moving, running, grounded: this.grounded });
+    this.model.update?.(dt);
 
     // --- Weapon firing (left mouse or Z; muzzle origin + camera aim ray) ---
     if (ctx) {
       const firing = input.mouseDown(0) || input.isDown('KeyZ');
+      const origin = this.model.muzzleWorldPosition;
+      const camDir = rig.getAimDirection(this._aim);
+
+      // Resolve the aim point once (locked enemy torso, else down the camera ray)
+      // and reuse it for both the reticle and the shot direction.
+      const target = this._acquireTarget(origin, camDir, ctx);
+      this.hasLock = !!target;
+      if (target) this.aimPoint.copy(target.position).setY(target.position.y + AIM_ASSIST.TARGET_Y);
+      else this.aimPoint.copy(origin).addScaledVector(camDir, AIM_ASSIST.RETICLE_DIST);
+      const dir = this._fireDir.copy(this.aimPoint).sub(origin).normalize();
+
       this.weapon.update(dt, firing, {
-        origin: this.model.muzzleWorldPosition,
-        dir: rig.getAimDirection(this._aim),
+        origin,
+        dir,
         projectiles: ctx.projectiles,
         vfx: ctx.vfx,
         cameraRig: rig,
       });
+      if (this.weapon.justFired) this.model.playShot?.();
     }
   }
 
@@ -176,44 +259,5 @@ export class Player {
       else if (m === dzL) this.position.z = s.minZ - r;
       else this.position.z = s.maxZ + r;
     }
-  }
-
-  _animate(dt, moving, running, planarSpeed) {
-    const p = this.model.pivots;
-    // Locomotion phase advances with actual ground speed (keeps the gait from
-    // gliding when SPEED is high); idle ticks slowly.
-    const freq = moving ? planarSpeed * 1.35 : 2.2;
-    this.animTime += dt * freq;
-    const t = this.animTime;
-
-    const swing = moving ? (running ? 0.9 : 0.6) : 0.0;
-    // Legs alternate fore/aft (bone-local X pitch).
-    p.legL.rotation.x = Math.sin(t) * swing;
-    p.legR.rotation.x = Math.sin(t + Math.PI) * swing;
-    // Arms hold the rifle (no free swing): right paw grips it, left rests forward.
-    // A tiny breathing wobble keeps them from looking frozen.
-    const wob = Math.sin(t * 0.9) * 0.05;
-    p.armR.rotation.set(-1.0 + wob, -0.15, 0.12);
-    p.armL.rotation.set(-0.22 + wob, 0.0, -0.08);
-
-    // Body bob + slight forward lean when moving/running.
-    const bob = moving ? Math.abs(Math.sin(t)) * (running ? 0.07 : 0.04) : Math.sin(t * 0.6) * 0.01;
-    p.torso.position.y = 0.52 + bob;
-    p.torso.rotation.x = moving ? (running ? 0.18 : 0.1) : 0.0;
-
-    // Airborne: tuck legs forward (simple jump pose).
-    if (!this.grounded) {
-      p.legL.rotation.x = 0.5;
-      p.legR.rotation.x = 0.5;
-      p.torso.rotation.x = 0.15;
-    }
-
-    // Tail gentle sway (the upright arc is baked into the geometry now); tuck a
-    // touch when running.
-    p.tail.rotation.x = Math.sin(t * 0.8) * 0.08 - (running ? 0.12 : 0);
-    p.tail.rotation.z = Math.sin(t * 0.6) * 0.08;
-
-    // Head subtle look toward aim pitch in TP/FP.
-    p.head.rotation.x = clamp(-this.cameraRig.pitch * 0.3, -0.4, 0.4);
   }
 }

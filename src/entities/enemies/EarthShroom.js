@@ -16,10 +16,7 @@ export class EarthShroom extends EnemyBase {
   }
 
   buildModel() {
-    this.attachModel(buildMushroom({
-      capColor: 0x6b4a2e, stemColor: 0x5a4636, spotColor: 0xe0c060,
-      emissiveColor: 0xc8851a, prop: 'crystal',
-    }));
+    this.attachModel(buildMushroom('EARTH_SHROOM'));
   }
 
   performAttack(ctx, target, toTarget, dist) {

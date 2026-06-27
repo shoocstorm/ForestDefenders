@@ -17,6 +17,7 @@ import { WorldLabels } from '../ui/WorldLabels.js';
 import { Overlays } from '../ui/Overlays.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { AnimalManager } from '../systems/AnimalManager.js';
+import { updateTime as updateWindTime } from '../materials/CelMaterial.js';
 
 // Top-level game: owns renderer, scene, the fixed-step update loop, and the
 // systems registry. Milestones add systems (WaveManager, enemies, HUD, etc.)
@@ -175,6 +176,8 @@ export class Game {
     this.arena.update(realDt);
     this._updateAmbientFall(realDt);
     this.worldLabels.update(this.animals.animals, this.animals.nearestCaged);
+    // Advance the cel-shader wind uTime for all foliage/tree materials.
+    updateWindTime(performance.now() * 0.001);
 
     // Quality toggle (Slash) for the post stack.
     if (this.input.wasPressed('Slash')) this.postfx.toggleQuality();
@@ -236,7 +239,20 @@ export class Game {
     this.state = 'playing';
   }
 
+  // Project the player's world-space aim point to screen so the reticle sits on the
+  // real aim (or the locked enemy), instead of pinned over the hero in third-person.
+  _updateCrosshair() {
+    const cam = this.cameraRig.camera;
+    cam.updateMatrixWorld();
+    const ndc = (this._ndc ||= new THREE.Vector3()).copy(this.player.aimPoint).project(cam);
+    const onScreen = ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
+    const x = (ndc.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-ndc.y * 0.5 + 0.5) * window.innerHeight;
+    this.hud.setCrosshair(x, y, this.player.hasLock, onScreen);
+  }
+
   _updateHud() {
+    this._updateCrosshair();
     this.hud.update({
       hp: this.player.hp,
       maxHp: this.player.maxHp,

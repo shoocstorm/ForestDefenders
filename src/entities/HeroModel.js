@@ -1,182 +1,242 @@
 import * as THREE from 'three';
+import { toon, addOutlines } from '../materials/CelMaterial.js';
+import { damp, lerp } from '../util/MathUtils.js';
 
-// Procedural "Squrriel" hero built from primitives (HERO_SPEC §1).
-// Feet at origin (y=0), ~1.05 units tall, faces -Z (game forward).
-// Exposes named pivots so the locomotion animator can drive limbs/tail.
+// Hero "Squrriel" — fully PROCEDURAL pivot rig (no GLB). Built from cel-shaded
+// primitives organized into named pivots (legs / arms / body / head / tail / gun)
+// so locomotion + one-shots are driven analytically in update(). This replaces the
+// heavyweight authored squrriel.glb: every proportion, pose and animation is a
+// number here, which makes it trivial to fine-tune and to bolt on more clips later.
 //
-// A skinned GLB can replace this later; the public interface (group + pivots
-// + setPose hooks) is what Player.js depends on.
+// Primitives are authored facing -Z, but Player's facing math
+// (group.rotation.y = atan2(wish.x, wish.z)) expects a +Z-facing model, so we apply
+// an inner 180° flip on modelRoot (Player keeps setting group.rotation.y = facing
+// unchanged). Without this flip the hero faces opposite its movement direction.
+//
+// Interface consumed by Player.js (unchanged):
+//   .group, .muzzleWorldPosition, .update(dt),
+//   .setLocomotion({moving,running,grounded}), .playJump(), .playShot(),
+//   .setFirstPerson(fp)
 
-const FUR = 0xe07a32;       // warm orange
-const FUR_DARK = 0xb85e22;
-const CREAM = 0xf4e0bd;     // belly / tail tip
-const VEST = 0x3f7d3f;      // green utility vest
-const BELT = 0x6b4423;
-const GOLD = 0xe8c14a;
-const GOGGLE = 0x2a3a44;
-const GOGGLE_LENS = 0x9fd9e8;
-const EYE = 0x16110d;
-const WOOD = 0x8a5a2b;
-const STEEL = 0x70787f;
+const HIP_Y = 0.40;          // hip pivot height (legs hang below to the ground)
+const SHOT_DUR = 0.26;       // recoil one-shot length (s)
+const JUMP_POP = 0.18;       // takeoff knee-pop decay window (s)
 
-function toon(color, opts = {}) {
-  return new THREE.MeshToonMaterial({ color, ...opts });
-}
+// Palette (squirrel-red fur + cream belly, dark gunmetal rifle).
+const FUR      = 0xc06a2e;
+const FUR_DARK = 0x8a4720;
+const CREAM    = 0xf3e3c2;
+const PINK     = 0xe79bb0;
+const DARK     = 0x161310;
+const METAL    = 0x3a3d44;
+const WOOD     = 0x6e4a26;
 
-// Add an inverted-hull outline child to a mesh (cel-shaded look).
-function addOutline(mesh, thickness = 0.012) {
-  const outlineMat = new THREE.MeshBasicMaterial({ color: 0x10180f, side: THREE.BackSide });
-  const outline = new THREE.Mesh(mesh.geometry, outlineMat);
-  outline.scale.multiplyScalar(1 + thickness / Math.max(0.05, mesh.geometry.boundingSphere?.radius ?? 0.3));
-  // Simpler robust approach: push along normals via slight uniform scale.
-  outline.scale.set(1.06, 1.06, 1.06);
-  mesh.add(outline);
-  return mesh;
+const T = (c, o = {}) => toon({ color: c, ...o });
+
+function mesh(geo, mat, parent, pos = [0, 0, 0], rot = [0, 0, 0]) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(...pos);
+  m.rotation.set(...rot);
+  m.castShadow = true;
+  parent.add(m);
+  return m;
 }
 
 export class HeroModel {
   constructor() {
     this.group = new THREE.Group();
+    this.modelRoot = new THREE.Group();
+    this.group.add(this.modelRoot);
+    this.rig = {};
     this.pivots = {};
+
+    // Locomotion + one-shot state (all posing is analytic in update()).
+    this.grounded = true;
+    this.moving = false;
+    this.running = false;
+    this._speed01 = 0;  // idle→run blend (damped)
+    this._move01 = 0;   // stand→move blend (damped)
+    this._air01 = 0;    // grounded→airborne blend (damped)
+    this._phase = 0;    // stride phase
+    this._t = 0;        // global clock (idle breathing, tail sway)
+    this._shotT = 0;    // recoil timer
+    this._popT = 0;     // takeoff knee-pop timer
+
     this._build();
   }
 
-  _mesh(geo, mat, parent, pos = [0, 0, 0], outline = true) {
-    geo.computeBoundingSphere?.();
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(...pos);
-    m.castShadow = true;
-    if (outline) addOutline(m);
-    parent.add(m);
-    return m;
-  }
-
   _build() {
-    const g = this.group;
+    const root = this.modelRoot;
+    // -Z-authored geometry → +Z-facing in group space (matches Player.facing math).
+    root.rotation.y = Math.PI;
 
-    // --- Torso (slightly egg-shaped) ---
-    const torso = new THREE.Group();
-    torso.position.y = 0.52;
-    g.add(torso);
-    this.pivots.torso = torso;
+    // --- Legs (hip pivots under root so the feet stay planted while the body
+    // bobs). Each leg points down; the foot reaches the ground at y≈0. ---
+    for (const side of [-1, 1]) {
+      const hip = new THREE.Group();
+      hip.position.set(side * 0.13, HIP_Y, 0);
+      root.add(hip);
+      mesh(new THREE.CapsuleGeometry(0.075, 0.20, 4, 8), T(FUR), hip, [0, -0.16, 0]);
+      mesh(new THREE.CapsuleGeometry(0.06, 0.14, 4, 8), T(FUR_DARK), hip, [0, -0.30, 0.01]);
+      // Foot — pointing forward (-Z).
+      const foot = mesh(new THREE.SphereGeometry(0.085, 10, 8), T(FUR_DARK), hip, [0, -0.38, -0.05]);
+      foot.scale.set(1, 0.6, 1.7);
+      this.rig[side < 0 ? 'legL' : 'legR'] = hip;
+    }
 
-    const bodyGeo = new THREE.CapsuleGeometry(0.22, 0.18, 6, 12);
-    this._mesh(bodyGeo, toon(FUR), torso, [0, 0, 0]);
-    // Cream belly patch
-    this._mesh(new THREE.SphereGeometry(0.17, 12, 10), toon(CREAM), torso, [0, -0.02, 0.12], false);
-    // Vest
-    const vestGeo = new THREE.CapsuleGeometry(0.235, 0.12, 5, 12);
-    const vest = this._mesh(vestGeo, toon(VEST), torso, [0, 0.02, -0.01], false);
-    vest.scale.set(1, 1, 0.85);
-    // Belt + buckle
-    this._mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 16), toon(BELT), torso, [0, -0.18, 0], false)
-      .rotation.x = Math.PI / 2;
-    this._mesh(new THREE.BoxGeometry(0.07, 0.06, 0.04), toon(GOLD, { emissive: 0x3a2e00 }), torso, [0, -0.18, 0.21], false);
+    // --- Body pivot (torso + everything above; carries bob + lean). ---
+    const body = new THREE.Group();
+    body.position.set(0, HIP_Y, 0);
+    root.add(body);
+    this.rig.body = body;
 
-    // --- Head ---
+    // Torso: cream belly over a fur back, slight pear taper.
+    const torso = mesh(new THREE.SphereGeometry(0.21, 14, 12), T(FUR), body, [0, 0.16, 0]);
+    torso.scale.set(1.0, 1.25, 0.95);
+    const belly = mesh(new THREE.SphereGeometry(0.17, 14, 12), T(CREAM), body, [0, 0.13, -0.07]);
+    belly.scale.set(0.9, 1.2, 0.7);
+
+    // --- Head pivot. ---
     const head = new THREE.Group();
-    head.position.y = 0.34;
-    torso.add(head);
-    this.pivots.head = head;
-    this._mesh(new THREE.SphereGeometry(0.27, 16, 14), toon(FUR), head, [0, 0, 0]);
-    // Cheeks / muzzle
-    this._mesh(new THREE.SphereGeometry(0.15, 12, 10), toon(CREAM), head, [0, -0.05, 0.2], false);
-    // Ears
+    head.position.set(0, 0.44, -0.02);
+    body.add(head);
+    this.rig.head = head;
+    mesh(new THREE.SphereGeometry(0.18, 16, 14), T(FUR), head, [0, 0, 0]);
+    // Muzzle/snout + cheeks (cream), forward -Z.
+    const snout = mesh(new THREE.SphereGeometry(0.10, 12, 10), T(CREAM), head, [0, -0.03, -0.13]);
+    snout.scale.set(1.0, 0.85, 1.1);
+    mesh(new THREE.SphereGeometry(0.035, 8, 8), T(DARK), head, [0, 0.0, -0.235]); // nose
     for (const sx of [-1, 1]) {
-      const ear = this._mesh(new THREE.ConeGeometry(0.08, 0.18, 8), toon(FUR), head, [sx * 0.16, 0.26, -0.02]);
-      ear.rotation.z = sx * -0.25;
-      this._mesh(new THREE.ConeGeometry(0.045, 0.1, 8), toon(CREAM), ear, [0, 0.0, 0.01], false);
+      // Eyes.
+      mesh(new THREE.SphereGeometry(0.045, 10, 10), T(DARK), head, [sx * 0.08, 0.06, -0.145]);
+      mesh(new THREE.SphereGeometry(0.016, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }), head, [sx * 0.085, 0.085, -0.175]);
+      // Ears — tall tufted squirrel ears.
+      const ear = mesh(new THREE.ConeGeometry(0.05, 0.16, 7), T(FUR), head, [sx * 0.10, 0.20, 0.02], [0.1, 0, sx * 0.2]);
+      mesh(new THREE.ConeGeometry(0.026, 0.10, 7), T(PINK), ear, [0, -0.01, 0.012]);
     }
-    // Eyes (with catch-light)
-    for (const sx of [-1, 1]) {
-      this._mesh(new THREE.SphereGeometry(0.06, 10, 8), toon(EYE), head, [sx * 0.11, 0.02, 0.23], false);
-      this._mesh(new THREE.SphereGeometry(0.018, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), head, [sx * 0.13, 0.05, 0.27], false);
-    }
-    // Nose
-    this._mesh(new THREE.SphereGeometry(0.035, 8, 8), toon(0x3a2018), head, [0, -0.04, 0.32], false);
-    // Goggles on forehead
-    const goggleBand = this._mesh(new THREE.TorusGeometry(0.22, 0.035, 8, 18), toon(GOGGLE), head, [0, 0.16, 0.04], false);
-    goggleBand.rotation.x = Math.PI / 2 - 0.3;
-    for (const sx of [-1, 1]) {
-      this._mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 12), toon(GOGGLE), head, [sx * 0.12, 0.2, 0.16], false)
-        .rotation.x = Math.PI / 2;
-      this._mesh(new THREE.CircleGeometry(0.055, 12), new THREE.MeshBasicMaterial({ color: GOGGLE_LENS }), head, [sx * 0.12, 0.2, 0.19], false)
-        .rotation.x = 0;
-    }
+    // Buck teeth.
+    mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), T(0xfffef2), head, [0, -0.10, -0.20]);
 
-    // --- Tail (big bushy; arcs up behind the back then curls forward over it) ---
-    // Spheres are placed along a baked arc in the tail's local frame so the whole
-    // bush sways as one rigid group (driven by pivots.tail rotation in the animator).
-    const tail = new THREE.Group();
-    tail.position.set(0, 0.0, -0.22); // lower back, just behind the torso
-    torso.add(tail);
-    this.pivots.tail = tail;
-    const tailColors = [FUR_DARK, FUR, FUR, FUR, CREAM, CREAM];
-    const tailSizes = [0.15, 0.22, 0.26, 0.25, 0.21, 0.16];
-    const segs = tailColors.length;
-    const step = 0.17;
-    let ty = 0, tz = 0;
-    for (let i = 0; i < segs; i++) {
-      // Direction angle sweeps from up-and-back (-0.7) to up-and-forward (1.5),
-      // measured from +Y toward +Z (front), producing the squirrel "?" curl.
-      const phi = -0.7 + 2.2 * ((i + 0.5) / segs);
-      ty += Math.cos(phi) * step;
-      tz += Math.sin(phi) * step;
-      this._mesh(new THREE.SphereGeometry(tailSizes[i], 12, 10), toon(tailColors[i]), tail, [0, ty, tz], false);
+    // --- Arms (shoulder pivots): posed to grip the rifle in front of the chest. ---
+    for (const side of [-1, 1]) {
+      const sh = new THREE.Group();
+      sh.position.set(side * 0.17, 0.30, -0.02);
+      body.add(sh);
+      // Reach forward + inward toward the gun.
+      sh.rotation.set(-0.9, side * 0.25, side * 0.15);
+      mesh(new THREE.CapsuleGeometry(0.055, 0.16, 4, 8), T(FUR), sh, [0, -0.10, 0]);
+      mesh(new THREE.CapsuleGeometry(0.05, 0.13, 4, 8), T(FUR_DARK), sh, [0, -0.22, -0.02], [-0.3, 0, 0]);
+      mesh(new THREE.SphereGeometry(0.06, 10, 8), T(CREAM), sh, [0, -0.30, -0.05]); // paw
+      this.rig[side < 0 ? 'armL' : 'armR'] = sh;
     }
 
-    // --- Arms ---
-    this.pivots.armL = this._limb(torso, -1, 0.24, 0.18, FUR, true);
-    this.pivots.armR = this._limb(torso, 1, 0.24, 0.18, FUR, true);
-
-    // --- Legs ---
-    this.pivots.legL = this._limb(g, -1, 0.42, 0.22, FUR, false);
-    this.pivots.legR = this._limb(g, 1, 0.42, 0.22, FUR, false);
-
-    // --- Rifle (held in the right paw) ---
-    // Parented to the torso so it bobs/leans with the body and the holding hand
-    // (which is also a torso child) instead of floating on the static root.
+    // --- Rifle (held under the body pivot so it tracks chest pose). Barrel -Z. ---
     const gun = new THREE.Group();
-    gun.position.set(0.28, -0.02, 0.28); // torso-local (≈ world 0.28, 0.50, 0.28)
-    gun.rotation.set(0, 0.1, -0.05);
-    torso.add(gun);
-    this.pivots.gun = gun;
-    this._mesh(new THREE.BoxGeometry(0.08, 0.1, 0.34), toon(WOOD), gun, [0, 0, 0], false); // stock
-    this._mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 10), toon(STEEL), gun, [0, 0.03, 0.34], false)
-      .rotation.x = Math.PI / 2; // barrel toward +Z
-    // Muzzle marker (where projectiles spawn)
+    gun.position.set(0.02, 0.26, -0.18);
+    body.add(gun);
+    this.rig.gun = gun;
+    const stock = mesh(new THREE.BoxGeometry(0.07, 0.09, 0.20), T(WOOD), gun, [0, 0, 0.12]);
+    stock.rotation.x = 0.15;
+    mesh(new THREE.BoxGeometry(0.06, 0.07, 0.26), T(METAL), gun, [0, 0.01, -0.06]);     // receiver
+    mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.34, 10), T(METAL), gun, [0, 0.02, -0.30], [Math.PI / 2, 0, 0]); // barrel
+    mesh(new THREE.BoxGeometry(0.035, 0.10, 0.05), T(METAL), gun, [0, -0.08, 0.0]);      // magazine
+    // Muzzle origin at the barrel tip (non-mesh → no outline).
     const muzzle = new THREE.Object3D();
-    muzzle.position.set(0, 0.03, 0.6);
+    muzzle.position.set(0, 0.02, -0.48);
     gun.add(muzzle);
     this.pivots.muzzle = muzzle;
 
-    g.scale.setScalar(1.0);
+    // --- Bushy tail: S-curve of swelling spheres rising up behind the back. ---
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.10, 0.16);
+    body.add(tail);
+    this.rig.tail = tail;
+    const segs = [
+      { p: [0, 0.02, 0.06], r: 0.10, c: FUR },
+      { p: [0, 0.14, 0.14], r: 0.15, c: FUR },
+      { p: [0, 0.30, 0.16], r: 0.19, c: FUR_DARK },
+      { p: [0, 0.46, 0.10], r: 0.20, c: FUR },
+      { p: [0, 0.58, -0.02], r: 0.16, c: CREAM },
+    ];
+    for (const s of segs) mesh(new THREE.SphereGeometry(s.r, 12, 10), T(s.c), tail, s.p);
+
+    addOutlines(root, { thickness: 0.014 });
+
+    // Cache rest transforms we overlay animation onto.
+    this._bodyRestY = body.position.y;
+    this._gunRestZ = gun.position.z;
   }
 
-  // Build a simple two-part limb (upper + lower) hanging from a pivot.
-  _limb(parent, side, atY, atXabs, color, isArm) {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * atXabs, atY, 0);
-    parent.add(pivot);
-    const upperLen = isArm ? 0.18 : 0.2;
-    const lowerLen = isArm ? 0.16 : 0.2;
-    const r = isArm ? 0.06 : 0.08;
-    const upper = this._mesh(new THREE.CapsuleGeometry(r, upperLen, 4, 8), toon(color), pivot, [0, -upperLen / 2 - r, 0], false);
-    const lower = new THREE.Group();
-    lower.position.y = -(upperLen + r * 2);
-    upper.parent.add(lower); // keep lower under pivot for simple swing
-    pivot.add(lower);
-    this._mesh(new THREE.CapsuleGeometry(r * 0.9, lowerLen, 4, 8), toon(color), lower, [0, -lowerLen / 2 - r, 0], false);
-    // foot / paw
-    if (!isArm) {
-      this._mesh(new THREE.BoxGeometry(0.14, 0.07, 0.2), toon(FUR_DARK), lower, [0, -lowerLen - r, 0.04], false);
-    } else {
-      this._mesh(new THREE.SphereGeometry(0.07, 8, 8), toon(CREAM), lower, [0, -lowerLen - r, 0], false);
-    }
-    return pivot;
+  // --- State intake from Player (no early-out: posing all happens in update). ---
+  setLocomotion({ moving, running, grounded }) {
+    this.moving = !!moving;
+    this.running = !!running;
+    this.grounded = grounded !== false;
   }
+
+  playJump() { this._popT = JUMP_POP; }
+  playShot() { this._shotT = SHOT_DUR; }
+  setFirstPerson(fp) { this.modelRoot.visible = !fp; }
 
   get muzzleWorldPosition() {
     return this.pivots.muzzle.getWorldPosition(new THREE.Vector3());
+  }
+
+  update(dt) {
+    this._t += dt;
+    if (this._shotT > 0) this._shotT = Math.max(0, this._shotT - dt);
+    if (this._popT > 0) this._popT = Math.max(0, this._popT - dt);
+
+    // Blend locomotion weights smoothly.
+    const moveTarget = this.moving && this.grounded ? 1 : 0;
+    const runTarget = this.running ? 1 : 0;
+    const airTarget = this.grounded ? 0 : 1;
+    this._move01 = damp(this._move01, moveTarget, 10, dt);
+    this._speed01 = damp(this._speed01, runTarget, 8, dt);
+    this._air01 = damp(this._air01, airTarget, 12, dt);
+
+    const m = this._move01, sp = this._speed01, air = this._air01;
+
+    // Advance the stride only while moving (faster at a run).
+    const strideHz = lerp(2.2, 3.6, sp);
+    this._phase += dt * Math.PI * 2 * strideHz * m;
+    const ph = this._phase;
+
+    const legAmp = m * lerp(0.5, 0.9, sp);
+    const lean = m * lerp(0.10, 0.30, sp);
+    const recoil = this._shotT > 0 ? Math.sin((this._shotT / SHOT_DUR) * Math.PI) : 0;
+    const pop = this._popT > 0 ? this._popT / JUMP_POP : 0;
+
+    // Legs: walk swing, or tuck up when airborne.
+    const swingL = Math.sin(ph) * legAmp;
+    const swingR = Math.sin(ph + Math.PI) * legAmp;
+    const tuck = lerp(0, -0.9, air) - pop * 0.6;
+    this.rig.legL.rotation.x = lerp(swingL, tuck, air);
+    this.rig.legR.rotation.x = lerp(swingR, tuck, air * 0.85);
+
+    // Body: bob + forward lean (− on recoil it rocks back), small idle breathing.
+    const walkBob = Math.abs(Math.sin(ph)) * lerp(0.02, 0.045, sp) * m;
+    const breathe = Math.sin(this._t * 1.7) * 0.012 * (1 - m);
+    this.rig.body.position.y = this._bodyRestY + walkBob + breathe - air * 0.04;
+    this.rig.body.rotation.x = lean + air * 0.15 - recoil * 0.12;
+    this.rig.body.rotation.z = Math.sin(ph) * 0.04 * m;
+
+    // Gun recoil kick (pushes back toward +Z and muzzle rises).
+    this.rig.gun.position.z = this._gunRestZ + recoil * 0.08;
+    this.rig.gun.rotation.x = -recoil * 0.25;
+
+    // Arms counter-sway slightly with the stride; rise a touch when airborne.
+    const armSway = Math.sin(ph) * 0.08 * m;
+    this.rig.armL.rotation.x = -0.9 + armSway + air * 0.2 - recoil * 0.15;
+    this.rig.armR.rotation.x = -0.9 - armSway + air * 0.2 - recoil * 0.15;
+
+    // Head: subtle counter-bob + look-into-run.
+    this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m;
+
+    // Tail: lazy idle sway, streams up/out at speed, flares on jump.
+    const tailSway = Math.sin(this._t * 2.2 + ph) * lerp(0.12, 0.28, m);
+    this.rig.tail.rotation.z = tailSway;
+    this.rig.tail.rotation.x = -lean * 0.6 - air * 0.4 + Math.sin(this._t * 1.4) * 0.05;
   }
 }
