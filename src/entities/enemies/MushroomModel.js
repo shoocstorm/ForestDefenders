@@ -86,6 +86,19 @@ export function buildMushroom({ capColor, stemColor, spotColor, emissiveColor, p
       flame.position.set((i - 1) * 0.14, 0.64 + (i === 0 ? 0.05 : 0), 0);
       capPivot.add(flame);
     }
+  } else if (prop === 'crystal') {
+    // Earth: glowing amber crystal shards jutting from the cap.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const shard = new THREE.Mesh(
+        new THREE.ConeGeometry(0.08, 0.3 + Math.random() * 0.12, 5),
+        new THREE.MeshToonMaterial({ color: 0xe0a83a, emissive: 0xc8851a, emissiveIntensity: 0.8 }),
+      );
+      shard.position.set(Math.cos(a) * 0.34, 0.58, Math.sin(a) * 0.34);
+      shard.rotation.set(Math.cos(a) * 0.5, 0, -Math.sin(a) * 0.5);
+      capPivot.add(shard);
+      emissives.push(shard.material);
+    }
   } else if (prop === 'twig') {
     for (const sx of [-1, 1]) {
       const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.04, 0.3, 6), toon(0x6e4a2a));

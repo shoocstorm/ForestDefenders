@@ -90,6 +90,12 @@ export const ENEMY_DEFS = {
     hp: 20, speed: 4.0, attackDamage: 15, attackRange: 10.0, attackCooldown: 3.0,
     detectionRange: 14, hitRadius: 0.65, accent: 0xff7a30, projectileSpeed: 12,
   },
+  // Earth Shroom — L1 wave-3 boss/elite (ENEMIES_SPEC §2). Tank, ground-slam AoE.
+  EARTH_SHROOM: {
+    type: 'EARTH_SHROOM', element: 'EARTH', role: 'boss',
+    hp: 80, speed: 3.0, attackDamage: 25, attackRange: 3.2, attackCooldown: 4.0,
+    detectionRange: 16, hitRadius: 1.15, accent: 0xe0a83a, scale: 1.7,
+  },
 };
 
 // --- Combat / juice tuning (COMBAT_SPEC, ENEMIES_SPEC §5, JUICE_SPEC §12). ---
@@ -106,3 +112,56 @@ export const JUICE = {
   HIT_STOP: 0.04, HIT_STOP_DUR: 0.08,
   SLOW_MO: 0.12, SLOW_MO_DUR: 1.1,
 };
+
+// --- Level 1 wave script (LEVELS_SPEC §4). Each enemy: type from ENEMY_DEFS. ---
+// `delay` = seconds after the previous wave is cleared (wave 1 = after level start).
+// `animal` = the creature endangered during that wave (ANIMALS_SPEC §2).
+export const LEVEL1_WAVES = [
+  { delay: 3, animal: 'HEDGEHOG', spread: false,
+    enemies: [['WOOD_SHROOM', 5], ['FIRE_SHROOM', 3]] },
+  { delay: 5, animal: 'BIRD', spread: true,
+    enemies: [['WOOD_SHROOM', 3], ['FIRE_SHROOM', 3]] },
+  { delay: 5, animal: 'RABBIT', spread: true,
+    enemies: [['EARTH_SHROOM', 1], ['FIRE_SHROOM', 3], ['WOOD_SHROOM', 2]] },
+];
+
+// --- Animals (ANIMALS_SPEC §2). pos in world coords; buff granted on rescue. ---
+export const ANIMALS = {
+  HEDGEHOG: { type: 'HEDGEHOG', hp: 50, buff: 'SHIELD', flying: false,
+    pos: [3, 0, 4], cage: true, color: 0x8a6f4a },
+  BIRD: { type: 'BIRD', hp: 40, buff: 'REVEAL', flying: true,
+    pos: [0, 3.2, 4], cage: true, color: 0x4aa3d8 },
+  RABBIT: { type: 'RABBIT', hp: 45, buff: 'SPEED', flying: false,
+    pos: [-6, 0, 26], cage: true, color: 0xd8cfc4 },
+};
+
+// --- Buffs (COMBAT_SPEC §5). Rescue grants these for the level. ---
+export const BUFFS = {
+  SHIELD_POWER: 30,     // Hedgehog: shield points absorbed before HP
+  SPEED_MULT: 1.15,     // Rabbit: +15% move speed
+  // REVEAL: Bird → enemies marked on HUD (flag only)
+};
+
+// Rescue scoring (ANIMALS_SPEC §6): saved/total → rank → bonus gold.
+export const RESCUE_RANKS = [
+  { min: 3, rank: 'S', stars: 3, bonus: 40 },
+  { min: 2, rank: 'A', stars: 2, bonus: 24 },
+  { min: 1, rank: 'B', stars: 1, bonus: 10 },
+  { min: 0, rank: 'C', stars: 0, bonus: 0 },
+];
+
+// --- Cinematic-cel render quality tiers + post params (LEVELS_SPEC §10). ---
+// HIGH = full stack (bloom + GTAO + god-rays); LOW drops the heavy passes for 60fps.
+export const QUALITY = {
+  DEFAULT: 'HIGH',
+  HIGH: { bloom: true, ao: true, godrays: true, bloomScale: 1.0 },
+  LOW:  { bloom: true, ao: false, godrays: false, bloomScale: 0.5 },
+};
+export const POST = {
+  BLOOM_STRENGTH: 0.9, BLOOM_RADIUS: 0.5, BLOOM_THRESHOLD: 0.0, // selective: threshold 0 (bloom layer only)
+  AO_RADIUS: 0.5, AO_INTENSITY: 1.0,
+  GODRAY_STRENGTH: 0.45,
+};
+export const BLOOM_LAYER = 1; // objects on this layer glow (boss, rings, lanterns, spores)
+
+export const VEGETATION = { SEED: 1337 }; // deterministic procedural variation

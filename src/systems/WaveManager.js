@@ -1,0 +1,76 @@
+import * as THREE from 'three';
+import { LEVEL1_WAVES, ARENA } from '../config/Constants.js';
+import { randRange } from '../util/MathUtils.js';
+import { WoodShroom } from '../entities/enemies/WoodShroom.js';
+import { FireShroom } from '../entities/enemies/FireShroom.js';
+import { EarthShroom } from '../entities/enemies/EarthShroom.js';
+
+const ENEMY_CLASSES = {
+  WOOD_SHROOM: WoodShroom,
+  FIRE_SHROOM: FireShroom,
+  EARTH_SHROOM: EarthShroom,
+};
+
+// Drives the 3-wave Level 1 script (LEVELS_SPEC §4). A wave's enemies spawn at the
+// east-end markers after a delay; the next wave only begins once every enemy of the
+// current wave is dead. Fires `onWaveStart` (HUD banner + endangered animal) and
+// `onAllCleared` (victory). Replaces the endless test spawn from M2.
+export class WaveManager {
+  constructor(enemyManager, gameManager, { onWaveStart, onAllCleared } = {}) {
+    this.enemies = enemyManager;
+    this.gm = gameManager;
+    this.onWaveStart = onWaveStart;
+    this.onAllCleared = onAllCleared;
+    this.waves = LEVEL1_WAVES;
+    this.index = -1;
+    this.state = 'PREWAVE';
+    this.timer = this.waves[0].delay;
+    this.done = false;
+    this.waveEnemies = [];
+  }
+
+  get waveNumber() { return Math.max(0, this.index + 1); }
+  get total() { return this.waves.length; }
+
+  update(dt) {
+    if (this.done) return;
+    if (this.state === 'PREWAVE') {
+      this.timer -= dt;
+      if (this.timer <= 0) this._startNextWave();
+    } else if (this.state === 'ACTIVE') {
+      if (!this.waveEnemies.some((e) => !e.dead)) {
+        if (this.index + 1 < this.waves.length) {
+          this.state = 'PREWAVE';
+          this.timer = this.waves[this.index + 1].delay;
+        } else {
+          this.done = true;
+          this.onAllCleared?.();
+        }
+      }
+    }
+  }
+
+  _startNextWave() {
+    this.index++;
+    const w = this.waves[this.index];
+    this.waveEnemies = [];
+    let i = 0;
+    for (const [type, count] of w.enemies) {
+      for (let n = 0; n < count; n++, i++) {
+        const e = this.enemies.spawn(ENEMY_CLASSES[type], this._spawnPos(w.spread, type, i), this.gm.level);
+        this.waveEnemies.push(e);
+      }
+    }
+    this.state = 'ACTIVE';
+    this.onWaveStart?.(this.waveNumber, w);
+  }
+
+  // East-end spawn markers; `spread` scatters wider to avoid clustering. Boss spawns
+  // close to its landmark. Always inside the arena, never on the central platform.
+  _spawnPos(spread, type, i) {
+    if (type === 'EARTH_SHROOM') return new THREE.Vector3(randRange(-3, 3), 0, ARENA.LENGTH / 2 - 7);
+    const z = ARENA.LENGTH / 2 - randRange(6, 15);
+    const x = (spread ? randRange(-13, 13) : randRange(-9, 9));
+    return new THREE.Vector3(x, 0, z);
+  }
+}

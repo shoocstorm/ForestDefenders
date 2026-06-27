@@ -62,6 +62,7 @@ export class EnemyBase {
     this._emissives = [];
     this._baseEmissive = [];
     this.buildModel();           // subclass fills this.root, this.capPivot, this._emissives
+    if (def.scale) this.group.scale.setScalar(def.scale); // boss is a bigger body
   }
 
   // Subclasses call this with a buildMushroom(...) result.
@@ -103,7 +104,10 @@ export class EnemyBase {
 
     if (this._deathT >= 0) { this._updateDeath(dt); return; }
 
-    _to.subVectors(ctx.player.position, this.position); _to.y = 0;
+    // Target the nearest attackable animal, else the player (ANIMALS_SPEC §5).
+    const target = this._selectTarget(ctx);
+    this.target = target;
+    _to.subVectors(target.position, this.position); _to.y = 0;
     const dist = _to.length();
     this.state = dist <= this.attackRange ? STATE.ATTACK : STATE.PURSUE;
 
@@ -129,7 +133,7 @@ export class EnemyBase {
     // Attack on cooldown when in range.
     this._attackTimer -= dt;
     if (this.state === STATE.ATTACK && this._attackTimer <= 0) {
-      this.performAttack(ctx, _to, dist);
+      this.performAttack(ctx, target, _to, dist);
       this._attackTimer = this.attackCooldown;
     }
 
@@ -164,6 +168,25 @@ export class EnemyBase {
     if (_desired.lengthSq() > 1e-4) _desired.normalize();
     this.velocity.x = _desired.x * this.speed;
     this.velocity.z = _desired.z * this.speed;
+  }
+
+  // Pick whom to hunt: nearest attackable animal, but switch to the player when
+  // they get close (self-defense), and always the player if no animal is valid.
+  _selectTarget(ctx) {
+    const player = ctx.player;
+    const animals = ctx.animals;
+    if (!animals || !animals.length) return player;
+    let best = null, bestD = Infinity;
+    for (const a of animals) {
+      // Melee/boss can't reach flying animals (ANIMALS_SPEC §5).
+      if (!a.isAttackable() || (a.flying && this.role !== 'ranged')) continue;
+      const d = a.position.distanceToSquared(this.position);
+      if (d < bestD) { bestD = d; best = a; }
+    }
+    if (!best) return player;
+    const selfDef = this.attackRange * 1.5;
+    if (player.position.distanceToSquared(this.position) < selfDef * selfDef) return player;
+    return best;
   }
 
   _separation(enemies, out) {
@@ -215,7 +238,10 @@ export class EnemyBase {
     _center.copy(this.position).setY(this.position.y + 0.6);
     ctx.loot.spawnGold(this.position, randInt(COMBAT.GOLD_MIN ?? 1, COMBAT.GOLD_MAX ?? 5));
     ctx.vfx.spore(_center, this.def.accent ?? 0xffffff);
-    ctx.juice.impactFreeze();
+    // Bosses get dramatic slow-mo; regular kills get a light impact freeze.
+    if (this.role === 'boss') ctx.juice.slowMo();
+    else ctx.juice.impactFreeze();
+    ctx.onEnemyDied?.(this);
     this._deathT = 0;
   }
 
@@ -245,5 +271,5 @@ export class EnemyBase {
 
   // Subclasses override:
   buildModel() {}
-  performAttack(ctx, toPlayer, dist) {}
+  performAttack(ctx, target, toTarget, dist) {}
 }

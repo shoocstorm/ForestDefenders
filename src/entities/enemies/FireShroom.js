@@ -20,9 +20,9 @@ export class FireShroom extends EnemyBase {
     }));
   }
 
-  performAttack(ctx, toPlayer, dist) {
+  performAttack(ctx, target, toTarget, dist) {
     _spawn.copy(this.position).setY(this.position.y + 1.0);
-    _aim.copy(ctx.player.position).setY(ctx.player.position.y + 0.8).sub(_spawn).normalize();
+    _aim.copy(target.position).setY(target.position.y + 0.8).sub(_spawn).normalize();
     ctx.projectiles.spawn(_spawn, _aim, {
       team: 'enemy',
       speed: this.def.projectileSpeed,

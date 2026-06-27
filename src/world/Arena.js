@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { ARENA } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
+import { Vegetation } from './Vegetation.js';
+import { Water } from './Water.js';
+import { Lanterns } from './Lanterns.js';
+import { BLOOM_LAYER } from '../config/Constants.js';
 
 // Misty Forest arena (LEVELS_SPEC L1). M1 scope: ground, sky, fog, lighting,
 // boundary, scattered trees, a raised central platform with stairs, and a
@@ -12,12 +16,36 @@ export class Arena {
     this._build();
   }
 
+  // Per-frame ambient motion: tree sway, water ripple, lantern/ring pulse, fireflies.
+  update(dt) {
+    this._t = (this._t || 0) + dt;
+    this.vegetation?.update(dt);
+    this.water?.update(dt);
+    this.lanterns?.update(dt);
+    if (this._rings) {
+      for (const r of this._rings) {
+        const s = 1 + Math.sin(this._t * 2 + r.phase) * 0.08;
+        r.ring.scale.set(s, s, 1);
+        r.ring.material.opacity = 0.55 + Math.sin(this._t * 2 + r.phase) * 0.25;
+      }
+    }
+    if (this.fireflies) {
+      const arr = this.fireflies.geometry.attributes.position.array;
+      for (let i = 0; i < this._ffSeed.length; i++) {
+        const s = this._ffSeed[i];
+        arr[i * 3 + 1] += Math.sin(this._t * 1.3 + s) * dt * 0.4;
+        arr[i * 3] += Math.cos(this._t * 0.7 + s) * dt * 0.3;
+      }
+      this.fireflies.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
   _build() {
     const scene = this.scene;
 
-    // --- Sky + fog (pale misty daylight) ---
-    scene.background = new THREE.Color(0x9fc8d6);
-    scene.fog = new THREE.Fog(0xa9cdd0, 35, 130);
+    // --- Sky + fog (pale misty daylight; closer near-plane → depth/mist) ---
+    scene.background = new THREE.Color(0xaed2dc);
+    scene.fog = new THREE.Fog(0xc2dbe0, 20, 100);
 
     // --- Lighting: soft daylight + warm fill + hemisphere bounce ---
     const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
@@ -57,8 +85,13 @@ export class Arena {
     // --- Boundary walls (low decorative hedges marking the arena edge) ---
     this._boundary();
 
-    // --- Trees scattered off the lane ---
-    this._trees();
+    // --- Procedural trees scattered off the lane (Vegetation owns colliders) ---
+    this.vegetation = new Vegetation(scene);
+    for (const c of this.vegetation.colliders) this.colliders.push(c);
+
+    // --- Scenic enchanted pond (SW glade) + path lanterns ---
+    this.water = new Water(scene, -9, -12, 4.5);
+    this.lanterns = new Lanterns(scene);
 
     // --- Raised central platform + stairs ---
     this._platform();
@@ -66,10 +99,14 @@ export class Arena {
     // --- Boss-end landmark: giant violet mushroom ---
     this._bossLandmark();
 
-    // --- Spawn telegraph rings near east end (visual placeholder) ---
+    // --- Spawn telegraph rings over the east-end spawn zone (emissive, pulsing) ---
+    this._rings = [];
     for (let i = 0; i < 3; i++) {
-      this._spawnRing(randRange(-8, 8), ARENA.LENGTH / 2 - randRange(6, 14));
+      this._spawnRing(randRange(-9, 9), ARENA.LENGTH / 2 - randRange(7, 14));
     }
+
+    // --- Ambient fireflies drifting near the ground (bloom accents) ---
+    this._fireflies();
   }
 
   _boundary() {
@@ -148,17 +185,25 @@ export class Arena {
       pil.castShadow = true;
       this.scene.add(pil);
     }
-    // Stairs (steps 0.625 high → above nav climb, per spec)
+    // Standables: surfaces the player can stand on (top-land) — the platform (with
+    // solid sides) plus the ascending stairs (auto-step). Exposed for Player collision.
+    this.standables = [
+      { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true }, // platform
+    ];
+
+    // Stairs ascend from z=-5 (0.6 high) to z=-1 (3.0, meeting the platform edge).
     const steps = 5;
     for (let i = 0; i < steps; i++) {
       const sh = (steps - i) * (h / steps);
+      const z = 4 - 5 - i * 1.0;
       const step = new THREE.Mesh(
         new THREE.BoxGeometry(3, sh, 1.0),
         new THREE.MeshToonMaterial({ color: 0x7d7363 })
       );
-      step.position.set(0, sh / 2, 4 - 5 - i * 1.0);
+      step.position.set(0, sh / 2, z);
       step.castShadow = true; step.receiveShadow = true;
       this.scene.add(step);
+      this.standables.push({ minX: -1.5, maxX: 1.5, minZ: z - 0.5, maxZ: z + 0.5, top: sh, solid: false });
     }
     this.platform = top;
   }
@@ -174,12 +219,13 @@ export class Arena {
     g.add(stem);
     const cap = new THREE.Mesh(
       new THREE.SphereGeometry(4.5, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshToonMaterial({ color: 0x7a3fa0, emissive: 0x2a0f40, emissiveIntensity: 0.6 })
+      new THREE.MeshToonMaterial({ color: 0x7a3fa0, emissive: 0x5a1f80, emissiveIntensity: 1.1 })
     );
     cap.position.y = 7;
     cap.castShadow = true;
+    cap.layers.enable(BLOOM_LAYER);
     g.add(cap);
-    // Glowing spots
+    // Glowing spots (bloom accents)
     for (let i = 0; i < 10; i++) {
       const spot = new THREE.Mesh(
         new THREE.SphereGeometry(randRange(0.3, 0.6), 8, 8),
@@ -187,6 +233,7 @@ export class Arena {
       );
       const a = randRange(0, Math.PI * 2), r = randRange(1.5, 3.8);
       spot.position.set(Math.cos(a) * r, 7 + randRange(0.5, 2.5), Math.sin(a) * r * 0.5);
+      spot.layers.enable(BLOOM_LAYER);
       g.add(spot);
     }
     g.position.set(0, 0, ARENA.LENGTH / 2 - 4);
@@ -200,10 +247,35 @@ export class Arena {
   _spawnRing(x, z) {
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(1.6, 0.12, 8, 32),
-      new THREE.MeshBasicMaterial({ color: 0x7fff9f, transparent: true, opacity: 0.7 })
+      new THREE.MeshBasicMaterial({ color: 0x7fff9f, transparent: true, opacity: 0.8 })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(x, 0.05, z);
+    ring.layers.enable(BLOOM_LAYER);
     this.scene.add(ring);
+    this._rings.push({ ring, phase: Math.random() * Math.PI * 2 });
+  }
+
+  // Drifting fireflies near the ground — small bloom-layer points (LEVELS_SPEC §2).
+  _fireflies() {
+    const n = 70;
+    const pos = new Float32Array(n * 3);
+    this._ffSeed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * (ARENA.WIDTH - 4);
+      pos[i * 3 + 1] = 0.4 + Math.random() * 2.4;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * (ARENA.LENGTH - 8);
+      this._ffSeed[i] = Math.random() * 100;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xfff0a0, size: 0.16, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this.fireflies = new THREE.Points(geo, mat);
+    this.fireflies.frustumCulled = false;
+    this.fireflies.layers.enable(BLOOM_LAYER);
+    this.scene.add(this.fireflies);
   }
 }

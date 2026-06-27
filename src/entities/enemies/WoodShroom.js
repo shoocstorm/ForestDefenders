@@ -16,9 +16,9 @@ export class WoodShroom extends EnemyBase {
     }));
   }
 
-  performAttack(ctx, toPlayer, dist) {
+  performAttack(ctx, target, toTarget, dist) {
     if (dist <= this.attackRange) {
-      ctx.player.takeDamage(this.attackDamage, ctx);
+      target.takeDamage(this.attackDamage, ctx);
       // Quick cap lunge for readability.
       if (this.capPivot) this.capPivot.rotation.x = -0.5;
     }

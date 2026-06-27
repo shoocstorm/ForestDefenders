@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PLAYER, CAMERA, ARENA, COMBAT } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
 import { Acorn } from '../weapons/Acorn.js';
+import { resolveCircleColliders } from '../util/Collision.js';
 import { clamp, dampAngle } from '../util/MathUtils.js';
 
 // Player character controller: camera-relative movement, jump + double-jump,
@@ -23,6 +24,7 @@ export class Player {
     this.maxHp = PLAYER.MAX_HP;
     this._invuln = 0;          // i-frame timer after taking a hit
     this._spawn = this.position.clone();
+    this.dead = false;
 
     this.weapon = new Acorn();
 
@@ -36,19 +38,19 @@ export class Player {
     this._aim = new THREE.Vector3();
   }
 
-  // Incoming enemy damage (i-framed). On reaching 0 HP the player respawns at the
-  // start with full HP (a real defeat screen + run end arrives in M3).
+  // Incoming enemy damage (i-framed). Shield (Hedgehog buff) soaks first; at 0 HP
+  // the player dies → defeat screen via ctx.onPlayerDeath (COMBAT_SPEC §4).
   takeDamage(amount, ctx) {
-    if (this._invuln > 0 || amount <= 0) return;
-    this.hp = Math.max(0, this.hp - amount);
+    if (this._invuln > 0 || amount <= 0 || this.dead) return;
+    const through = ctx?.gameManager ? ctx.gameManager.absorbWithShield(amount) : amount;
     this._invuln = COMBAT.PLAYER_IFRAMES;
     this.cameraRig.addShake(0.45);
     ctx?.hud?.flashDamage();
+    if (through <= 0) return; // fully shielded
+    this.hp = Math.max(0, this.hp - through);
     if (this.hp <= 0) {
-      this.hp = this.maxHp;
-      this.position.copy(this._spawn);
-      this.velocity.set(0, 0, 0);
-      this._invuln = 1.5;
+      this.dead = true;
+      ctx?.onPlayerDeath?.();
     }
   }
 
@@ -65,7 +67,8 @@ export class Player {
 
     const axis = input.moveAxis();
     const running = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
-    const speed = PLAYER.SPEED * (running ? PLAYER.RUN_MULT : 1);
+    const speedMult = ctx?.gameManager?.speedMult ?? 1; // Rabbit speed buff
+    const speed = PLAYER.SPEED * (running ? PLAYER.RUN_MULT : 1) * speedMult;
 
     this._wish.set(0, 0, 0)
       .addScaledVector(this._fwd, axis.y)
@@ -93,9 +96,24 @@ export class Player {
     this.velocity.y -= PLAYER.GRAVITY * dt;
     this.position.addScaledVector(this.velocity, dt);
 
-    // Ground plane at y=0 (M1 flat ground).
-    if (this.position.y <= 0) {
-      this.position.y = 0;
+    // --- Horizontal collision: tree trunks + solid platform sides ---
+    const r = PLAYER.RADIUS;
+    if (ctx?.colliders) resolveCircleColliders(this.position, r, ctx.colliders);
+    const standables = ctx?.standables;
+    if (standables) this._resolvePlatformSides(standables, r);
+
+    // --- Vertical: stand on the highest reachable surface (auto-step), else ground ---
+    let floorY = 0;
+    if (standables) {
+      for (const s of standables) {
+        if (this.position.x <= s.minX || this.position.x >= s.maxX) continue;
+        if (this.position.z <= s.minZ || this.position.z >= s.maxZ) continue;
+        // Reachable if we're above it, or close enough below to step up onto it.
+        if (s.top > floorY && this.position.y >= s.top - 0.7) floorY = s.top;
+      }
+    }
+    if (this.position.y <= floorY) {
+      this.position.y = floorY;
       this.velocity.y = 0;
       if (!this.grounded) this.jumpsLeft = this.hasDoubleJump ? 2 : 1;
       this.grounded = true;
@@ -104,8 +122,8 @@ export class Player {
     }
 
     // --- Arena bounds ---
-    const halfX = ARENA.WIDTH / 2 - PLAYER.RADIUS;
-    const halfZ = ARENA.LENGTH / 2 - PLAYER.RADIUS;
+    const halfX = ARENA.WIDTH / 2 - r;
+    const halfZ = ARENA.LENGTH / 2 - r;
     this.position.x = clamp(this.position.x, -halfX, halfX);
     this.position.z = clamp(this.position.z, -halfZ, halfZ);
 
@@ -138,6 +156,25 @@ export class Player {
         vfx: ctx.vfx,
         cameraRig: rig,
       });
+    }
+  }
+
+  // Push the player out of the sides of solid standables (the platform block) when
+  // their body is below the top surface — so they can't walk through it.
+  _resolvePlatformSides(standables, r) {
+    for (const s of standables) {
+      if (!s.solid || this.position.y >= s.top - 0.1) continue;
+      if (this.position.x <= s.minX - r || this.position.x >= s.maxX + r) continue;
+      if (this.position.z <= s.minZ - r || this.position.z >= s.maxZ + r) continue;
+      const dxL = this.position.x - (s.minX - r);
+      const dxR = (s.maxX + r) - this.position.x;
+      const dzL = this.position.z - (s.minZ - r);
+      const dzR = (s.maxZ + r) - this.position.z;
+      const m = Math.min(dxL, dxR, dzL, dzR);
+      if (m === dxL) this.position.x = s.minX - r;
+      else if (m === dxR) this.position.x = s.maxX + r;
+      else if (m === dzL) this.position.z = s.minZ - r;
+      else this.position.z = s.maxZ + r;
     }
   }
 

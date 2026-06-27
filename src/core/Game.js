@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Input } from './Input.js';
 import { CameraRig } from './CameraRig.js';
+import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
 import { CAMERA } from '../config/Constants.js';
@@ -12,10 +13,10 @@ import { VFX } from '../vfx/VFX.js';
 import { Loot } from '../vfx/Loot.js';
 import { DamageNumbers } from '../ui/DamageNumbers.js';
 import { HUD } from '../ui/HUD.js';
-import { WoodShroom } from '../entities/enemies/WoodShroom.js';
-import { FireShroom } from '../entities/enemies/FireShroom.js';
-import { ARENA } from '../config/Constants.js';
-import { randRange } from '../util/MathUtils.js';
+import { WorldLabels } from '../ui/WorldLabels.js';
+import { Overlays } from '../ui/Overlays.js';
+import { WaveManager } from '../systems/WaveManager.js';
+import { AnimalManager } from '../systems/AnimalManager.js';
 
 // Top-level game: owns renderer, scene, the fixed-step update loop, and the
 // systems registry. Milestones add systems (WaveManager, enemies, HUD, etc.)
@@ -48,13 +49,19 @@ export class Game {
     this.enemies = new EnemyManager(this.scene);
     this.hud = new HUD();
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
+    this.worldLabels = new WorldLabels(this.cameraRig.camera);
     this.loot = new Loot(this.scene, this.gameManager, this.hud);
+    this.animals = new AnimalManager(this.scene);
+    this.overlays = new Overlays(() => this.resetLevel());
 
     // Reused per-frame combat context (avoids per-step allocation).
     this.ctx = {
       player: this.player,
+      input: this.input,
       enemies: this.enemies.enemies,
+      animals: this.animals.animals,
       colliders: this.arena.colliders,
+      standables: this.arena.standables,
       projectiles: this.projectiles,
       vfx: this.vfx,
       loot: this.loot,
@@ -63,10 +70,17 @@ export class Game {
       juice: this.juice,
       hud: this.hud,
       cameraRig: this.cameraRig,
+      onPlayerDeath: () => this._onDefeat(),
     };
 
-    this._spawnWave();
-    this._respawnTimer = 0;
+    // Cinematic-cel post pipeline (selective bloom + GTAO + ACES output).
+    this.postfx = new PostFX(this.renderer, this.scene, this.cameraRig.camera);
+
+    this.state = 'playing'; // 'playing' | 'victory' | 'defeat'
+    this.waves = new WaveManager(this.enemies, this.gameManager, {
+      onWaveStart: (n) => this.hud.showBanner(`WAVE ${n}`),
+      onAllCleared: () => this._onVictory(),
+    });
 
     this._buildAmbientFall();
 
@@ -141,53 +155,85 @@ export class Game {
     const md = this.input.consumeMouseDelta();
     if (md.x || md.y) this.cameraRig.applyMouse(md.x, md.y);
 
-    // Fixed-step simulation for stable physics/animation (scaled accumulator).
-    this.accum += simDt;
-    let steps = 0;
-    while (this.accum >= this.fixedDt && steps < 5) {
-      this._fixedUpdate(this.fixedDt);
-      this.accum -= this.fixedDt;
-      steps++;
+    // Fixed-step simulation (scaled accumulator). Frozen while an overlay is up.
+    if (this.state === 'playing') {
+      this.accum += simDt;
+      let steps = 0;
+      while (this.accum >= this.fixedDt && steps < 5) {
+        this._fixedUpdate(this.fixedDt);
+        this.accum -= this.fixedDt;
+        steps++;
+      }
+      // Per-frame (variable) combat VFX/UI — scaled so they freeze with the sim.
+      this.vfx.update(simDt);
+      this.loot.update(simDt, this.cameraRig.camera.position);
+      this.damageNumbers.update(simDt);
     }
 
-    // Per-frame (variable) combat VFX/UI — scaled so they freeze with the sim.
-    this.vfx.update(simDt);
-    this.loot.update(simDt, this.cameraRig.camera.position);
-    this.damageNumbers.update(simDt);
-
-    // Endless test spawning: refill once the field is cleared (M3 → real waves).
-    if (this.enemies.aliveCount === 0) {
-      this._respawnTimer += realDt;
-      if (this._respawnTimer > 2) { this._spawnWave(); this._respawnTimer = 0; }
-    }
-
-    // Camera + ambience.
+    // Camera + ambience + projected labels (run even when paused so UI tracks).
     this.cameraRig.update(simDt, this.player.position);
+    this.arena.update(realDt);
     this._updateAmbientFall(realDt);
+    this.worldLabels.update(this.animals.animals, this.animals.nearestCaged);
+
+    // Quality toggle (Slash) for the post stack.
+    if (this.input.wasPressed('Slash')) this.postfx.toggleQuality();
 
     this._updateHud();
-    this.renderer.render(this.scene, this.cameraRig.camera);
+    this.postfx.render();
     this.input.endFrame();
     this._updateStats(realDt);
   }
 
   _fixedUpdate(dt) {
+    this.waves.update(dt);
     this.player.update(dt, this.input, this.ctx);
+    this.animals.update(dt, this.ctx);   // before enemies so targeting is current
     this.enemies.update(dt, this.ctx);
     this.projectiles.update(dt, this.ctx);
   }
 
-  // Scatter a small test wave near the east (boss) end (LEVELS_SPEC spawn rings).
-  _spawnWave() {
-    const level = this.gameManager.level;
-    for (let i = 0; i < 3; i++) {
-      this.enemies.spawn(WoodShroom,
-        new THREE.Vector3(randRange(-8, 8), 0, randRange(ARENA.LENGTH / 2 - 16, ARENA.LENGTH / 2 - 6)), level);
-    }
-    for (let i = 0; i < 2; i++) {
-      this.enemies.spawn(FireShroom,
-        new THREE.Vector3(randRange(-10, 10), 0, randRange(ARENA.LENGTH / 2 - 18, ARENA.LENGTH / 2 - 8)), level);
-    }
+  _onVictory() {
+    if (this.state !== 'playing') return;
+    this.state = 'victory';
+    document.exitPointerLock?.();
+    const saved = this.animals.savedCount;
+    const r = this.gameManager.computeRank(saved);
+    this.overlays.showVictory({
+      rank: r.rank, stars: r.stars, bonus: r.bonus, saved, total: this.animals.total,
+      kills: this.gameManager.kills, gold: this.gameManager.gold,
+    });
+  }
+
+  _onDefeat() {
+    if (this.state !== 'playing') return;
+    this.state = 'defeat';
+    document.exitPointerLock?.();
+    this.overlays.showDefeat({
+      wave: this.waves.waveNumber, total: this.waves.total, kills: this.gameManager.kills,
+    });
+  }
+
+  // Rebuild the level in place (Retry / Play Again) — no full page reload.
+  resetLevel() {
+    for (const e of this.enemies.enemies) this.scene.remove(e.group);
+    this.enemies.enemies.length = 0;
+    for (const a of this.animals.animals) a.dispose();
+    this.animals = new AnimalManager(this.scene);
+    this.ctx.animals = this.animals.animals;
+
+    this.gameManager.reset();
+    this.player.hp = this.player.maxHp;
+    this.player.dead = false;
+    this.player.position.copy(this.player._spawn);
+    this.player.velocity.set(0, 0, 0);
+
+    this.waves = new WaveManager(this.enemies, this.gameManager, {
+      onWaveStart: (n) => this.hud.showBanner(`WAVE ${n}`),
+      onAllCleared: () => this._onVictory(),
+    });
+    this.accum = 0;
+    this.state = 'playing';
   }
 
   _updateHud() {
@@ -198,6 +244,11 @@ export class Game {
       enemies: this.enemies.aliveCount,
       kills: this.gameManager.kills,
       weapon: this.player.weapon.name,
+      shield: this.gameManager.shield,
+      buffs: this.gameManager.buffs,
+      wave: this.waves.waveNumber || 1,
+      totalWaves: this.waves.total,
+      saved: this.animals.savedCount,
     });
   }
 
@@ -222,5 +273,6 @@ export class Game {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h);
     this.cameraRig.resize(w / h);
+    this.postfx?.setSize(w, h);
   }
 }

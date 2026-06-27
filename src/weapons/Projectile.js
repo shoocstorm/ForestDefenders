@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARENA } from '../config/Constants.js';
+import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 
 // Team-aware projectile pool. Player-team shots test against enemies; enemy-team
 // shots (e.g. Fire Shroom fireballs) test against the player. Meshes are pooled
@@ -21,6 +21,7 @@ export class ProjectilePool {
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const mesh = new THREE.Mesh(this._geo, mat);
     mesh.castShadow = false;
+    mesh.layers.enable(BLOOM_LAYER); // projectiles glow in the post pipeline
     const light = new THREE.PointLight(0xffffff, 0, 6, 2);
     mesh.add(light);
     const p = {
@@ -79,12 +80,24 @@ export class ProjectilePool {
             }
           }
         } else {
+          // Enemy projectile: test the player, then any attackable animal.
           const player = ctx.player;
           const rr = p.radius + 0.55;
           if (this._tmp.copy(player.position).setY(player.position.y + 0.8).distanceToSquared(p.pos) < rr * rr) {
             player.takeDamage(p.damage, ctx);
             ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
             dead = true;
+          } else if (ctx.animals) {
+            for (const a of ctx.animals) {
+              if (!a.isAttackable()) continue;
+              const ar = p.radius + a.hitRadius;
+              if (this._tmp.copy(a.position).setY(a.position.y + 0.4).distanceToSquared(p.pos) < ar * ar) {
+                a.takeDamage(p.damage, ctx);
+                ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+                dead = true;
+                break;
+              }
+            }
           }
         }
       }

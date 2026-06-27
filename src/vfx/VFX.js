@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BLOOM_LAYER } from '../config/Constants.js';
 
 // Lightweight particle/light VFX manager. Each effect is a short-lived additive
 // THREE.Points cloud (+ optional flash light + expanding shockwave rings) tracked
@@ -37,6 +38,7 @@ export class VFX {
     });
     const points = new THREE.Points(geo, mat);
     points.frustumCulled = false;
+    points.layers.enable(BLOOM_LAYER); // additive particles glow in the post pipeline
     this.scene.add(points);
     this.active.push({ points, vels, life, maxLife: life, gravity });
   }
@@ -77,6 +79,13 @@ export class VFX {
     this._burst(pos, { count: 28, color: 0xffffff, size: 0.18, speed: 9, spread: 1, life: 0.45 });
     this._burst(pos, { count: 24, color: accentColor, size: 0.22, speed: 5, spread: 1, life: 0.55 });
     for (let i = 0; i < 3; i++) this._shockwave(pos, accentColor, 5.0, 0.4 + i * 0.12);
+  }
+
+  // Celebratory burst when an animal is freed (ANIMALS_SPEC §8) — gold + pink.
+  rescueBurst(pos) {
+    this._flash(pos, 0xffd6f0, 14, 8);
+    this._burst(pos, { count: 30, color: 0xffd24a, size: 0.22, speed: 6, spread: 1, up: 0.7, life: 0.75 });
+    this._burst(pos, { count: 24, color: 0xff7ab0, size: 0.2, speed: 5, spread: 1, up: 0.6, life: 0.75 });
   }
 
   update(dt) {
