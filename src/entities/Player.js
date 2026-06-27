@@ -118,6 +118,10 @@ export class Player {
     // --- Apply transform to model ---
     this.model.group.position.copy(this.position);
     this.model.group.rotation.y = this.facing;
+    // First-person "viewmodel": keep the body/arms/gun/tail visible so the player
+    // can see what they control, but hide just the head — the camera sits inside
+    // it and would otherwise look at the head's (black) outline shell.
+    this.model.pivots.head.visible = rig.mode !== CAMERA.FP;
 
     // --- Animation ---
     const planarSpeed = Math.hypot(this.velocity.x, this.velocity.z);

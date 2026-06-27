@@ -52,8 +52,9 @@ export class CameraRig {
     const eye = this._target.copy(playerPos);
 
     if (this.mode === CAMERA.FP) {
-      eye.y += CAMERA.EYE_HEIGHT ?? 0.95;
-      eye.y = playerPos.y + 0.95;
+      // Eye at head height; Player hides the hero mesh in FP so the camera isn't
+      // looking at the inside of the head's (black) outline shell.
+      eye.y = playerPos.y + CAMERA.EYE_HEIGHT;
       this.camera.position.copy(eye);
       this._desired.copy(eye).addScaledVector(aim, 1);
       this.camera.lookAt(this._desired);

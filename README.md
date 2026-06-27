@@ -42,11 +42,3 @@ src/
     Player.js           movement controller + procedural locomotion animator
 ```
 
-## Milestones
-
-- [x] **M1 — Foundation & Hero**: scaffold, arena, procedural squirrel, movement (run/jump/double-jump), 3 camera modes, mouse-look.
-- [ ] **M2 — Combat core**: acorn gun, projectiles, enemies + AI, damage/element pipeline, death VFX, gold, HUD.
-- [ ] **M3 — Level 1 loop**: set pieces, 3-wave spawner, animals, victory/defeat + scoring.
-- [ ] **M4 — Weapons & juice**: 9 weapons, melee, camera/hit-stop/slow-mo, full VFX.
-- [ ] **M5 — Economy & systems**: shop, upgrades, plants, achievements, save/load.
-- [ ] **M6 — Full campaign & audio**: L2/L3 biomes, procedural audio, atmosphere polish.

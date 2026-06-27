@@ -28,6 +28,7 @@ export const CAMERA = {
   TP: 'tp',
   TOP: 'top',
   FOV: 70,
+  EYE_HEIGHT: 1.02, // first-person eye height above the hero's feet (clears the torso top)
   MOUSE_SENS: 0.0022,
   PITCH_MIN: -1.3,
   PITCH_MAX: 1.3,
