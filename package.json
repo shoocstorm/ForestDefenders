@@ -5,9 +5,8 @@
   "type": "module",
   "description": "Forest Defender: Mushroom Mayhem — Three.js re-implementation",
   "scripts": {
-    "dev": "BUN_PORT=5173 bun ./index.html",
-    "build": "bun build ./index.html --outdir dist --minify --sourcemap=linked",
-    "preview": "BUN_PORT=4173 bun ./index.html"
+    "dev": "bun ./index.html",
+    "build": "rm -rf dist && bun build ./src/main.js --outfile dist/main.js --minify && cp index.html dist/ "
   },
   "dependencies": {
     "three": "^0.171.0"

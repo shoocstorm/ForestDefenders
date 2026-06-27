@@ -21,20 +21,19 @@
 
 ```bash
 bun install
-bun run dev      # http://localhost:5173  (Bun dev server + HMR)
-bun run build    # bundle to dist/
-bun run preview  # serve on :4173
+bun run dev      # http://localhost:3000  (Bun dev server + HMR)
+bun run build    # bundle to dist/, then npx http-server dist/
 ```
 
-**Gotchas (important):**
+**Gotchas:**
 - Bun **swallows `--port`** when serving an HTML entrypoint → it defaults to 3000.
-  Port MUST be set via the **`BUN_PORT`** env var (already wired into the npm scripts).
+  Port can be set via the **`BUN_PORT`** env var if needed.
 - `index.html` must reference **`./src/main.js`** (relative path) for Bun's HTML bundler.
 - **Headless screenshot verification** (no GPU): use Chrome with software WebGL —
   ```bash
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --no-sandbox \
     --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader \
-    --window-size=1280,720 --virtual-time-budget=6000 --screenshot=out.png "http://localhost:5173/"
+    --window-size=1280,720 --virtual-time-budget=6000 --screenshot=out.png "http://localhost:3000/"
   ```
   Plain `--disable-gpu` fails with "Error creating WebGL context". FPS will read ~15
   under SwiftShader; that's the software renderer, not the game — real GPU is 60.

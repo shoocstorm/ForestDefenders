@@ -2,9 +2,9 @@
 // Keeping all magic numbers here so milestones stay data-driven and easy to verify.
 
 export const PLAYER = {
-  // Locomotion (HERO_SPEC §7)
-  SPEED: 7.0,
-  RUN_MULT: 1.7,
+  // Locomotion (HERO_SPEC §7 baseline was 7.0/1.7; raised for a swifter arcade feel)
+  SPEED: 10.0,
+  RUN_MULT: 1.8,
   JUMP_VELOCITY: 9.0,
   DOUBLE_JUMP_VELOCITY: 7.5,
   ROTATION_SPEED: 9.0,

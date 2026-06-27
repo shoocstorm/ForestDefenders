@@ -61,7 +61,7 @@ export class Player {
     this._fwd.y = 0;
     if (this._fwd.lengthSq() < 1e-4) this._fwd.set(0, 0, -1);
     this._fwd.normalize();
-    this._right.set(this._fwd.z, 0, -this._fwd.x); // right-hand perpendicular
+    this._right.set(-this._fwd.z, 0, this._fwd.x); // screen-right for a -Z forward
 
     const axis = input.moveAxis();
     const running = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
@@ -139,8 +139,9 @@ export class Player {
 
   _animate(dt, moving, running, planarSpeed) {
     const p = this.model.pivots;
-    // Locomotion phase advances with speed; run is faster + bigger.
-    const freq = moving ? (running ? 10 : 7) : 2.2;
+    // Locomotion phase advances with actual ground speed (keeps the gait from
+    // gliding when SPEED is high); idle ticks slowly.
+    const freq = moving ? planarSpeed * 1.35 : 2.2;
     this.animTime += dt * freq;
     const t = this.animTime;
 
@@ -148,9 +149,11 @@ export class Player {
     // Legs alternate fore/aft (bone-local X pitch).
     p.legL.rotation.x = Math.sin(t) * swing;
     p.legR.rotation.x = Math.sin(t + Math.PI) * swing;
-    // Arms counter-swing (smaller; right arm braces gun so dampen it).
-    p.armL.rotation.x = Math.sin(t + Math.PI) * swing * 0.7;
-    p.armR.rotation.x = Math.sin(t) * swing * 0.35;
+    // Arms hold the rifle (no free swing): right paw grips it, left rests forward.
+    // A tiny breathing wobble keeps them from looking frozen.
+    const wob = Math.sin(t * 0.9) * 0.05;
+    p.armR.rotation.set(-1.0 + wob, -0.15, 0.12);
+    p.armL.rotation.set(-0.22 + wob, 0.0, -0.08);
 
     // Body bob + slight forward lean when moving/running.
     const bob = moving ? Math.abs(Math.sin(t)) * (running ? 0.07 : 0.04) : Math.sin(t * 0.6) * 0.01;
@@ -164,9 +167,10 @@ export class Player {
       p.torso.rotation.x = 0.15;
     }
 
-    // Tail idle sway + lift when running.
-    p.tail.rotation.x = -0.3 + Math.sin(t * 0.8) * 0.12 + (running ? 0.25 : 0);
-    p.tail.rotation.z = Math.sin(t * 0.6) * 0.1;
+    // Tail gentle sway (the upright arc is baked into the geometry now); tuck a
+    // touch when running.
+    p.tail.rotation.x = Math.sin(t * 0.8) * 0.08 - (running ? 0.12 : 0);
+    p.tail.rotation.z = Math.sin(t * 0.6) * 0.08;
 
     // Head subtle look toward aim pitch in TP/FP.
     p.head.rotation.x = clamp(-this.cameraRig.pitch * 0.3, -0.4, 0.4);

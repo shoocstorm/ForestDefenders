@@ -151,7 +151,7 @@ export class Arena {
     // Stairs (steps 0.625 high → above nav climb, per spec)
     const steps = 5;
     for (let i = 0; i < steps; i++) {
-      const sh = (i + 1) * (h / steps);
+      const sh = (steps - i) * (h / steps);
       const step = new THREE.Mesh(
         new THREE.BoxGeometry(3, sh, 1.0),
         new THREE.MeshToonMaterial({ color: 0x7d7363 })

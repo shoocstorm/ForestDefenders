@@ -104,21 +104,25 @@ export class HeroModel {
         .rotation.x = 0;
     }
 
-    // --- Tail (big bushy, pivot at base for sway) ---
+    // --- Tail (big bushy; arcs up behind the back then curls forward over it) ---
+    // Spheres are placed along a baked arc in the tail's local frame so the whole
+    // bush sways as one rigid group (driven by pivots.tail rotation in the animator).
     const tail = new THREE.Group();
-    tail.position.set(0, -0.1, -0.2);
+    tail.position.set(0, 0.0, -0.22); // lower back, just behind the torso
     torso.add(tail);
     this.pivots.tail = tail;
-    let seg = tail;
-    const tailColors = [FUR, FUR, FUR_DARK, CREAM];
-    for (let i = 0; i < 4; i++) {
-      const s = 0.26 - i * 0.03;
-      const sphere = this._mesh(new THREE.SphereGeometry(s, 12, 10), toon(tailColors[i]), seg, [0, 0.0, 0], false);
-      const next = new THREE.Group();
-      next.position.set(0, 0.12 + i * 0.02, -0.16 - i * 0.04);
-      next.rotation.x = -0.5;
-      seg.add(next);
-      seg = next;
+    const tailColors = [FUR_DARK, FUR, FUR, FUR, CREAM, CREAM];
+    const tailSizes = [0.15, 0.22, 0.26, 0.25, 0.21, 0.16];
+    const segs = tailColors.length;
+    const step = 0.17;
+    let ty = 0, tz = 0;
+    for (let i = 0; i < segs; i++) {
+      // Direction angle sweeps from up-and-back (-0.7) to up-and-forward (1.5),
+      // measured from +Y toward +Z (front), producing the squirrel "?" curl.
+      const phi = -0.7 + 2.2 * ((i + 0.5) / segs);
+      ty += Math.cos(phi) * step;
+      tz += Math.sin(phi) * step;
+      this._mesh(new THREE.SphereGeometry(tailSizes[i], 12, 10), toon(tailColors[i]), tail, [0, ty, tz], false);
     }
 
     // --- Arms ---
@@ -129,11 +133,13 @@ export class HeroModel {
     this.pivots.legL = this._limb(g, -1, 0.42, 0.22, FUR, false);
     this.pivots.legR = this._limb(g, 1, 0.42, 0.22, FUR, false);
 
-    // --- Rifle (held in right hand area) ---
+    // --- Rifle (held in the right paw) ---
+    // Parented to the torso so it bobs/leans with the body and the holding hand
+    // (which is also a torso child) instead of floating on the static root.
     const gun = new THREE.Group();
-    gun.position.set(0.28, 0.5, 0.28);
+    gun.position.set(0.28, -0.02, 0.28); // torso-local (≈ world 0.28, 0.50, 0.28)
     gun.rotation.set(0, 0.1, -0.05);
-    g.add(gun);
+    torso.add(gun);
     this.pivots.gun = gun;
     this._mesh(new THREE.BoxGeometry(0.08, 0.1, 0.34), toon(WOOD), gun, [0, 0, 0], false); // stock
     this._mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 10), toon(STEEL), gun, [0, 0.03, 0.34], false)
