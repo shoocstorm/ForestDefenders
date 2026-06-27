@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Forest Defender: Mushroom Mayhem</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1410; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      /* --- Boot / loading overlay --- */
+      #boot {
+        position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px;
+        background: radial-gradient(circle at 50% 35%, #1a3326, #0b1410 70%);
+        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6;
+        z-index: 50; transition: opacity 0.6s ease;
+      }
+      #boot.hidden { opacity: 0; pointer-events: none; }
+      #boot h1 { font-size: 34px; letter-spacing: 1px; text-shadow: 0 2px 12px #000a; }
+      #boot .sub { font-size: 14px; opacity: 0.7; }
+      #boot .hint { font-size: 13px; opacity: 0.55; margin-top: 8px; }
+      #boot .spinner {
+        width: 42px; height: 42px; border: 4px solid #2e5d3e; border-top-color: #a8e063;
+        border-radius: 50%; animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* --- Debug stats --- */
+      #stats {
+        position: fixed; top: 8px; left: 8px; z-index: 20;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+        color: #a8e063; text-shadow: 0 1px 3px #000c; pointer-events: none;
+        line-height: 1.5; white-space: pre;
+      }
+      /* --- Controls help --- */
+      #help {
+        position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+        z-index: 20; font-family: "Trebuchet MS", system-ui, sans-serif;
+        font-size: 12.5px; color: #d7f0c2; text-shadow: 0 1px 3px #000c;
+        background: #0b141066; padding: 6px 14px; border-radius: 20px;
+        border: 1px solid #ffffff1a; pointer-events: none; text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="stats"></div>
+    <div id="help">WASD move · Shift run · Space jump (×2) · Mouse look · 1/2/3 camera · Click to capture mouse</div>
+    <div id="boot">
+      <h1>🌰 Forest Defender</h1>
+      <div class="sub">Mushroom Mayhem</div>
+      <div class="spinner"></div>
+      <div class="hint">Loading…</div>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "forest-defender-ii",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forest Defender: Mushroom Mayhem — Three.js re-implementation",
+  "scripts": {
+    "dev": "BUN_PORT=5173 bun ./index.html",
+    "build": "bun build ./index.html --outdir dist --minify --sourcemap=linked",
+    "preview": "BUN_PORT=4173 bun ./index.html"
+  },
+  "dependencies": {
+    "three": "^0.171.0"
+  }
+}
