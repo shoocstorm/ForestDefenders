@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { PLAYER, CAMERA, ARENA } from '../config/Constants.js';
+import { PLAYER, CAMERA, ARENA, COMBAT } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
+import { Acorn } from '../weapons/Acorn.js';
 import { clamp, dampAngle } from '../util/MathUtils.js';
 
 // Player character controller: camera-relative movement, jump + double-jump,
@@ -20,6 +21,10 @@ export class Player {
     this.oneShot = null;       // { name, t, dur } for jump/shot/etc later
     this.hp = PLAYER.MAX_HP;
     this.maxHp = PLAYER.MAX_HP;
+    this._invuln = 0;          // i-frame timer after taking a hit
+    this._spawn = this.position.clone();
+
+    this.weapon = new Acorn();
 
     this.model = new HeroModel();
     scene.add(this.model.group);
@@ -28,10 +33,28 @@ export class Player {
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._wish = new THREE.Vector3();
+    this._aim = new THREE.Vector3();
   }
 
-  update(dt, input) {
+  // Incoming enemy damage (i-framed). On reaching 0 HP the player respawns at the
+  // start with full HP (a real defeat screen + run end arrives in M3).
+  takeDamage(amount, ctx) {
+    if (this._invuln > 0 || amount <= 0) return;
+    this.hp = Math.max(0, this.hp - amount);
+    this._invuln = COMBAT.PLAYER_IFRAMES;
+    this.cameraRig.addShake(0.45);
+    ctx?.hud?.flashDamage();
+    if (this.hp <= 0) {
+      this.hp = this.maxHp;
+      this.position.copy(this._spawn);
+      this.velocity.set(0, 0, 0);
+      this._invuln = 1.5;
+    }
+  }
+
+  update(dt, input, ctx) {
     const rig = this.cameraRig;
+    if (this._invuln > 0) this._invuln -= dt;
 
     // --- Build camera-relative basis on the ground plane ---
     rig.getAimDirection(this._fwd);
@@ -100,6 +123,18 @@ export class Player {
     const planarSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     this.speedScale = planarSpeed / PLAYER.SPEED;
     this._animate(dt, moving, running, planarSpeed);
+
+    // --- Weapon firing (left mouse or Z; muzzle origin + camera aim ray) ---
+    if (ctx) {
+      const firing = input.mouseDown(0) || input.isDown('KeyZ');
+      this.weapon.update(dt, firing, {
+        origin: this.model.muzzleWorldPosition,
+        dir: rig.getAimDirection(this._aim),
+        projectiles: ctx.projectiles,
+        vfx: ctx.vfx,
+        cameraRig: rig,
+      });
+    }
   }
 
   _animate(dt, moving, running, planarSpeed) {

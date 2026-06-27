@@ -62,3 +62,46 @@ export function elementMultiplier(attackElement, targetElement) {
   const idx = ELEMENTS.indexOf(targetElement);
   return idx < 0 ? 1.0 : row[idx];
 }
+
+// --- Weapons (WEAPONS_SPEC §2). M2 ships only the Acorn Gun. ---
+export const WEAPONS = {
+  ACORN: {
+    name: 'Acorn Gun', element: 'NATURE', damage: 10, cooldown: 0.3,
+    recoil: 0.35, projectileSpeed: 20, projectileRadius: 0.16,
+    color: 0x9a6a35, muzzleColor: 0xc7e08a, automatic: true,
+  },
+};
+
+// Shared camera-recoil tuning (JUICE_SPEC §2); per-weapon `recoil` scales it.
+export const RECOIL = {
+  PITCH: 0.14, FOV: 2.0, RETURN: 13.0,
+};
+
+// --- Enemies (ENEMIES_SPEC §2). M2 ships Wood + Fire shrooms. ---
+export const ENEMY_DEFS = {
+  WOOD_SHROOM: {
+    type: 'WOOD_SHROOM', element: 'WOOD', role: 'melee',
+    hp: 30, speed: 5.5, attackDamage: 10, attackRange: 2.6, attackCooldown: 1.5,
+    detectionRange: 12, hitRadius: 0.7, accent: 0x8fe04a,
+  },
+  FIRE_SHROOM: {
+    type: 'FIRE_SHROOM', element: 'FIRE', role: 'ranged',
+    hp: 20, speed: 4.0, attackDamage: 15, attackRange: 10.0, attackCooldown: 3.0,
+    detectionRange: 14, hitRadius: 0.65, accent: 0xff7a30, projectileSpeed: 12,
+  },
+};
+
+// --- Combat / juice tuning (COMBAT_SPEC, ENEMIES_SPEC §5, JUICE_SPEC §12). ---
+export const COMBAT = {
+  PLAYER_IFRAMES: 0.6,
+  ENEMY_RADIUS: 0.5,        // body radius for tree/separation collision
+  SEPARATION_RADIUS: 1.5,   // boids push range (ENEMIES_SPEC §3.2)
+  LEVEL_SCALE: 0.15,        // (1 + 0.15*level) per campaign level
+  GOLD_MIN: 1, GOLD_MAX: 5,
+};
+
+export const JUICE = {
+  IMPACT_FREEZE: 0.05, IMPACT_RESTORE: 0.07,
+  HIT_STOP: 0.04, HIT_STOP_DUR: 0.08,
+  SLOW_MO: 0.12, SLOW_MO_DUR: 1.1,
+};

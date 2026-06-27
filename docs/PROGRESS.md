@@ -4,7 +4,7 @@
 > work session so a fresh conversation can continue without re-deriving context.
 
 **Last updated:** 2026-06-27
-**Current milestone:** M1 complete ✅ · next up: **M2 — Combat core**
+**Current milestone:** M2 complete ✅ · next up: **M3 — Level 1 loop**
 
 ---
 
@@ -53,7 +53,28 @@ src/
   world/Arena.js        Misty Forest: ground, lights+shadows, fog, trees(+collider data), platform, boss landmark, spawn rings
   entities/
     HeroModel.js        procedural "Squrriel" (primitives) with named pivots: torso/head/tail/armL/armR/legL/legR/gun/muzzle
-    Player.js           camera-relative movement, jump+double-jump, facing, procedural locomotion animator; holds hp/maxHp
+    Player.js           camera-relative movement, jump+double-jump, facing, locomotion animator; holds hp/maxHp; owns Acorn weapon + takeDamage (i-framed, respawns at 0)
+    EnemyBase.js        HealthComponent + PURSUE/ATTACK AI, boids separation, anti-stuck veer, hit-squash/flash, death sequence (gold+spore+freeze+squash-flop), level scaling
+    enemies/
+      MushroomModel.js  buildMushroom() — shared procedural cap/stem/face/gills/spots/prop (twig|flame)
+      WoodShroom.js     WOOD melee (vine slash)
+      FireShroom.js     FIRE ranged (lobs enemy-team fireball projectile)
+  combat/
+    HealthComponent.js  dumb HP pool (subtract/heal + onDeath/onChange); damage pipeline lives in EnemyBase.takeDamage
+  weapons/
+    Weapon.js           base: cooldown + auto/semi fire mode → spawns projectile + muzzle flash + camera recoil
+    Acorn.js            default NATURE single-shot (WEAPONS.ACORN)
+    Projectile.js       ProjectilePool — team-aware ('player'→enemies, 'enemy'→player), pooled meshes + point light, sphere hit test
+  vfx/
+    VFX.js              pooled additive particle bursts + flash lights + shockwave rings: muzzleFlash / hitSpark / spore (simplified)
+    Loot.js             gold "acorn" drops that scatter then magnetize to camera → GameManager.gold + HUD pulse
+  ui/
+    DamageNumbers.js    DOM floating combat text (white/green WEAK!/yellow EFFECTIVE/red RESIST), world→screen projected
+    HUD.js              DOM overlay: HP bar (color ramp), gold, enemies/kills, weapon/ammo, crosshair, damage vignette
+  systems/
+    Juice.js            global timeScale (impactFreeze/hitStop/slowMo, token-guarded) — Game scales sim dt by it
+    GameManager.js      gold, kills, level (enemy scaling), playerDamageMult
+    EnemyManager.js     enemy list: spawn / update / reap; exposes list on ctx for separation
 ```
 
 **Key integration points already in place for later milestones:**
@@ -70,8 +91,8 @@ src/
 | Milestone | Scope | Status |
 |---|---|---|
 | **M1 — Foundation & Hero** | Bun+three scaffold, arena, procedural squirrel, run/jump/double-jump, 3 cameras, mouse-look | ✅ done |
-| **M2 — Combat core** | Acorn gun + projectiles, 2 enemy types + pursue/attack AI, health + element matrix + damage pipeline, death VFX, gold drops, basic HUD (HP/gold/ammo/crosshair) | ⬜ next |
-| **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ⬜ |
+| **M2 — Combat core** | Acorn gun + projectiles, 2 enemy types + pursue/attack AI, health + element matrix + damage pipeline, death VFX, gold drops, basic HUD (HP/gold/ammo/crosshair) | ✅ done |
+| **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ⬜ next |
 | **M4 — Weapons & juice** | All 9 weapons + switching, kick/tail melee, camera recoil/shake/hit-stop/slow-mo, muzzle flashes, full spore-death VFX | ⬜ |
 | **M5 — Economy & systems** | Shop, permanent upgrades, plants, achievements, JSON save/load, level-up | ⬜ |
 | **M6 — Full campaign & audio** | L2/L3 biomes, procedural audio, ambient particles, atmosphere/bloom polish | ⬜ |
@@ -93,35 +114,55 @@ src/
 ### Known small deferrals (intentional, not bugs)
 - Ambient petals render as square points (no circular sprite texture yet) — polish in M6.
 - Camera has no collision against geometry (can clip through trees/platform) — polish later.
-- Player collides only with ground + arena bounds, not trees/platform sides yet — add in M2/M3.
+- Player collides only with ground + arena bounds, not trees/platform sides yet — add in M3.
+  (Enemies DO resolve against tree colliders + bounds via `util/Collision.js`; player can reuse it.)
 - Outline (inverted-hull) uses a flat 1.06 uniform scale; fine for chunky primitives, revisit if needed.
 
-## 6. M2 — plan (next session starts here)
+## 6. M2 — done
 
-Goal: shoot enemies, they fight back, they die with juice and drop gold. Verifiable by
-playing: spawn a few enemies, kill them with the acorn gun, watch gold tick up on the HUD.
+- [x] **Damage pipeline** (`combat/HealthComponent.js` + `EnemyBase.takeDamage`): base × `playerDamageMult`
+      × `elementMultiplier(attack, target)` → HP; floating `WEAK!/EFFECTIVE/RESIST` + number text.
+- [x] **Acorn gun** (`weapons/Weapon.js` + `Acorn.js`): cooldown + auto/semi fire, muzzle-origin spawn
+      along camera aim, camera recoil. Left-click **or** Z to fire.
+- [x] **Projectiles** (`weapons/Projectile.js`): pooled, **team-aware** — player shots hit enemies,
+      enemy fireballs hit the player; sphere hit test, point-light glow, lifetime/bounds cull.
+- [x] **Enemies** (`EnemyBase.js` + `WoodShroom`/`FireShroom` + `MushroomModel.js`): PURSUE/ATTACK AI,
+      boids separation, anti-stuck veer, tree+bounds collision, hit-squash/flash, death sequence
+      (gold + spore + impact-freeze + squash-flop), level scaling. Procedural cap/stem/face/spots/prop.
+- [x] **VFX** (`vfx/VFX.js`): pooled additive bursts + flash lights + shockwave rings — muzzle/hit/spore.
+- [x] **Loot** (`vfx/Loot.js`): gold acorns scatter then magnetize to camera → `GameManager.gold` + HUD pulse.
+- [x] **HUD** (`ui/HUD.js`): HP bar w/ color ramp, gold, enemies/kills, weapon/ammo, crosshair, damage vignette.
+- [x] **Juice time-scale** (`systems/Juice.js`): `impactFreeze/hitStop/slowMo` dip `Game`'s sim dt (token-guarded).
+- [x] **Systems**: `GameManager` (gold/kills/level/damageMult), `EnemyManager` (spawn/update/reap).
+- [x] Wired into `Game._fixedUpdate` (player→enemies→projectiles) with a reused `ctx`; endless test wave
+      (3 Wood + 2 Fire) respawns 2s after a clear so there's always something to shoot.
+- [x] Verified via CDP on the live headless build: element mult (NATURE×WOOD=1.0, 10 dmg), kill→`kills++`,
+      1–5 gold acorns drop + collect (HUD `GOLD` ticked to 4), impact-freeze dipped `timeScale`,
+      acorn projectile hit (HP 20→10), enemy melee damaged player (HP→10, red bar). Build = 28 modules.
 
-Suggested build order & new files:
-1. **`combat/HealthComponent.js`** — `max/current`, `takeDamage(amount, attackElement)` →
-   applies `player_damage_mult` (start 1.0) × `elementMultiplier(...)`, returns result; `onDeath` callback.
-2. **`combat/DamageNumbers.js`** (or fold into HUD) — floating `WEAK!`/`RESIST`/`EFFECTIVE` + amount text (CSS or sprites).
-3. **`weapons/Weapon.js` + `weapons/Acorn.js`** — fire-rate cooldown, muzzle position, recoil amount;
-   spawns a projectile along `cameraRig.getAimDirection()` from `player.model.muzzleWorldPosition`.
-4. **`weapons/Projectile.js`** + a projectile pool — travel, lifetime, sphere-vs-enemy hit test,
-   trail/muzzle flash, calls `HealthComponent.takeDamage`. NATURE element for acorn.
-5. **`entities/EnemyBase.js`** — HealthComponent, AI state machine (IDLE→PURSUE→ATTACK→cooldown,
-   plus anti-stuck veer + boids separation), `element`, hit-squash, death sequence
-   (gold drop + spore burst + impact-freeze hook), level-scaling `(1 + 0.15*level)`.
-6. **`entities/enemies/WoodShroom.js`** (melee, WOOD) + **`FireShroom.js`** (ranged fireball, FIRE) —
-   procedural mushroom models from primitives (cap/stem/face). Reference `MUSHROOM_BASE_SPEC.md`.
-7. **`vfx/`** — minimal: muzzle flash, hit spark, simplified spore explosion (full ~520-particle
-   version is M4), gold "acorn" loot that magnetizes to camera.
-8. **`systems/GameManager.js`** — gold, player_damage_mult, kill count; the eventual singleton.
-9. **`ui/HUD.js`** — HP bar, gold counter, ammo/weapon readout, crosshair (DOM overlay; replace inline stats later).
-10. Wire input: left-click / Z to fire; spawn a handful of test enemies on start to verify.
+### M2 deferrals (intentional)
+- Only the Acorn ships; the other 8 weapons + switching are M4 (Weapon base is ready for them).
+- Spore explosion is the simplified ~160-particle version; full ~520-particle death burst is M4.
+- Player death just respawns at start w/ full HP (i-framed) — real defeat screen + run end is M3.
+- Enemy projectiles travel straight (no FireShroom dodge / arc yet) — refine in M4.
 
-Specs to read first for M2: `ENEMIES_SPEC.md`, `WEAPONS_SPEC.md`, `COMBAT_SPEC.md`,
-`MUSHROOM_BASE_SPEC.md`, `JUICE_SPEC.md` (death sequence / hit-stop), `HUD_SPEC.md`.
+## 6b. M3 — plan (next session starts here)
+
+Goal: a complete Level 1 loop — 3 waves, animals to rescue, victory/defeat screens, rescue scoring.
+
+Suggested build order:
+1. **`systems/WaveManager.js`** — replace the endless test spawn in `Game` with 3 scripted waves
+   (counts/types/timing per `LEVELS_SPEC.md`); use `Arena` spawn rings as telegraphed spawn points.
+2. **`entities/Animal.js` + cages** — rescuable animals (`ANIMALS_SPEC.md`); `[E] FREE` prompt; each
+   rescue grants its buff (`COMBAT_SPEC §5`) and feeds rescue scoring.
+3. **Win/lose flow** — victory ("LEVEL CLEAR!" + stars/score) and defeat (skull + retry) overlays
+   (`HUD_SPEC §4`); wire `Player` 0-HP into real defeat instead of respawn.
+4. **HUD additions** — top-center wave counter + animal-rescue counter; bottom-left score/credits.
+5. **L1 set pieces** — flesh out `Arena` per `LEVELS_SPEC.md` (objective markers, rescue spots).
+6. **Player tree/platform collision** — reuse `util/Collision.js` `resolveCircleColliders` (enemies already do).
+
+Specs to read first for M3: `LEVELS_SPEC.md`, `ANIMALS_SPEC.md`, `HUD_SPEC.md` (§4 overlays),
+`STORY_SPEC.md`, `ONBOARDING_SPEC.md`.
 
 ## 7. Tuning reference (already in `src/config/Constants.js`)
 
@@ -130,6 +171,9 @@ Specs to read first for M2: `ENEMIES_SPEC.md`, `WEAPONS_SPEC.md`, `COMBAT_SPEC.m
 - Camera: FOV 70, sens 0.0022, pitch ±1.3, TP dist 6.0 / height 2.4, TOP height 26.
 - Arena: 70 (Z) × 30 (X), platform height 3.0.
 - Element matrix + `elementMultiplier()` exported from Constants.
+- **M2 added:** `WEAPONS.ACORN` (10 dmg / 0.3s cd / NATURE), `RECOIL`, `ENEMY_DEFS` (WOOD_SHROOM melee 30hp,
+  FIRE_SHROOM ranged 20hp), `COMBAT` (player i-frames 0.6s, enemy radius/separation, level scale 0.15, gold 1–5),
+  `JUICE` (impact-freeze 0.05/0.07, hit-stop, slow-mo).
 
 ## 8. Conventions
 
