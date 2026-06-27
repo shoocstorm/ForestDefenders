@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { toon, addOutlines } from '../materials/CelMaterial.js';
-import { damp, lerp } from '../util/MathUtils.js';
+import { damp, lerp, clamp } from '../util/MathUtils.js';
 
 // Hero "Squrriel" — fully PROCEDURAL pivot rig (no GLB). Built from cel-shaded
 // primitives organized into named pivots (legs / arms / body / head / tail / gun)
@@ -49,6 +49,16 @@ export class HeroModel {
     this.group.add(this.modelRoot);
     this.rig = {};
     this.pivots = {};
+    this.arms = [];      // two-bone IK chains (shoulder→elbow→paw) that grip the gun
+
+    // Reusable scratch for the per-frame arm IK (no per-frame allocations).
+    this._ik = {
+      to: new THREE.Vector3(), pole: new THREE.Vector3(),
+      x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3(),
+      tgt: new THREE.Vector3(), m: new THREE.Matrix4(),
+      qBase: new THREE.Quaternion(), qBend: new THREE.Quaternion(),
+      X: new THREE.Vector3(1, 0, 0),
+    };
 
     // Locomotion + one-shot state (all posing is analytic in update()).
     this.grounded = true;
@@ -118,17 +128,25 @@ export class HeroModel {
     // Buck teeth.
     mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), T(0xfffef2), head, [0, -0.10, -0.20]);
 
-    // --- Arms (shoulder pivots): posed to grip the rifle in front of the chest. ---
+    // --- Arms: real two-bone chains (shoulder → elbow → paw). Built straight,
+    // hanging down -Y; update() solves IK each frame so the paws land on the
+    // gun's grip pivots and follow it through bob/recoil (genuine grip, not a
+    // fixed pose). l1/l2 are the upper/forearm bone lengths the solver uses. ---
+    const L1 = 0.19, L2 = 0.19; // bone lengths → total reach 0.38
     for (const side of [-1, 1]) {
       const sh = new THREE.Group();
       sh.position.set(side * 0.17, 0.30, -0.02);
       body.add(sh);
-      // Reach forward + inward toward the gun.
-      sh.rotation.set(-0.9, side * 0.25, side * 0.15);
-      mesh(new THREE.CapsuleGeometry(0.055, 0.16, 4, 8), T(FUR), sh, [0, -0.10, 0]);
-      mesh(new THREE.CapsuleGeometry(0.05, 0.13, 4, 8), T(FUR_DARK), sh, [0, -0.22, -0.02], [-0.3, 0, 0]);
-      mesh(new THREE.SphereGeometry(0.06, 10, 8), T(CREAM), sh, [0, -0.30, -0.05]); // paw
+      // Upper arm hangs along -Y; elbow pivot sits at its far end.
+      mesh(new THREE.CapsuleGeometry(0.055, L1 - 0.06, 4, 8), T(FUR), sh, [0, -L1 / 2, 0]);
+      const elbow = new THREE.Group();
+      elbow.position.set(0, -L1, 0);
+      sh.add(elbow);
+      mesh(new THREE.CapsuleGeometry(0.05, L2 - 0.06, 4, 8), T(FUR_DARK), elbow, [0, -L2 / 2, 0]);
+      mesh(new THREE.SphereGeometry(0.06, 10, 8), T(CREAM), elbow, [0, -L2, 0]); // paw
       this.rig[side < 0 ? 'armL' : 'armR'] = sh;
+      // side<0 (left) takes the forward fore-grip; side>0 (right) the rear trigger grip.
+      this.arms.push({ shoulder: sh, elbow, l1: L1, l2: L2, side, grip: side < 0 ? 'gripFore' : 'gripRear' });
     }
 
     // --- Rifle (held under the body pivot so it tracks chest pose). Barrel -Z. ---
@@ -139,8 +157,22 @@ export class HeroModel {
     const stock = mesh(new THREE.BoxGeometry(0.07, 0.09, 0.20), T(WOOD), gun, [0, 0, 0.12]);
     stock.rotation.x = 0.15;
     mesh(new THREE.BoxGeometry(0.06, 0.07, 0.26), T(METAL), gun, [0, 0.01, -0.06]);     // receiver
+    mesh(new THREE.BoxGeometry(0.05, 0.045, 0.16), T(WOOD), gun, [0, 0.0, -0.20]);       // forestock (fore-grip rests here)
     mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.34, 10), T(METAL), gun, [0, 0.02, -0.30], [Math.PI / 2, 0, 0]); // barrel
     mesh(new THREE.BoxGeometry(0.035, 0.10, 0.05), T(METAL), gun, [0, -0.08, 0.0]);      // magazine
+    // Charging bolt: rides on top of the receiver and slides back on each shot.
+    const bolt = mesh(new THREE.BoxGeometry(0.03, 0.03, 0.08), T(0x202227), gun, [0.045, 0.06, -0.06]);
+    this.rig.bolt = bolt;
+    this._boltRestZ = bolt.position.z;
+    // Grip pivots the paws IK onto (children of the gun → they track recoil/bob).
+    const gripRear = new THREE.Object3D();   // right trigger hand, by the receiver
+    gripRear.position.set(0.02, -0.05, -0.04);
+    gun.add(gripRear);
+    this.pivots.gripRear = gripRear;
+    const gripFore = new THREE.Object3D();    // left support hand, on the forestock
+    gripFore.position.set(-0.02, -0.04, -0.16);
+    gun.add(gripFore);
+    this.pivots.gripFore = gripFore;
     // Muzzle origin at the barrel tip (non-mesh → no outline).
     const muzzle = new THREE.Object3D();
     muzzle.position.set(0, 0.02, -0.48);
@@ -183,6 +215,37 @@ export class HeroModel {
     return this.pivots.muzzle.getWorldPosition(new THREE.Vector3());
   }
 
+  // Two-bone IK (law of cosines) solved in body-local space: orient the shoulder
+  // + elbow so the paw lands on its gun grip pivot. The grip is a child of the
+  // gun, so the hand tracks every bit of bob, lean and recoil for a real grip.
+  _solveArm(arm) {
+    const ik = this._ik;
+    const gun = this.rig.gun;
+    // Grip target in body-local space (gun only rotates about X + slides in Z).
+    ik.tgt.copy(this.pivots[arm.grip].position).applyEuler(gun.rotation).add(gun.position);
+    const S = arm.shoulder.position;
+    ik.to.subVectors(ik.tgt, S);
+    let d = ik.to.length();
+    const reach = arm.l1 + arm.l2;
+    d = clamp(d, Math.abs(arm.l1 - arm.l2) + 1e-3, reach * 0.999);
+    ik.to.normalize(); // shoulder→grip dir; the arm aims its local -Y down this.
+
+    // Pole splays elbows down + outward so they read as elbows (not back-bent).
+    ik.pole.set(arm.side * 0.6, -1, 0.25).normalize();
+    ik.x.crossVectors(ik.to, ik.pole).normalize(); // hinge axis (local +X)
+    ik.y.copy(ik.to).multiplyScalar(-1);           // local +Y (arm hangs along -Y)
+    ik.z.crossVectors(ik.x, ik.y).normalize();
+    ik.m.makeBasis(ik.x, ik.y, ik.z);
+    ik.qBase.setFromRotationMatrix(ik.m);
+
+    const a = arm.l1, b = arm.l2;
+    const alpha = Math.acos(clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1)); // shoulder bend
+    const gamma = Math.acos(clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1)); // elbow interior
+    ik.qBend.setFromAxisAngle(ik.X, alpha);
+    arm.shoulder.quaternion.copy(ik.qBase).multiply(ik.qBend);
+    arm.elbow.rotation.set(-(Math.PI - gamma), 0, 0);
+  }
+
   update(dt) {
     this._t += dt;
     if (this._shotT > 0) this._shotT = Math.max(0, this._shotT - dt);
@@ -222,14 +285,15 @@ export class HeroModel {
     this.rig.body.rotation.x = lean + air * 0.15 - recoil * 0.12;
     this.rig.body.rotation.z = Math.sin(ph) * 0.04 * m;
 
-    // Gun recoil kick (pushes back toward +Z and muzzle rises).
-    this.rig.gun.position.z = this._gunRestZ + recoil * 0.08;
-    this.rig.gun.rotation.x = -recoil * 0.25;
+    // Firing kick: the rifle slams back toward +Z, the muzzle climbs, and the
+    // charging bolt cycles. The grips are children of the gun, so both paws
+    // recoil with it through the IK below — the whole shooting action reads.
+    this.rig.gun.position.z = this._gunRestZ + recoil * 0.09;
+    this.rig.gun.rotation.x = -recoil * 0.32;
+    this.rig.bolt.position.z = this._boltRestZ + recoil * 0.06; // bolt slides back
 
-    // Arms counter-sway slightly with the stride; rise a touch when airborne.
-    const armSway = Math.sin(ph) * 0.08 * m;
-    this.rig.armL.rotation.x = -0.9 + armSway + air * 0.2 - recoil * 0.15;
-    this.rig.armR.rotation.x = -0.9 - armSway + air * 0.2 - recoil * 0.15;
+    // Solve the arm IK last so the paws lock onto the (now-posed) gun grips.
+    for (const arm of this.arms) this._solveArm(arm);
 
     // Head: subtle counter-bob + look-into-run.
     this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m;

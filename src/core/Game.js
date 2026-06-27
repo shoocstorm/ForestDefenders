@@ -51,7 +51,7 @@ export class Game {
     this.hud = new HUD();
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
-    this.loot = new Loot(this.scene, this.gameManager, this.hud);
+    this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx);
     this.animals = new AnimalManager(this.scene);
     this.overlays = new Overlays(() => this.resetLevel());
 
@@ -167,7 +167,7 @@ export class Game {
       }
       // Per-frame (variable) combat VFX/UI — scaled so they freeze with the sim.
       this.vfx.update(simDt);
-      this.loot.update(simDt, this.cameraRig.camera.position);
+      this.loot.update(simDt, this.player.position);
       this.damageNumbers.update(simDt);
     }
 
