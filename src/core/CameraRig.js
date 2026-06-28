@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CAMERA } from '../config/Constants.js';
+import { CAMERA, RECOIL } from '../config/Constants.js';
 import { clamp, damp } from '../util/MathUtils.js';
 
 // Owns the perspective camera and three view modes (first / third / top).
@@ -9,10 +9,13 @@ export class CameraRig {
   constructor(aspect) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.FOV, aspect, 0.05, 600);
     this.mode = CAMERA.TP;
-    this.yaw = 0;          // around world Y; 0 looks toward -Z (game forward)
+    // Around world Y; 0 looks toward -Z. Player spawns at the west end (-Z) so
+    // start facing +Z toward the arena center (origin). Hero idle-facing follows.
+    this.yaw = Math.PI;
     this.pitch = -0.15;
     this.trauma = 0;       // 0..1, decays; shake = trauma^2
     this.recoilPitch = 0;
+    this.recoilYaw = 0;
     this.fovPunch = 0;
 
     this._target = new THREE.Vector3();
@@ -32,7 +35,13 @@ export class CameraRig {
   }
 
   addShake(amount) { this.trauma = clamp(this.trauma + amount, 0, 1); }
-  addRecoil(amount) { this.recoilPitch += amount; this.fovPunch += amount * 6; }
+  // Per-weapon recoil kick (JUICE_SPEC §2): `mult` is the weapon's recoil intensity.
+  // Camera snaps up (pitch), random horizontal kick (yaw), and a brief FOV punch.
+  addRecoil(mult = 1) {
+    this.recoilPitch += RECOIL.PITCH * mult;
+    this.recoilYaw += (Math.random() * 2 - 1) * RECOIL.YAW * mult;
+    this.fovPunch += RECOIL.FOV * mult;
+  }
 
   // Aim direction in world space (used by weapons / facing).
   getAimDirection(out = new THREE.Vector3()) {
@@ -45,7 +54,8 @@ export class CameraRig {
   update(dt, playerPos) {
     // Decay shake & recoil.
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
-    this.recoilPitch = damp(this.recoilPitch, 0, 12, dt);
+    this.recoilPitch = damp(this.recoilPitch, 0, RECOIL.RETURN, dt);
+    this.recoilYaw = damp(this.recoilYaw, 0, RECOIL.RETURN, dt);
     this.fovPunch = damp(this.fovPunch, 0, 9, dt);
 
     const aim = this.getAimDirection(this._tmp);
@@ -72,8 +82,9 @@ export class CameraRig {
       this.camera.lookAt(playerPos.x, playerPos.y + 1.1, playerPos.z);
     }
 
-    // Apply recoil pitch by nudging the camera's rotation.
+    // Apply recoil kick by nudging the camera's rotation (pitch up + yaw chaos).
     this.camera.rotateX(this.recoilPitch);
+    this.camera.rotateY(this.recoilYaw);
 
     // Trauma shake: jittery offset that decays quickly.
     const shake = this.trauma * this.trauma;

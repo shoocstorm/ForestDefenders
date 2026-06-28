@@ -72,7 +72,7 @@ export class HUD {
       </div>
       <div class="fd-panel" style="bottom:46px;right:14px;text-align:right;">
         <div style="font-size:16px;font-weight:800;" id="fd-weapon">Acorn Gun</div>
-        <div class="fd-label">AMMO <span id="fd-ammo">&infin;</span> &middot; NATURE</div>
+        <div class="fd-label">AMMO <span id="fd-ammo">&infin;</span> &middot; <span id="fd-element">NATURE</span></div>
       </div>
       <div id="fd-reticle"><div id="fd-cross"></div><div id="fd-dot"></div></div>
     `;
@@ -84,6 +84,8 @@ export class HUD {
     this.enemiesEl = root.querySelector('#fd-enemies');
     this.killsEl = root.querySelector('#fd-kills');
     this.weaponEl = root.querySelector('#fd-weapon');
+    this.ammoEl = root.querySelector('#fd-ammo');
+    this.elementEl = root.querySelector('#fd-element');
     this.vignette = root.querySelector('#fd-vignette');
     this.shWrap = root.querySelector('#fd-shwrap');
     this.shBar = root.querySelector('#fd-sh');
@@ -144,6 +146,8 @@ export class HUD {
     this.enemiesEl.textContent = state.enemies;
     this.killsEl.textContent = state.kills;
     this.weaponEl.textContent = state.weapon;
+    if (state.ammo !== undefined) this.ammoEl.textContent = state.ammo;
+    if (state.element) this.elementEl.textContent = state.element;
 
     // Shield bar (Hedgehog buff).
     if (state.shield > 0) {

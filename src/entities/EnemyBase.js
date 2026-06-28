@@ -51,6 +51,8 @@ export class EnemyBase {
     this._hitFlash = 0;
     this._squash = 0;
     this._deathT = -1;
+    this._stun = 0;                          // EMP / knockback freeze timer (Toroid)
+    this._knock = new THREE.Vector3();       // decaying knockback impulse (melee / AOE)
     this._animTime = randRange(0, 10);
 
     this.health = new HealthComponent(this.maxHp, { onDeath: () => this._onDied() });
@@ -106,11 +108,43 @@ export class EnemyBase {
     return { final, mult };
   }
 
+  // Knockback impulse (melee / explosive AOE). `dir` is a horizontal unit vector.
+  applyKnockback(dir, speed) {
+    if (this.dead) return;
+    this._knock.addScaledVector(dir, speed);
+  }
+
+  // EMP / electric stun (Toroid). Freezes AI + attacks for `duration` seconds.
+  stun(duration) {
+    if (this.dead) return;
+    this._stun = Math.max(this._stun, duration);
+  }
+
+  // Slide + decay the knockback impulse (exponential, frame-rate independent).
+  _applyKnock(dt) {
+    if (this._knock.lengthSq() < 1e-5) { this._knock.set(0, 0, 0); return; }
+    this.position.addScaledVector(this._knock, dt);
+    this._knock.multiplyScalar(Math.exp(-6 * dt));
+  }
+
   update(dt, ctx) {
     this._ctx = ctx;
     this._animTime += dt;
 
     if (this._deathT >= 0) { this._updateDeath(dt); return; }
+
+    // EMP stun (Toroid): frozen — no AI/attacks, knockback still slides + glow pulse.
+    if (this._stun > 0) {
+      this._stun -= dt;
+      this.velocity.set(0, 0, 0);
+      this._applyKnock(dt);
+      this.group.position.copy(this.position);
+      const pulse = 0.5 + 0.5 * Math.sin(this._animTime * 14);
+      for (let i = 0; i < this._emissives.length; i++) {
+        this._emissives[i].emissiveIntensity = this._baseEmissive[i] + pulse * 0.8;
+      }
+      return;
+    }
 
     // Target the nearest attackable animal, else the player (ANIMALS_SPEC §5).
     const target = this._selectTarget(ctx);
@@ -121,8 +155,9 @@ export class EnemyBase {
 
     this._move(dt, _to, dist, ctx);
 
-    // Integrate + resolve against arena bounds and tree trunks.
+    // Integrate + resolve against arena bounds and tree trunks (+ knockback slide).
     this.position.addScaledVector(this.velocity, dt);
+    this._applyKnock(dt);
     const half = COMBAT.ENEMY_RADIUS;
     this.position.x = clamp(this.position.x, -ARENA.WIDTH / 2 + half, ARENA.WIDTH / 2 - half);
     this.position.z = clamp(this.position.z, -ARENA.LENGTH / 2 + half, ARENA.LENGTH / 2 - half);

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { PLAYER, CAMERA, ARENA, COMBAT, AIM_ASSIST } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
-import { Acorn } from '../weapons/Acorn.js';
+import { WeaponManager } from '../weapons/WeaponManager.js';
 import { resolveCircleColliders } from '../util/Collision.js';
-import { clamp, damp, dampAngle } from '../util/MathUtils.js';
+import { clamp, lerp, damp, dampAngle } from '../util/MathUtils.js';
 
 // Player character controller: camera-relative movement, jump + double-jump,
 // run, facing toward movement/aim, and a lightweight procedural locomotion
@@ -26,9 +26,13 @@ export class Player {
     this._spawn = this.position.clone();
     this.dead = false;
 
-    this.weapon = new Acorn();
+    this.weapons = new WeaponManager();
+    this.weapon = this.weapons.current; // active weapon (mirrored for HUD/firing)
+    this._kickCd = 0;
+    this._tailCd = 0;
 
     this.model = new HeroModel();
+    this.model.setWeaponTint(this.weapon.def.muzzleColor);
     scene.add(this.model.group);
     this.model.group.position.copy(this.position);
 
@@ -121,6 +125,8 @@ export class Player {
   update(dt, input, ctx) {
     const rig = this.cameraRig;
     if (this._invuln > 0) this._invuln -= dt;
+    if (this._kickCd > 0) this._kickCd -= dt;
+    if (this._tailCd > 0) this._tailCd -= dt;
 
     // --- Aim assist: pull the crosshair onto the targeted enemy (before basis +
     // firing so movement and the shot use the focused view). ---
@@ -132,6 +138,14 @@ export class Player {
     if (this._fwd.lengthSq() < 1e-4) this._fwd.set(0, 0, -1);
     this._fwd.normalize();
     this._right.set(-this._fwd.z, 0, this._fwd.x); // screen-right for a -Z forward
+
+    // --- Weapon switch (Q / mouse wheel) + melee (V kick, R tail) ---
+    if (input.wasPressed('KeyQ')) this._setWeapon(this.weapons.next());
+    const wheel = input.consumeWheel();
+    if (wheel > 0) this._setWeapon(this.weapons.next());
+    else if (wheel < 0) this._setWeapon(this.weapons.prev());
+    if (input.wasPressed('KeyV')) this._kick(ctx);
+    if (input.wasPressed('KeyR')) this._tailSwing(ctx);
 
     const axis = input.moveAxis();
     const running = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
@@ -237,9 +251,62 @@ export class Player {
         projectiles: ctx.projectiles,
         vfx: ctx.vfx,
         cameraRig: rig,
+        enemies: ctx.enemies,
+        juice: ctx.juice,
       });
       if (this.weapon.justFired) this.model.playShot?.();
     }
+  }
+
+  // Apply a weapon change from the WeaponManager (null = no change): mirror the
+  // active weapon, play the swap dip, and retint the gun's energy cell.
+  _setWeapon(changed) {
+    if (!changed) return;
+    this.weapon = changed;
+    this.model.playSwitch?.();
+    this.model.setWeaponTint?.(changed.def.muzzleColor);
+  }
+
+  // Kick (V): forward cone melee — damage + knockback to enemies ahead (HERO_SPEC §6.3).
+  _kick(ctx) {
+    if (this._kickCd > 0 || !ctx?.enemies) return;
+    this._kickCd = PLAYER.KICK_COOLDOWN;
+    this.model.playKick?.();
+    let hit = false;
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      this._toEnemy.subVectors(e.position, this.position); this._toEnemy.y = 0;
+      const dist = this._toEnemy.length();
+      if (dist > PLAYER.KICK_RANGE + e.hitRadius || dist < 1e-3) continue;
+      this._toEnemy.multiplyScalar(1 / dist);
+      if (this._toEnemy.dot(this._fwd) < 0.35) continue; // forward cone only
+      e.takeDamage(PLAYER.KICK_DAMAGE, 'PHYSICAL', ctx);
+      e.applyKnockback?.(this._toEnemy, 9);
+      hit = true;
+    }
+    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(this._fwd, 1).setY(0.7), 0xfff0a0, PLAYER.KICK_RANGE);
+    ctx.cameraRig?.addShake?.(0.25);
+    if (hit) ctx.juice?.hitStop?.();
+  }
+
+  // Tail swing (R): 360° radial melee — flings enemies out (distance-scaled) and
+  // grants brief i-frames + heavy shake (HERO_SPEC §6.3, JUICE_SPEC §12).
+  _tailSwing(ctx) {
+    if (this._tailCd > 0 || !ctx?.enemies) return;
+    this._tailCd = PLAYER.TAIL_COOLDOWN;
+    this.model.playTail?.();
+    this._invuln = Math.max(this._invuln, PLAYER.TAIL_IFRAMES);
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      this._toEnemy.subVectors(e.position, this.position); this._toEnemy.y = 0;
+      const dist = this._toEnemy.length();
+      if (dist > PLAYER.TAIL_RANGE + e.hitRadius || dist < 1e-3) continue;
+      this._toEnemy.multiplyScalar(1 / dist);
+      e.takeDamage(PLAYER.TAIL_DAMAGE, 'PHYSICAL', ctx);
+      e.applyKnockback?.(this._toEnemy, lerp(24, 15, clamp(dist / PLAYER.TAIL_RANGE, 0, 1)));
+    }
+    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
+    ctx.cameraRig?.addShake?.(0.6);
   }
 
   // Push the player out of the sides of solid standables (the platform block) when

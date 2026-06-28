@@ -21,6 +21,9 @@ import { damp, lerp, clamp } from '../util/MathUtils.js';
 const HIP_Y = 0.40;          // hip pivot height (legs hang below to the ground)
 const SHOT_DUR = 0.26;       // recoil one-shot length (s)
 const JUMP_POP = 0.18;       // takeoff knee-pop decay window (s)
+const SWITCH_DUR = 0.4;      // weapon-swap dip
+const KICK_DUR = 0.5;        // kick one-shot
+const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
 // Palette (squirrel-red fur + cream belly, dark gunmetal rifle).
 const FUR      = 0xc06a2e;
@@ -71,6 +74,9 @@ export class HeroModel {
     this._t = 0;        // global clock (idle breathing, tail sway)
     this._shotT = 0;    // recoil timer
     this._popT = 0;     // takeoff knee-pop timer
+    this._switchT = 0;  // weapon-swap dip timer
+    this._kickT = 0;    // kick one-shot timer
+    this._tailT = 0;    // tail-swing one-shot timer
 
     this._build();
   }
@@ -178,6 +184,14 @@ export class HeroModel {
     muzzle.position.set(0, 0.02, -0.48);
     gun.add(muzzle);
     this.pivots.muzzle = muzzle;
+    // Glowing energy cell — recolored per weapon (setWeaponTint) so each weapon
+    // reads distinctly without modeling 9 separate guns (special meshes → M5).
+    const accent = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, 0.11),
+      new THREE.MeshBasicMaterial({ color: 0xc7e08a }));
+    accent.position.set(-0.045, 0.055, -0.02);
+    accent.userData.__outline = true; // skip inverted-hull outline on the glow cell
+    gun.add(accent);
+    this.gunAccent = accent;
 
     // --- Bushy tail: S-curve of swelling spheres rising up behind the back. ---
     const tail = new THREE.Group();
@@ -198,6 +212,7 @@ export class HeroModel {
     // Cache rest transforms we overlay animation onto.
     this._bodyRestY = body.position.y;
     this._gunRestZ = gun.position.z;
+    this._gunRestY = gun.position.y;
   }
 
   // --- State intake from Player (no early-out: posing all happens in update). ---
@@ -209,7 +224,11 @@ export class HeroModel {
 
   playJump() { this._popT = JUMP_POP; }
   playShot() { this._shotT = SHOT_DUR; }
+  playSwitch() { this._switchT = SWITCH_DUR; }
+  playKick() { this._kickT = KICK_DUR; }
+  playTail() { this._tailT = TAIL_DUR; }
   setFirstPerson(fp) { this.modelRoot.visible = !fp; }
+  setWeaponTint(color) { this.gunAccent?.material.color.setHex(color); }
 
   get muzzleWorldPosition() {
     return this.pivots.muzzle.getWorldPosition(new THREE.Vector3());
@@ -250,6 +269,9 @@ export class HeroModel {
     this._t += dt;
     if (this._shotT > 0) this._shotT = Math.max(0, this._shotT - dt);
     if (this._popT > 0) this._popT = Math.max(0, this._popT - dt);
+    if (this._switchT > 0) this._switchT = Math.max(0, this._switchT - dt);
+    if (this._kickT > 0) this._kickT = Math.max(0, this._kickT - dt);
+    if (this._tailT > 0) this._tailT = Math.max(0, this._tailT - dt);
 
     // Blend locomotion weights smoothly.
     const moveTarget = this.moving && this.grounded ? 1 : 0;
@@ -288,9 +310,19 @@ export class HeroModel {
     // Firing kick: the rifle slams back toward +Z, the muzzle climbs, and the
     // charging bolt cycles. The grips are children of the gun, so both paws
     // recoil with it through the IK below — the whole shooting action reads.
+    // Weapon-swap dip: lower + tilt the gun down and back up over SWITCH_DUR.
+    const sw = this._switchT > 0 ? Math.sin((this._switchT / SWITCH_DUR) * Math.PI) : 0;
     this.rig.gun.position.z = this._gunRestZ + recoil * 0.09;
-    this.rig.gun.rotation.x = -recoil * 0.32;
+    this.rig.gun.position.y = this._gunRestY - sw * 0.14;
+    this.rig.gun.rotation.x = -recoil * 0.32 + sw * 0.6;
     this.rig.bolt.position.z = this._boltRestZ + recoil * 0.06; // bolt slides back
+
+    // Kick (Q): plant on the left leg, drive the right thigh forward + up.
+    if (this._kickT > 0) {
+      const kp = Math.sin((1 - this._kickT / KICK_DUR) * Math.PI); // 0→1→0 over the clip
+      this.rig.legR.rotation.x = -1.6 * kp;
+      this.rig.body.rotation.x += 0.2 * kp;
+    }
 
     // Solve the arm IK last so the paws lock onto the (now-posed) gun grips.
     for (const arm of this.arms) this._solveArm(arm);
@@ -302,5 +334,16 @@ export class HeroModel {
     const tailSway = Math.sin(this._t * 2.2 + ph) * lerp(0.12, 0.28, m);
     this.rig.tail.rotation.z = tailSway;
     this.rig.tail.rotation.x = -lean * 0.6 - air * 0.4 + Math.sin(this._t * 1.4) * 0.05;
+
+    // Tail swing (R): 3 fast full-body spins with the tail flared huge (JUICE §12).
+    if (this._tailT > 0) {
+      const tp = this._tailT / TAIL_DUR;        // 1→0
+      this.modelRoot.rotation.y = Math.PI + (1 - tp) * Math.PI * 2 * 3;
+      const flare = Math.sin(tp * Math.PI) * 1.7; // 0→huge→0
+      this.rig.tail.scale.setScalar(1 + flare);
+    } else if (this.modelRoot.rotation.y !== Math.PI) {
+      this.modelRoot.rotation.y = Math.PI;        // restore base facing flip
+      this.rig.tail.scale.setScalar(1);
+    }
   }
 }

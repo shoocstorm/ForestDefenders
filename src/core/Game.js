@@ -260,6 +260,8 @@ export class Game {
       enemies: this.enemies.aliveCount,
       kills: this.gameManager.kills,
       weapon: this.player.weapon.name,
+      ammo: this.player.weapon.ammoText(),
+      element: this.player.weapon.element,
       shield: this.gameManager.shield,
       buffs: this.gameManager.buffs,
       wave: this.waves.waveNumber || 1,

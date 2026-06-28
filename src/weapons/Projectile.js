@@ -44,6 +44,11 @@ export class ProjectilePool {
     p.radius = opts.radius ?? 0.16;
     p.life = opts.lifetime ?? 3;
     p.gravity = opts.gravity ?? 0;
+    // AOE / EMP payloads (explosive + ring weapons). 0 → plain single-target shot.
+    p.explodeRadius = opts.explodeRadius ?? 0;
+    p.knockback = opts.knockback ?? 0;
+    p.empRadius = opts.empRadius ?? 0;
+    p.empDuration = opts.empDuration ?? 0;
     p.pos.copy(origin);
     p.vel.copy(dir).normalize().multiplyScalar(opts.speed ?? 20);
     const color = opts.color ?? 0xffffff;
@@ -66,6 +71,7 @@ export class ProjectilePool {
 
       let dead = p.life <= 0 || p.pos.y <= 0.05 ||
         Math.abs(p.pos.x) > halfX || Math.abs(p.pos.z) > halfZ;
+      const aoe = p.explodeRadius > 0 || p.empRadius > 0;
 
       if (!dead) {
         if (p.team === 'player') {
@@ -73,8 +79,10 @@ export class ProjectilePool {
             if (e.dead) continue;
             const rr = p.radius + e.hitRadius;
             if (this._tmp.copy(e.position).setY(e.position.y + 0.6).distanceToSquared(p.pos) < rr * rr) {
-              e.takeDamage(p.damage, p.element, ctx);
-              ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+              if (!aoe) { // AOE shots detonate below instead of single-target hit
+                e.takeDamage(p.damage, p.element, ctx);
+                ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+              }
               dead = true;
               break;
             }
@@ -103,6 +111,7 @@ export class ProjectilePool {
       }
 
       if (dead) {
+        if (aoe && p.team === 'player') this._detonate(p, ctx);
         p.active = false;
         p.mesh.visible = false;
         p.light.intensity = 0;
@@ -110,5 +119,28 @@ export class ProjectilePool {
         p.mesh.position.copy(p.pos);
       }
     }
+  }
+
+  // AOE detonation for explosive (Boomstick / Fire Bullet) and ring (Toroid) shots:
+  // radial damage + knockback to every enemy in range, plus EMP stun for the ring.
+  // Heavy juice — flash, shockwaves, camera shake + hit-stop (JUICE_SPEC §3,6).
+  _detonate(p, ctx) {
+    const radius = Math.max(p.explodeRadius, p.empRadius);
+    const color = p.mat.color.getHex();
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      const d = this._tmp.copy(e.position).setY(e.position.y + 0.6).distanceTo(p.pos);
+      if (d > radius + e.hitRadius) continue;
+      const falloff = 1 - Math.min(1, d / (radius + e.hitRadius));
+      e.takeDamage(p.damage * (0.4 + 0.6 * falloff), p.element, ctx);
+      if (p.knockback) {
+        this._up.copy(e.position).sub(p.pos).setY(0).normalize();
+        e.applyKnockback?.(this._up, p.knockback * (0.5 + falloff));
+      }
+      if (p.empDuration) e.stun?.(p.empDuration);
+    }
+    ctx.vfx.explosion?.(p.pos, color, radius);
+    ctx.cameraRig?.addShake?.(0.5);
+    ctx.juice?.hitStop?.();
   }
 }

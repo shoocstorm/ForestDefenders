@@ -69,6 +69,10 @@ export class Input {
     return d;
   }
 
+  // Read + clear the wheel accumulator (sign: +1 down / -1 up). Consumed so it
+  // can't double-fire across multiple fixed sim steps in one frame.
+  consumeWheel() { const w = this.wheel; this.wheel = 0; return w; }
+
   // Call at the end of each frame to clear edge-triggered state.
   endFrame() {
     this.pressed.clear();

@@ -3,8 +3,8 @@
 > Living tracker for the Three.js re-implementation. Update this at the end of every
 > work session so a fresh conversation can continue without re-deriving context.
 
-**Last updated:** 2026-06-27
-**Current milestone:** M2 complete ✅ · next up: **M3 — Level 1 loop**
+**Last updated:** 2026-06-28
+**Current milestone:** M4 complete ✅ · next up: **M5 — Economy & systems**
 
 ---
 
@@ -92,8 +92,8 @@ src/
 |---|---|---|
 | **M1 — Foundation & Hero** | Bun+three scaffold, arena, procedural squirrel, run/jump/double-jump, 3 cameras, mouse-look | ✅ done |
 | **M2 — Combat core** | Acorn gun + projectiles, 2 enemy types + pursue/attack AI, health + element matrix + damage pipeline, death VFX, gold drops, basic HUD (HP/gold/ammo/crosshair) | ✅ done |
-| **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ⬜ next |
-| **M4 — Weapons & juice** | All 9 weapons + switching, kick/tail melee, camera recoil/shake/hit-stop/slow-mo, muzzle flashes, full spore-death VFX | ⬜ |
+| **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ✅ done |
+| **M4 — Weapons & juice** | All 9 weapons + switching, kick/tail melee, camera recoil/shake/hit-stop/slow-mo, muzzle flashes, full spore-death VFX | ✅ done |
 | **M5 — Economy & systems** | Shop, permanent upgrades, plants, achievements, JSON save/load, level-up | ⬜ |
 | **M6 — Full campaign & audio** | L2/L3 biomes, procedural audio, ambient particles, atmosphere/bloom polish | ⬜ |
 
@@ -146,23 +146,64 @@ src/
 - Player death just respawns at start w/ full HP (i-framed) — real defeat screen + run end is M3.
 - Enemy projectiles travel straight (no FireShroom dodge / arc yet) — refine in M4.
 
-## 6b. M3 — plan (next session starts here)
+## 6c. M3 — done
 
-Goal: a complete Level 1 loop — 3 waves, animals to rescue, victory/defeat screens, rescue scoring.
+- [x] **`systems/WaveManager.js`** — 3 scripted L1 waves (`LEVEL1_WAVES`); each wave's enemies spawn at
+      arena spawn rings, next wave starts `delay`s after the previous clears; `onWaveStart`/`onAllCleared`
+      drive the HUD banner + victory. Replaced the M2 endless test spawn.
+- [x] **`entities/Animal.js` + cages** — 3 rescuable animals (hedgehog/bird/rabbit), `[E]/[F] FREE` prompt
+      via `AnimalManager` + `WorldLabels`. Hedgehog & bird are procedural; rabbit uses bunny.glb.
+- [x] **Rescue reward** — freeing grants the animal's buff (shield/speed/reveal) **plus** an instant
+      reward: gold + HP heal (`RESCUE_REWARD`), floating reward numbers + gold pulse, then the animal
+      floats away and is removed. (Replaces the earlier "freed animal roams and must survive" model.)
+- [x] **Win/lose flow** — `ui/Overlays.js` victory (LEVEL CLEAR + rescue rank/stars/score) and defeat
+      (retry) screens; `Player` 0-HP now triggers a real defeat (`onPlayerDeath`) instead of respawning.
+- [x] **HUD additions** — top-center wave counter + animals-safe counter; shield bar; buff icons.
+- [x] **Player tree/platform collision** — `resolveCircleColliders` + platform side-resolve.
+- [x] **Rescue scoring** — `GameManager.computeRank` (RESCUE_RANKS) → rank/stars/bonus gold at victory.
 
-Suggested build order:
-1. **`systems/WaveManager.js`** — replace the endless test spawn in `Game` with 3 scripted waves
-   (counts/types/timing per `LEVELS_SPEC.md`); use `Arena` spawn rings as telegraphed spawn points.
-2. **`entities/Animal.js` + cages** — rescuable animals (`ANIMALS_SPEC.md`); `[E] FREE` prompt; each
-   rescue grants its buff (`COMBAT_SPEC §5`) and feeds rescue scoring.
-3. **Win/lose flow** — victory ("LEVEL CLEAR!" + stars/score) and defeat (skull + retry) overlays
-   (`HUD_SPEC §4`); wire `Player` 0-HP into real defeat instead of respawn.
-4. **HUD additions** — top-center wave counter + animal-rescue counter; bottom-left score/credits.
-5. **L1 set pieces** — flesh out `Arena` per `LEVELS_SPEC.md` (objective markers, rescue spots).
-6. **Player tree/platform collision** — reuse `util/Collision.js` `resolveCircleColliders` (enemies already do).
+## 6d. M4 — done
 
-Specs to read first for M3: `LEVELS_SPEC.md`, `ANIMALS_SPEC.md`, `HUD_SPEC.md` (§4 overlays),
-`STORY_SPEC.md`, `ONBOARDING_SPEC.md`.
+- [x] **All 9 weapons** (`config/Constants.js` `WEAPONS` + `WEAPON_ORDER`): Acorn, Ganon, Machine Gun,
+      Boomstick, Laser, Scattergun, Fire Bullet, Forest Bow, Toroid Cannon — each with mode/ammo/recoil/
+      muzzle color per `WEAPONS_SPEC §2`.
+- [x] **Data-driven `weapons/Weapon.js`** — one class, `def.mode` dispatch:
+      `single · rapid · spread · charge · explosive · beam · ring`. Ammo by `def.ammo.type`:
+      `infinite · magazine` (mag/reserve + auto-reload) · `overheat` (heat gauge + lockout) ·
+      `energy` (regen). `ammoText()` feeds the HUD. (Replaced the old `Acorn.js` subclass — deleted.)
+- [x] **`weapons/Projectile.js`** — explosive/ring shots carry `explodeRadius`/`empRadius`/`knockback`/
+      `empDuration`; `_detonate()` does radial falloff damage + knockback + EMP stun + `VFX.explosion` +
+      shake + hit-stop. Beam weapons are hit-scan (`Weapon._beamDamage`, penetrates N) with `VFX.beam`.
+- [x] **`weapons/WeaponManager.js`** on `Player` — 9-weapon roster, `next/prev/select`; **Q** + **mouse
+      wheel** cycle; `HeroModel.playSwitch()` dip + `setWeaponTint()` recolors the gun's energy cell;
+      HUD shows weapon name / ammo / element.
+- [x] **Melee** (`HERO_SPEC §6.3`): **V** kick (forward cone, 30 dmg + knockback + hit-stop) and **R**
+      tail swing (360° radial, 28 dmg + distance-scaled fling + 0.95s i-frames + heavy shake). Poses via
+      `HeroModel.playKick` (thigh drive) / `playTail` (3 full-body spins + tail flared ~2.7×).
+- [x] **`EnemyBase`** — `applyKnockback(dir,speed)` (decaying slide) + `stun(dur)` (EMP freeze: no AI/
+      attack, glow pulse, knockback still slides).
+- [x] **Juice** (`JUICE_SPEC §2,6`): `CameraRig.addRecoil(mult)` now does pitch-up + random yaw kick +
+      FOV punch from shared `RECOIL` (back/up/pitch/yaw/fov/return); per-weapon `recoil` scales it.
+- [x] **Verified:** `bun build` clean (60 modules); headless render shows scene + new HUD ammo/element
+      readout, zero app JS errors; 16/16 weapon-logic assertions pass (every mode + ammo + switch path).
+
+### M4 deferrals (intentional)
+- **Unlock gating** → M5: all 9 weapons are available + switchable now; cage/shop/achievement unlocks +
+  the Scattergun multi-kill-attribution (`WEAPONS_SPEC §4`) land with the economy.
+- **Special weapon meshes** → the gun is recolored per weapon (energy-cell tint), not modeled as 7 distinct
+  meshes yet (`HERO_SPEC §6.2`); revisit in polish.
+- **Static Harvest** (Toroid energy-refund orbs on killing EMP-stunned enemies) not implemented — EMP stun
+  itself works; the refund loop is a small M5 add.
+- Boomstick/Fire-Bullet world interactions (blow rocks, ignite `burnable` trees) deferred — needs the
+  obstacle/plant systems (`OBSTACLE_PHYSICS_SPEC`, `PLANTS_SPEC`) from M5.
+
+## 6e. M5 — plan (next session starts here)
+
+Goal (`ECONOMY_SHOP_SPEC` + `PLANTS_SPEC` + `OBSTACLE_PHYSICS_SPEC`): shop, permanent upgrades, plants,
+achievements, JSON save/load, level-up, and weapon **unlock gating** (wire the M4 roster behind unlocks).
+
+Specs to read first for M5: `ECONOMY_SHOP_SPEC.md`, `PLANTS_SPEC.md`, `OBSTACLE_PHYSICS_SPEC.md`,
+`GALLERY_SPEC.md`, `SEASONS_SPEC.md`.
 
 ## 7. Tuning reference (already in `src/config/Constants.js`)
 

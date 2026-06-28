@@ -64,19 +64,79 @@ export function elementMultiplier(attackElement, targetElement) {
   return idx < 0 ? 1.0 : row[idx];
 }
 
-// --- Weapons (WEAPONS_SPEC §2). M2 ships only the Acorn Gun. ---
+// --- Weapons (WEAPONS_SPEC §2–3). All 9 ship in M4; switching via Q / wheel.
+// `mode` drives the firing behavior in weapons/Weapon.js. `ammo` shapes:
+//   { type:'infinite' } | { type:'magazine', mag, max } |
+//   { type:'overheat', perShot, cool, lockout } | { type:'energy', max, perShot, regen }
+// Unlock gating (cage/shop/achievement) is deferred to M5 — all are available now. ---
 export const WEAPONS = {
   ACORN: {
-    name: 'Acorn Gun', element: 'NATURE', damage: 10, cooldown: 0.3,
-    recoil: 0.35, projectileSpeed: 20, projectileRadius: 0.16,
-    color: 0x9a6a35, muzzleColor: 0xc7e08a, automatic: true,
+    id: 'ACORN', name: 'Acorn Gun', element: 'NATURE', mode: 'single',
+    damage: 10, cooldown: 0.3, recoil: 0.35, automatic: true,
+    projectileSpeed: 20, projectileRadius: 0.16,
+    color: 0x9a6a35, muzzleColor: 0xc7e08a, ammo: { type: 'infinite' },
+  },
+  GANON: {
+    id: 'GANON', name: 'Ganon Rifle', element: 'ENERGY', mode: 'charge',
+    damage: 25, cooldown: 0.5, recoil: 0.7, automatic: false,
+    projectileSpeed: 34, projectileRadius: 0.2, chargeTime: 0.7, minMult: 0.5, maxMult: 1.6,
+    color: 0x49e8ff, muzzleColor: 0x49e8ff, ammo: { type: 'magazine', mag: 5, max: 15 },
+  },
+  MACHINE: {
+    id: 'MACHINE', name: 'Machine Gun', element: 'PHYSICAL', mode: 'rapid',
+    damage: 5, cooldown: 0.08, recoil: 0.16, automatic: true,
+    projectileSpeed: 30, projectileRadius: 0.12, spread: 0.05,
+    color: 0xffe07a, muzzleColor: 0xffb13a,
+    ammo: { type: 'overheat', perShot: 5, cool: 38, lockout: 2 },
+  },
+  BOOM: {
+    id: 'BOOM', name: 'Boomstick', element: 'FIRE', mode: 'explosive',
+    damage: 40, cooldown: 1.2, recoil: 0.6, automatic: false,
+    projectileSpeed: 22, projectileRadius: 0.26, explodeRadius: 3.0, knockback: 9,
+    color: 0xff8a2a, muzzleColor: 0xff6a1a, ammo: { type: 'magazine', mag: 10, max: 30 },
+  },
+  LASER: {
+    id: 'LASER', name: 'Laser Rifle', element: 'ENERGY', mode: 'beam',
+    damage: 20, cooldown: 0.4, recoil: 0.3, automatic: true,
+    beamRange: 40, beamTick: 0.06, penetrate: 3,
+    color: 0xff3a4a, muzzleColor: 0xff3a4a, ammo: { type: 'infinite' },
+  },
+  SHOTGUN: {
+    id: 'SHOTGUN', name: 'Scattergun', element: 'PHYSICAL', mode: 'spread',
+    damage: 8, cooldown: 0.7, recoil: 0.6, automatic: false,
+    projectileSpeed: 26, projectileRadius: 0.13, pellets: 6, spreadAngle: 0.18,
+    color: 0xffd27a, muzzleColor: 0xffe24a, ammo: { type: 'infinite' },
+  },
+  FIRE_BULLET: {
+    id: 'FIRE_BULLET', name: 'Fire Bullet', element: 'FIRE', mode: 'explosive',
+    damage: 35, cooldown: 0.9, recoil: 0.5, automatic: false,
+    projectileSpeed: 28, projectileRadius: 0.2, explodeRadius: 2.4, knockback: 6,
+    color: 0xff5a2a, muzzleColor: 0xff7a2a, ammo: { type: 'magazine', mag: 20, max: 40 },
+  },
+  BOW: {
+    id: 'BOW', name: 'Forest Bow', element: 'ENERGY', mode: 'charge',
+    damage: 30, cooldown: 0.6, recoil: 0.25, automatic: false,
+    projectileSpeed: 40, projectileRadius: 0.16, chargeTime: 0.8, minMult: 0.4, maxMult: 1.8, arc: 4,
+    color: 0x9bff6a, muzzleColor: 0x9bff6a, ammo: { type: 'infinite' },
+  },
+  TOROID: {
+    id: 'TOROID', name: 'Toroid Cannon', element: 'ENERGY', mode: 'ring',
+    damage: 50, cooldown: 1.5, recoil: 0.5, automatic: false,
+    projectileSpeed: 18, projectileRadius: 0.45, empRadius: 3.5, empDuration: 3.5, knockback: 4,
+    color: 0x6ad0ff, muzzleColor: 0x6ad0ff, ammo: { type: 'energy', max: 100, perShot: 25, regen: 6 },
   },
 };
 
+// Catalog order for Q / wheel cycling (WEAPONS_SPEC §2 table order).
+export const WEAPON_ORDER = ['ACORN', 'GANON', 'MACHINE', 'BOOM', 'LASER', 'SHOTGUN', 'FIRE_BULLET', 'BOW', 'TOROID'];
+
 // Shared camera-recoil tuning (JUICE_SPEC §2); per-weapon `recoil` scales it.
 export const RECOIL = {
-  PITCH: 0.14, FOV: 2.0, RETURN: 13.0,
+  BACK: 0.16, UP: 0.07, PITCH: 0.14, YAW: 0.03, FOV: 2.0, RETURN: 13.0,
 };
+
+// Enemy stun (Toroid EMP, JUICE_SPEC): frozen, no AI/attacks, tinted.
+export const STUN = { TINT: 0x6ad0ff };
 
 // --- Enemies (ENEMIES_SPEC §2). M2 ships Wood + Fire shrooms. ---
 export const ENEMY_DEFS = {
