@@ -89,6 +89,10 @@ export class TouchControls {
         <div class="tc-btn tc-util" data-tap="cam">🎥</div>
         <div class="tc-btn tc-util" data-tap="shop">🛒</div>
         <div class="tc-btn tc-util" data-tap="gallery">🖼️</div>
+        <div class="tc-btn tc-util" data-tap="settings">⚙️</div>
+        <div class="tc-btn tc-util" data-tap="achievements">🏆</div>
+        <div class="tc-btn tc-util" data-tap="backpack">🎒</div>
+        <div class="tc-btn tc-util" data-tap="pause">⏸</div>
       </div>
       <div class="tc-btn tc-big"   id="tc-jump"   data-code="Space"><span class="ico">⤒</span></div>
       <div class="tc-btn tc-small" id="tc-tail"   data-code="KeyR"><span class="lab">TAIL</span></div>
@@ -118,6 +122,10 @@ export class TouchControls {
             break;
           case 'shop':    this.callbacks.toggleShop?.(); break;
           case 'gallery': this.callbacks.toggleGallery?.(); break;
+          case 'settings':    this.callbacks.toggleSettings?.(); break;
+          case 'achievements': this.callbacks.toggleAchievements?.(); break;
+          case 'backpack':    this.callbacks.toggleBackpack?.(); break;
+          case 'pause':       this.callbacks.togglePause?.(); break;
         }
       }, { passive: false });
     }

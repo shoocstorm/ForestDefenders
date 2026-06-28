@@ -24,6 +24,10 @@ import { PlantManager } from '../systems/PlantManager.js';
 import { Toasts } from '../ui/Toasts.js';
 import { Shop } from '../ui/Shop.js';
 import { Gallery } from '../ui/Gallery.js';
+import { Settings } from '../ui/Settings.js';
+import { AchievementViewer } from '../ui/AchievementViewer.js';
+import { Backpack } from '../ui/Backpack.js';
+import { PauseMenu } from '../ui/PauseMenu.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
 import { SFX } from '../audio/SFX.js';
 import { Music } from '../audio/Music.js';
@@ -89,6 +93,10 @@ export class Game {
     this.touch = TouchControls.maybeCreate(this.input, {
       toggleShop: () => this._toggleShop(),
       toggleGallery: () => this._toggleGallery(),
+      toggleSettings: () => this._toggleSettings(),
+      toggleAchievements: () => this._toggleAchievements(),
+      toggleBackpack: () => this._toggleBackpack(),
+      togglePause: () => this._togglePause(),
     });
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
@@ -103,6 +111,40 @@ export class Game {
     this.shop = new Shop({
       gameManager: this.gameManager, player: this.player, toasts: this.toasts,
       onPurchase: () => this._persist(),
+    });
+
+    // New UI screens
+    this.settings = new Settings({
+      audioSystem: this.audio,
+      gameManager: this.gameManager,
+      onClose: () => this._persist(),
+    });
+
+    this.achievementViewer = new AchievementViewer({
+      gameManager: this.gameManager,
+      onClose: () => {},
+    });
+
+    this.backpack = new Backpack({
+      gameManager: this.gameManager,
+      player: this.player,
+      onClose: () => {},
+    });
+
+    this.pauseMenu = new PauseMenu({
+      gameManager: this.gameManager,
+      waves: this.waves,
+      onResume: () => {
+        this.state = 'playing';
+        this.audio.ui('click');
+      },
+      onShop: () => { this.pauseMenu.close(); this.shop.open(); },
+      onGallery: () => { this.pauseMenu.close(); this.gallery.open(); },
+      onSettings: () => { this.pauseMenu.close(); this.settings.open(); },
+      onAchievements: () => { this.pauseMenu.close(); this.achievementViewer.open(); },
+      onBackpack: () => { this.pauseMenu.close(); this.backpack.open(); },
+      onMainMenu: () => this._returnToLanding(),
+      onQuit: () => window.location.reload(), // Simple quit for web
     });
 
     // Reused per-frame combat context (avoids per-step allocation).
@@ -222,17 +264,31 @@ export class Game {
     if (this.input.wasPressed('Digit2')) this.cameraRig.setMode(CAMERA.TP);
     if (this.input.wasPressed('Digit3')) this.cameraRig.setMode(CAMERA.TOP);
 
+    // ESC for pause menu
+    if (this.input.wasPressed('Escape')) this._togglePause();
     // Shop hotkey (P) — opens mid-run; freezes the sim.
     if (this.input.wasPressed('KeyP')) this._toggleShop();
     // Gallery hotkey (G) — weapon model viewer.
     if (this.input.wasPressed('KeyG')) this._toggleGallery();
+    // Settings hotkey (O) — options screen
+    if (this.input.wasPressed('KeyO')) this._toggleSettings();
+    // Achievements hotkey (H) — honors/awards
+    if (this.input.wasPressed('KeyH')) this._toggleAchievements();
+    // Backpack hotkey (I) — inventory
+    if (this.input.wasPressed('KeyI')) this._toggleBackpack();
 
     // Mouse-look (never time-scaled).
     const md = this.input.consumeMouseDelta();
     if (md.x || md.y) this.cameraRig.applyMouse(md.x, md.y);
 
-    // Fixed-step simulation (frozen while an overlay/shop/gallery is up).
-    if (this.state === 'playing' && !this.shop.isOpen && !this.gallery.isOpen) {
+    // Fixed-step simulation (frozen while an overlay/shop/gallery/pause/settings/achievements/backpack is up).
+    if (this.state === 'playing' &&
+        !this.shop.isOpen &&
+        !this.gallery.isOpen &&
+        !this.pauseMenu.isOpen &&
+        !this.settings.isOpen &&
+        !this.achievementViewer.isOpen &&
+        !this.backpack.isOpen) {
       this.accum += simDt;
       let steps = 0;
       while (this.accum >= this.fixedDt && steps < 5) {
@@ -269,7 +325,9 @@ export class Game {
   _renderFrame(realDt) {
     if (this.gallery.isOpen) return;
 
-    const paused = this.shop.isOpen || this.state !== 'playing';
+    const paused = this.shop.isOpen || this.pauseMenu.isOpen ||
+                   this.settings.isOpen || this.achievementViewer.isOpen ||
+                   this.backpack.isOpen || this.state !== 'playing';
     if (paused) {
       this._pausedRenderAccum += realDt;
       if (this._pausedRenderAccum < 1 / 30) return;
@@ -342,6 +400,109 @@ export class Game {
     this.audio.ui('click');
   }
 
+  _toggleSettings() {
+    if (this.settings.isOpen) { this.settings.close(); return; }
+    if (this.state !== 'playing') return;
+    document.exitPointerLock?.();
+    this.settings.open();
+    this.audio.ui('click');
+  }
+
+  _toggleAchievements() {
+    if (this.achievementViewer.isOpen) { this.achievementViewer.close(); return; }
+    document.exitPointerLock?.();
+    this.achievementViewer.open();
+    this.audio.ui('click');
+  }
+
+  _toggleBackpack() {
+    if (this.backpack.isOpen) { this.backpack.close(); return; }
+    if (this.state !== 'playing') return;
+    document.exitPointerLock?.();
+    this.backpack.open();
+    this.audio.ui('click');
+  }
+
+  _togglePause() {
+    // If any secondary screen is open, close it and return to pause
+    if (this.settings.isOpen) {
+      this.settings.close();
+      this._openPauseMenu();
+      return;
+    }
+    if (this.achievementViewer.isOpen) {
+      this.achievementViewer.close();
+      this._openPauseMenu();
+      return;
+    }
+    if (this.backpack.isOpen) {
+      this.backpack.close();
+      this._openPauseMenu();
+      return;
+    }
+    if (this.shop.isOpen) {
+      this.shop.close();
+      this._openPauseMenu();
+      return;
+    }
+    if (this.gallery.isOpen) {
+      this.gallery.close();
+      this._openPauseMenu();
+      return;
+    }
+
+    // If pause is open, close it (resume)
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.close();
+      this.state = 'playing';
+      this.audio.ui('click');
+      return;
+    }
+
+    // Otherwise open pause
+    if (this.state !== 'playing') return;
+    this._openPauseMenu();
+  }
+
+  _openPauseMenu() {
+    document.exitPointerLock?.();
+    this.pauseMenu.open();
+    this.audio.ui('click');
+  }
+
+  _returnToLanding() {
+    // Close pause menu and all screens
+    if (this.pauseMenu.isOpen) this.pauseMenu.close();
+    if (this.settings.isOpen) this.settings.close();
+    if (this.achievementViewer.isOpen) this.achievementViewer.close();
+    if (this.backpack.isOpen) this.backpack.close();
+    if (this.shop.isOpen) this.shop.close();
+    if (this.gallery.isOpen) this.gallery.close();
+
+    // Stop the current level - clear enemies
+    for (const e of this.enemies.enemies) this.scene.remove(e.group);
+    this.enemies.enemies.length = 0;
+
+    // Clear projectiles and VFX
+    this.projectiles.clear();
+    this.vfx.clear();
+
+    // Reset player position and state
+    this.player.position.copy(this.player._spawn);
+    this.player.velocity.set(0, 0, 0);
+    this.player.dead = false;
+    this.player.hp = this.player.maxHp;
+
+    // Set state to menu so game loop doesn't update
+    this.state = 'menu';
+
+    // Show landing screen
+    document.getElementById('landing').classList.add('show');
+
+    // Play UI sound
+    this.audio.ui('click');
+  }
+
   _onMultiKill(n) {
     this.gameManager.registerMultiKill();
     if (this.gameManager.unlockWeapon('SHOTGUN')) {
@@ -386,6 +547,10 @@ export class Game {
   loadLevel(campaignLevel) {
     if (this.shop.isOpen) this.shop.close();
     if (this.gallery.isOpen) this.gallery.close();
+    if (this.pauseMenu.isOpen) this.pauseMenu.close();
+    if (this.settings.isOpen) this.settings.close();
+    if (this.achievementViewer.isOpen) this.achievementViewer.close();
+    if (this.backpack.isOpen) this.backpack.close();
     this.campaignLevel = Math.max(0, Math.min(campaignLevel, CAMPAIGN.length - 1));
 
     // Clear enemies.

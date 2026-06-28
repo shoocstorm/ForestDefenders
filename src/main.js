@@ -15,28 +15,30 @@ const LEVEL_DESC = {
   L3: 'Old roots stir — the toughest stand awaits.',
 };
 
-// Build the level-select landing screen and resolve once the player picks one.
-function chooseLevel() {
+// Build the level-select landing screen. Can be called multiple times.
+function showLevelSelect() {
   const landing = document.getElementById('landing');
   const list = landing.querySelector('.levels');
   list.innerHTML = '';
-  return new Promise((resolve) => {
-    CAMPAIGN.forEach((lvl, i) => {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'level';
-      card.innerHTML =
-        `<div class="num">LEVEL ${i + 1}</div>` +
-        `<div class="name">${lvl.name}</div>` +
-        `<div class="desc">${LEVEL_DESC[lvl.biome] || ''}</div>`;
-      card.addEventListener('click', () => {
-        landing.classList.remove('show');
-        resolve(i);
-      });
-      list.appendChild(card);
+  CAMPAIGN.forEach((lvl, i) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'level';
+    card.innerHTML =
+      `<div class="num">LEVEL ${i + 1}</div>` +
+      `<div class="name">${lvl.name}</div>` +
+      `<div class="desc">${LEVEL_DESC[lvl.biome] || ''}</div>`;
+    card.addEventListener('click', () => {
+      landing.classList.remove('show');
+      // Use the globally exposed game instance to load the level
+      if (window.__game) {
+        window.__game.loadLevel(i);
+        window.__game.start();
+      }
     });
-    landing.classList.add('show');
+    list.appendChild(card);
   });
+  landing.classList.add('show');
 }
 
 (async () => {
@@ -51,8 +53,7 @@ function chooseLevel() {
 
     // Hide the loading overlay and let the player pick a level to play directly.
     boot?.classList.add('hidden');
-    const level = await chooseLevel();
-    game.loadLevel(level);
+    showLevelSelect();
     game.start();
   } catch (err) {
     console.error('Failed to start Forest Defender:', err);
