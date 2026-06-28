@@ -3,6 +3,64 @@
 <!-- Running log of non-obvious bugs, gotchas, and fixes discovered by coding agents.
      Append newest entry to the top. Keep each entry focused: symptom, root cause, fix. -->
 
+## Severe CPU/GPU stutter & freezes, worst when firing the Machine Gun (esp. L2)
+
+**Date:** 2026-06-28 · **Files:** `src/vfx/VFX.js`, `src/weapons/Projectile.js`,
+`src/ui/DamageNumbers.js`, `src/core/Game.js`
+
+**Symptom:** Game runs hot and janky in Chrome; periodic freezes that spike while
+firing the rapid weapons. Machine Gun (`cooldown 0.08`, ~12.5 shots/s) was the worst
+trigger. L1 firing froze; after the first round of fixes L1 was smooth but **L2 was
+still extremely slow** specifically while firing.
+
+**Root causes (four independent costs, all scaling with rate of fire):**
+
+1. **Per-shot light add/remove → shader recompiles.** `VFX._flash()` did
+   `scene.add(light)` then removed it ~0.18s later (and `Projectile` lights were
+   uncapped). Every change to the scene's light count forces Three.js to **recompile
+   every lit material's shader program**. At 12.5 shots/s this was a recompile storm =
+   the freeze. (The `beam()` comment already documented this exact hazard.)
+2. **Per-shot geometry/material allocation.** `VFX._burst()` allocated a fresh
+   `BufferGeometry` + 2 `Float32Array`s + `PointsMaterial` + `Points` per muzzle flash
+   and per hit spark, disposed a fraction of a second later → GC churn → hitches.
+3. **Uncapped dynamic projectile lights.** Each pooled projectile carried a live
+   `PointLight`. Low-damage Machine Gun vs the tankier/denser **L2** waves left many
+   more bullets alive at once → many simultaneous lights → per-fragment lighting cost
+   on every lit material exploded. This is why **L2 specifically** stayed slow.
+4. **DOM damage-number thrash.** `DamageNumbers` created/removed a div per hit and
+   positioned via `left`/`top` (invalidates **document layout** synchronously every
+   frame). L2's elemental hits (PHYSICAL gun vs Water/Ice/Metal) add a second label
+   node per hit → ~2 DOM nodes/hit → continuous main-thread layout passes.
+
+**Fixes:**
+- **VFX flash lights pooled** (`VFX.js`): 8 `PointLight`s added to the scene **once**,
+  grow-on-demand, never removed — only intensity toggled. Light count is now constant,
+  so no per-shot recompiles.
+- **VFX bursts pooled** (`VFX.js`): reusable `Points` objects with fixed 200-particle
+  capacity + `setDrawRange`; expired bursts are hidden, never disposed.
+- **Projectile light budget** (`Projectile.js`): `LIGHT_BUDGET = 6` — only the 6 most
+  recent in-flight bullets cast light; the rest still render via the bloom layer. Bounds
+  on-screen dynamic lights regardless of weapon or wave density. Decrement the counter
+  when a lit projectile dies.
+- **DamageNumbers rewritten** (`DamageNumbers.js`): pooled divs (cap 28, oldest
+  recycled), positioned with `transform: translate3d` (compositor-only, **no layout**).
+- **Pause-aware render loop** (`Game.js`): skip the heavy bloom+GTAO pipeline entirely
+  while the gallery is open (it draws its own full-screen canvas), throttle to ~30fps on
+  shop/victory/defeat overlays, and **stop the rAF loop while the tab is hidden**
+  (`visibilitychange`) — Chrome only throttles rAF when *fully* hidden, not when occluded.
+
+**Gotcha to remember:** In Three.js, **never add/remove lights at runtime** in a hot
+path — the scene light count is baked into every lit material's shader, so each change
+recompiles them all. Pool lights and toggle `intensity` instead (as the projectile pool
+and laser beam already did). Likewise, pool short-lived particle objects rather than
+alloc/dispose per spawn, and position DOM overlays with `transform`, never `left`/`top`.
+
+**Quality levers if still heavy:** press `/` in-game for `QUALITY.LOW` (drops GTAO,
+halves bloom res); lower the pixel-ratio cap at `Game.js:41` (`Math.min(devicePixelRatio, 2)`
+→ `1.5`). To diagnose: Chrome DevTools → Performance → record while firing; the widest
+band names the culprit (Layout/Recalc = DOM, Composite/GPU = render pipeline, Minor GC
+sawtooth = allocation).
+
 ## PostFX beauty pass renders black (only bloom glows show)
 
 **Date:** 2026-06-27 · **Files:** `src/core/PostFX.js`

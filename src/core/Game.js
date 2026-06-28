@@ -257,9 +257,25 @@ export class Game {
     if (this.input.wasPressed('Slash')) this.postfx.toggleQuality();
 
     this._updateHud();
-    this.postfx.render();
+    this._renderFrame(realDt);
     this.input.endFrame();
     this._updateStats(realDt);
+  }
+
+  // Pause-aware rendering. The gallery draws its own full-screen WebGL canvas over
+  // ours, so the heavy bloom+GTAO pipeline is pure waste while it's open — skip it.
+  // While the shop/victory/defeat overlay is up the 3D scene is only a barely-moving
+  // backdrop, so throttle it to ~30fps. Active play renders every frame.
+  _renderFrame(realDt) {
+    if (this.gallery.isOpen) return;
+
+    const paused = this.shop.isOpen || this.state !== 'playing';
+    if (paused) {
+      this._pausedRenderAccum += realDt;
+      if (this._pausedRenderAccum < 1 / 30) return;
+      this._pausedRenderAccum = 0;
+    }
+    this.postfx.render();
   }
 
   _fixedUpdate(dt) {

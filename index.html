@@ -66,6 +66,32 @@
       @media (orientation: portrait) and (pointer: coarse) {
         #rotate { display: flex; }
       }
+
+      /* --- Landing / level-select screen --- */
+      #landing {
+        position: fixed; inset: 0; z-index: 55; display: none;
+        flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+        background: radial-gradient(circle at 50% 30%, #1a3326, #0b1410 72%);
+        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6;
+        padding: 24px; text-align: center;
+      }
+      #landing.show { display: flex; }
+      #landing h1 { font-size: 40px; letter-spacing: 1px; text-shadow: 0 2px 14px #000a; }
+      #landing .sub { font-size: 15px; opacity: 0.7; margin-bottom: 22px; }
+      #landing .levels {
+        display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; max-width: 720px;
+      }
+      #landing .level {
+        cursor: pointer; width: 200px; padding: 20px 18px; border-radius: 14px;
+        background: #ffffff10; border: 1px solid #ffffff22; color: #e8ffd4;
+        transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      #landing .level:hover {
+        transform: translateY(-4px); background: #a8e0631f; border-color: #a8e063aa;
+      }
+      #landing .level .num { font-size: 13px; opacity: 0.6; letter-spacing: 2px; }
+      #landing .level .name { font-size: 21px; margin-top: 6px; font-weight: bold; }
+      #landing .level .desc { font-size: 12.5px; opacity: 0.65; margin-top: 8px; }
     </style>
   </head>
   <body>
@@ -76,6 +102,11 @@
       <div class="glyph">📱</div>
       <h2>Rotate your device</h2>
       <p>Forest Defender plays best in landscape.</p>
+    </div>
+    <div id="landing">
+      <h1>🌰 Forest Defender</h1>
+      <div class="sub">Mushroom Mayhem · Select a level</div>
+      <div class="levels"></div>
     </div>
     <div id="boot">
       <h1>🌰 Forest Defender</h1>

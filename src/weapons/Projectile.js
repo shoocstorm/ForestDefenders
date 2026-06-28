@@ -7,10 +7,18 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 //
 // Spawn opts: { team:'player'|'enemy', speed, damage, element, color, radius,
 //               lifetime, gravity }.
+// Cap on simultaneously-lit projectiles. Every active PointLight raises the
+// per-fragment cost of every lit material on screen, so an uncapped machine gun
+// (many bullets alive at once, especially vs the tankier L2/L3 waves) drags FPS
+// the more of the arena is lit. Bullets past the budget still render — they glow
+// via the bloom layer — they just don't cast dynamic light.
+const LIGHT_BUDGET = 6;
+
 export class ProjectilePool {
   constructor(scene) {
     this.scene = scene;
     this.items = [];
+    this._litActive = 0;
     this._geo = new THREE.SphereGeometry(1, 10, 8);
     this._up = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
@@ -54,7 +62,10 @@ export class ProjectilePool {
     const color = opts.color ?? 0xffffff;
     p.mat.color.setHex(color);
     p.light.color.setHex(color);
-    p.light.intensity = 5;
+    // Light only while under the global budget; over it the bullet stays unlit.
+    p.lit = this._litActive < LIGHT_BUDGET;
+    p.light.intensity = p.lit ? 5 : 0;
+    if (p.lit) this._litActive++;
     p.mesh.position.copy(origin);
     p.mesh.scale.setScalar(p.radius);
     p.mesh.visible = true;
@@ -117,6 +128,7 @@ export class ProjectilePool {
         p.active = false;
         p.mesh.visible = false;
         p.light.intensity = 0;
+        if (p.lit) { p.lit = false; this._litActive--; } // free a light-budget slot
       } else {
         p.mesh.position.copy(p.pos);
       }

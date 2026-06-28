@@ -6,12 +6,15 @@ import { BLOOM_LAYER } from '../config/Constants.js';
 // in `this.active` and advanced/retired in update(). M2 ships muzzle flash, hit
 // spark and a simplified spore explosion; the full ~520-particle death burst and
 // per-weapon flashes land in M4 (JUICE_SPEC §10).
+const MAX_BURST_PARTICLES = 200; // largest single burst (spore = 180)
+
 export class VFX {
   constructor(scene) {
     this.scene = scene;
-    this.active = [];     // particle bursts
-    this.lights = [];     // fading flash lights
+    this.active = [];     // particle bursts (pooled — entries reused, never disposed)
+    this.lights = [];     // pooled flash lights (added to scene once, intensity toggled)
     this.rings = [];      // expanding shockwave meshes
+    this._burstPool = []; // reusable Points objects (see _acquireBurst)
     this._ringGeo = new THREE.RingGeometry(0.6, 0.85, 24);
     this._ringGeo.rotateX(-Math.PI / 2);
     // Unit-length +Y cylinder (centered) reused for the laser beam — scaled by
@@ -23,6 +26,43 @@ export class VFX {
     // firing. Never added/removed per-frame (that would change the scene light
     // count and force a full material shader recompile every frame → stutter).
     this._laser = null;
+
+    // Flash-light pool: added to the scene ONCE and never removed. Adding/removing
+    // a light changes the scene light count, which forces Three.js to recompile the
+    // shader of every lit material — at the Machine Gun's ~12.5 shots/s that meant a
+    // recompile storm and the firing freeze. Now we only toggle intensity. The pool
+    // grows on demand (when more flashes overlap than exist) and then stays put.
+    for (let i = 0; i < 8; i++) this._spawnPoolLight();
+  }
+
+  _spawnPoolLight() {
+    const light = new THREE.PointLight(0xffffff, 0, 5, 2);
+    this.scene.add(light);
+    const entry = { light, life: 0, maxLife: 0, intensity: 0 };
+    this.lights.push(entry);
+    return entry;
+  }
+
+  // Reusable particle-burst object. Each carries a fixed-capacity geometry so a burst
+  // never allocates after warm-up; draw range limits it to the live particle count.
+  _acquireBurst() {
+    for (const e of this._burstPool) if (!e.active) return e;
+    const positions = new Float32Array(MAX_BURST_PARTICLES * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.16, transparent: true, opacity: 1,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const points = new THREE.Points(geo, mat);
+    points.frustumCulled = false;
+    points.visible = false;
+    points.layers.enable(BLOOM_LAYER); // additive particles glow in the post pipeline
+    this.scene.add(points);
+    const entry = { points, positions, vels: new Float32Array(MAX_BURST_PARTICLES * 3),
+      count: 0, life: 0, maxLife: 0, gravity: 0, active: false };
+    this._burstPool.push(entry);
+    return entry;
   }
 
   _buildLaser() {
@@ -48,8 +88,9 @@ export class VFX {
   }
 
   _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2 }) {
-    const positions = new Float32Array(count * 3);
-    const vels = new Float32Array(count * 3);
+    count = Math.min(count, MAX_BURST_PARTICLES);
+    const e = this._acquireBurst();
+    const positions = e.positions, vels = e.vels;
     for (let i = 0; i < count; i++) {
       positions[i * 3] = pos.x;
       positions[i * 3 + 1] = pos.y;
@@ -61,24 +102,28 @@ export class VFX {
       vels[i * 3 + 1] = Math.abs(Math.cos(phi)) * v * up + v * 0.3;
       vels[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * v * spread;
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({
-      color, size, transparent: true, opacity: 1,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const points = new THREE.Points(geo, mat);
-    points.frustumCulled = false;
-    points.layers.enable(BLOOM_LAYER); // additive particles glow in the post pipeline
-    this.scene.add(points);
-    this.active.push({ points, vels, life, maxLife: life, gravity });
+    e.points.geometry.setDrawRange(0, count);
+    e.points.geometry.attributes.position.needsUpdate = true;
+    e.points.material.color.set(color);
+    e.points.material.size = size;
+    e.points.material.opacity = 1;
+    e.points.visible = true;
+    e.count = count; e.life = life; e.maxLife = life; e.gravity = gravity;
+    e.active = true;
+    this.active.push(e);
   }
 
+  // Acquire a free pooled light (intensity toggled, never added/removed from the scene).
   _flash(pos, color, intensity, range) {
-    const light = new THREE.PointLight(color, intensity, range, 2);
-    light.position.copy(pos);
-    this.scene.add(light);
-    this.lights.push({ light, life: 0.18, maxLife: 0.18, intensity });
+    let e = null;
+    for (const l of this.lights) if (l.life <= 0) { e = l; break; }
+    if (!e) e = this._spawnPoolLight();
+    e.light.color.setHex(color);
+    e.light.distance = range;
+    e.light.position.copy(pos);
+    e.light.intensity = intensity;
+    e.intensity = intensity;
+    e.life = 0.18; e.maxLife = 0.18;
   }
 
   _shockwave(pos, color, maxRadius, life) {
@@ -190,14 +235,14 @@ export class VFX {
       const b = this.active[i];
       b.life -= dt;
       if (b.life <= 0) {
-        this.scene.remove(b.points);
-        b.points.geometry.dispose();
-        b.points.material.dispose();
+        b.points.visible = false; // returned to the pool — never disposed
+        b.active = false;
         this.active.splice(i, 1);
         continue;
       }
       const arr = b.points.geometry.attributes.position.array;
-      for (let j = 0; j < b.vels.length; j += 3) {
+      const n = b.count * 3;
+      for (let j = 0; j < n; j += 3) {
         b.vels[j + 1] -= b.gravity * dt;
         arr[j] += b.vels[j] * dt;
         arr[j + 1] += b.vels[j + 1] * dt;
@@ -208,15 +253,12 @@ export class VFX {
       b.points.material.opacity = b.life / b.maxLife;
     }
 
-    for (let i = this.lights.length - 1; i >= 0; i--) {
-      const l = this.lights[i];
+    // Pooled flash lights: fade by dimming intensity, never remove from the scene
+    // (the light count must stay constant to avoid material shader recompiles).
+    for (const l of this.lights) {
+      if (l.life <= 0) continue;
       l.life -= dt;
-      if (l.life <= 0) {
-        this.scene.remove(l.light);
-        this.lights.splice(i, 1);
-      } else {
-        l.light.intensity = l.intensity * (l.life / l.maxLife);
-      }
+      l.light.intensity = l.life <= 0 ? 0 : l.intensity * (l.life / l.maxLife);
     }
 
     for (let i = this.rings.length - 1; i >= 0; i--) {
