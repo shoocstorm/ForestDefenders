@@ -160,30 +160,44 @@ export class Arena {
   _platform() {
     const b = this.biome;
     const h = ARENA.PLATFORM_HEIGHT;
-    const top = new THREE.Mesh(
-      new THREE.BoxGeometry(10, h, 10),
-      toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.35 } })
-    );
-    top.position.set(0, h / 2, 4);
-    top.castShadow = true; top.receiveShadow = true;
-    top.userData.arenaOwned = true;
-    this.scene.add(top);
-    const cap = new THREE.Mesh(
+    const cz = 4; // platform centre on Z
+    const add = (mesh, x, y, z, shadow = true) => {
+      mesh.position.set(x, y, z);
+      if (shadow) { mesh.castShadow = true; mesh.receiveShadow = true; }
+      mesh.userData.arenaOwned = true;
+      this.scene.add(mesh);
+      return mesh;
+    };
+    const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.35 } });
+    const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.3 } });
+    const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.3 } });
+
+    // Tiered stone base — two overhanging plinth courses ground the column.
+    add(new THREE.Mesh(new THREE.BoxGeometry(11.2, 0.6, 11.2), stepMat), 0, 0.3, cz);
+    add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), topMat), 0, 0.825, cz);
+
+    // Main column, slightly inset so the base and cornice read as overhangs.
+    add(new THREE.Mesh(new THREE.BoxGeometry(9.4, h, 9.4), topMat), 0, h / 2, cz);
+
+    // Cornice lip just beneath the deck.
+    add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), stepMat), 0, h - 0.225, cz);
+
+    // Deck cap (the standing surface, top at h + 0.2).
+    add(new THREE.Mesh(
       new THREE.BoxGeometry(10.2, 0.2, 10.2),
       toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.4 }, wind: { base: 0.0, freq: 2.4, amp: 0.02 } })
-    );
-    cap.position.set(0, h + 0.1, 4);
-    cap.userData.arenaOwned = true;
-    this.scene.add(cap);
+    ), 0, h + 0.1, cz, false);
+
+    // Corner posts with carved collars + glowing finials framing the deck.
+    const finialMat = new THREE.MeshToonMaterial({ color: b.platform.topRim, emissive: b.platform.topRim, emissiveIntensity: 0.6 });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const pil = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.4, 0.45, h + 1.2, 8),
-        toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.3 } })
-      );
-      pil.position.set(sx * 4.4, (h + 1.2) / 2, 4 + sz * 4.4);
-      pil.castShadow = true;
-      pil.userData.arenaOwned = true;
-      this.scene.add(pil);
+      const px = sx * 4.5, pz = cz + sz * 4.5;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, h + 1.2, 10), pillarMat), px, (h + 1.2) / 2, pz);
+      // Collar ring + flared cap where the post clears the deck.
+      const collar = add(new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.07, 8, 14), stepMat), px, h + 0.25, pz);
+      collar.rotation.x = Math.PI / 2;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.22, 10), stepMat), px, h + 1.2, pz);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), finialMat), px, h + 1.45, pz, false);
     }
     this.standables = [
       { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true },

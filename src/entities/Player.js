@@ -77,30 +77,6 @@ export class Player {
     return best;
   }
 
-  // Soft lock-on: rotate the view so the crosshair settles onto the enemy nearest
-  // screen-center. Pull strengthens as it nears centre (sticky) and releases when
-  // you look away. Drives rig.yaw/pitch directly (mouse-look still composes).
-  _focusCrosshair(dt, ctx, rig) {
-    if (!AIM_ASSIST.ENABLED || rig.mode === CAMERA.TOP) return;
-    const cam = rig.camera.position;
-    const camDir = rig.getAimDirection(this._aim);
-    const target = this._acquireTarget(cam, camDir, ctx);
-    if (!target) return;
-
-    // Desired look direction: from the camera to the target's torso.
-    this._aimTarget.copy(target.position).setY(target.position.y + AIM_ASSIST.TARGET_Y);
-    const d = this._fireDir.subVectors(this._aimTarget, cam).normalize();
-    const desiredYaw = Math.atan2(-d.x, -d.z);
-    const desiredPitch = Math.asin(clamp(d.y, -1, 1));
-
-    const coneCos = Math.cos((AIM_ASSIST.CONE_DEG * Math.PI) / 180);
-    const t = clamp((this._lockAlign - coneCos) / (1 - coneCos), 0, 1);
-    const lambda = AIM_ASSIST.PULL_MIN + (AIM_ASSIST.PULL_MAX - AIM_ASSIST.PULL_MIN) * t;
-    rig.yaw = dampAngle(rig.yaw, desiredYaw, lambda, dt);
-    rig.pitch = clamp(damp(rig.pitch, desiredPitch, lambda, dt), CAMERA.PITCH_MIN, CAMERA.PITCH_MAX);
-  }
-
-
   // Incoming enemy damage (i-framed). Shield (Hedgehog buff) soaks first; at 0 HP
   // the player dies → defeat screen via ctx.onPlayerDeath (COMBAT_SPEC §4).
   takeDamage(amount, ctx) {
@@ -143,10 +119,6 @@ export class Player {
     if (this._invuln > 0) this._invuln -= dt;
     if (this._kickCd > 0) this._kickCd -= dt;
     if (this._tailCd > 0) this._tailCd -= dt;
-
-    // --- Aim assist: pull the crosshair onto the targeted enemy (before basis +
-    // firing so movement and the shot use the focused view). ---
-    this._focusCrosshair(dt, ctx, rig);
 
     // --- Build camera-relative basis on the ground plane ---
     rig.getAimDirection(this._fwd);

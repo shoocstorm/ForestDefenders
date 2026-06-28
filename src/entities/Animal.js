@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { HealthComponent } from '../combat/HealthComponent.js';
 import { buildAnimal } from './animals/AnimalModel.js';
 import { clamp, damp } from '../util/MathUtils.js';
-import { RESCUE_REWARD } from '../config/Constants.js';
+import { RESCUE_REWARD, BLOOM_LAYER } from '../config/Constants.js';
 
 // A rescuable Level 1 animal (ANIMALS_SPEC). Starts CAGED (safe). The player frees it
 // with [E] when near → grants its buff plus an instant reward (gold + HP heal), then
@@ -66,6 +66,30 @@ export class Animal {
     halo.position.y = 1.35; halo.rotation.x = Math.PI / 2;
     cage.add(halo);
     this.halo = halo;
+
+    // Floating "rescue me" beacon — a glowing orb on a soft light, ringed by two
+    // counter-rotating halos so the caged animal reads as needing saving at a glance.
+    const beacon = new THREE.Group();
+    beacon.position.y = 2.0;
+    const orbMat = new THREE.MeshBasicMaterial({ color: 0xffe9a0 });
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), orbMat);
+    beacon.add(orb);
+    if (orb.layers) orb.layers.enable(BLOOM_LAYER);
+    for (const r of [0.32, 0.46]) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(r, 0.022, 8, 24),
+        new THREE.MeshBasicMaterial({ color: 0xfff4c8 }),
+      );
+      beacon.add(ring);
+      if (ring.layers) ring.layers.enable(BLOOM_LAYER);
+    }
+    const beaconLight = new THREE.PointLight(0xffd87a, 1.4, 6, 2);
+    beacon.add(beaconLight);
+    cage.add(beacon);
+    this.beacon = beacon;
+    this._beaconLight = beaconLight;
+    this._beaconRings = beacon.children.filter((c) => c.isMesh && c.geometry.type === 'TorusGeometry');
+
     this.cage = cage;
     this.group.add(cage);
   }
@@ -87,7 +111,7 @@ export class Animal {
   free(ctx) {
     if (this.state !== 'CAGED') return;
     this.state = 'RESCUED';
-    if (this.cage) { this.group.remove(this.cage); this.cage = null; this.halo = null; }
+    if (this.cage) { this.group.remove(this.cage); this.cage = null; this.halo = null; this.beacon = null; this._beaconLight = null; this._beaconRings = null; }
 
     // Buff for the level + instant reward (gold + HP heal).
     ctx.gameManager.grantBuff(this.buff);
@@ -143,6 +167,18 @@ export class Animal {
     if (this.wings) for (let i = 0; i < this.wings.length; i++) this.wings[i].rotation.z = (i ? -1 : 1) * (0.3 + Math.sin(this._t * 12) * 0.5);
     if (this.halo) this.halo.rotation.z = this._t * 1.5;
 
+    // Rescue beacon: float, pulse the light, counter-rotate the halos.
+    if (this.beacon) {
+      this.beacon.position.y = 2.0 + Math.sin(this._t * 2) * 0.12;
+      this.beacon.rotation.y = this._t * 0.8;
+      const pulse = 0.5 + Math.sin(this._t * 4) * 0.5;
+      if (this._beaconLight) this._beaconLight.intensity = 0.9 + pulse * 1.2;
+      if (this._beaconRings) {
+        this._beaconRings[0].rotation.x = this._t * 1.6;
+        this._beaconRings[1].rotation.z = -this._t * 1.2;
+      }
+    }
+
     // Danger glow when exposed and hurt.
     const danger = this.state === 'FREE' ? (1 - this.health.percent) : 0;
     this.glow.intensity = damp(this.glow.intensity, danger * 6, 8, dt);
@@ -151,9 +187,12 @@ export class Animal {
   }
 
   _restBob() {
-    // Bird body centered; procedural hedgehog is built feet-at-0 (tiny float so the
-    // breathing bob doesn't clip the ground); other ground animals offset internally.
-    return this.flying ? 0 : (this.type === 'HEDGEHOG' ? 0.04 : 0.22);
+    // Flying bird perches inside its cage: the group is anchored at the platform
+    // deck, so lift the bird to the cage interior centre (bars span 0.05–1.05) —
+    // otherwise its body sinks ~0.2 below the deck. Procedural hedgehog is built
+    // feet-at-0 (tiny float so the breathing bob doesn't clip the ground); other
+    // ground animals offset internally.
+    return this.flying ? 0.55 : (this.type === 'HEDGEHOG' ? 0.04 : 0.22);
   }
 
   dispose() {

@@ -74,7 +74,10 @@ export class Vegetation {
     const leafMat2 = [];
 
     // Curved segmented trunk: walk up, bending the direction a little each section.
-    const trunkH = (spec.trunkH[0] + R() * (spec.trunkH[1] - spec.trunkH[0])) * scale;
+    // TALL boosts only the trunk length (radius/canopy stay put) so trees read as
+    // taller, slenderer crowns — shrubs are exempt so they stay ground cover.
+    const TALL = spec.canopy === 'bush' ? 1.0 : 1.45;
+    const trunkH = (spec.trunkH[0] + R() * (spec.trunkH[1] - spec.trunkH[0])) * scale * TALL;
     const segH = trunkH / spec.segs;
     const p = new THREE.Vector3(0, 0, 0);
     const d = new THREE.Vector3((R() - 0.5) * 0.18, 1, (R() - 0.5) * 0.18).normalize();

@@ -250,7 +250,7 @@ export const LEVEL3_WAVES = [
 // --- Animals (ANIMALS_SPEC §2). pos in world coords; buff granted on rescue. ---
 export const ANIMALS = {
   HEDGEHOG: { type: 'HEDGEHOG', hp: 50, buff: 'SHIELD', flying: false,
-    pos: [3, 0, 4], cage: true, color: 0x8a6f4a },
+    pos: [9, 0, 4], cage: true, color: 0x8a6f4a },
   BIRD: { type: 'BIRD', hp: 40, buff: 'REVEAL', flying: true,
     pos: [0, 3.2, 4], cage: true, color: 0x4aa3d8 },
   RABBIT: { type: 'RABBIT', hp: 45, buff: 'SPEED', flying: false,
@@ -363,11 +363,13 @@ export const PLANTS = {
 };
 
 // Level 1 plant placement (PLANTS_SPEC §3). The Bird sits on the central platform
-// (z≈4); Bounce Fruit is at its foot. Two berry bushes flank mid-map for the hurt.
+// (z≈4); Bounce Fruit hugs the platform's west edge (deck edge x≈-5.1) as an
+// alternate vault route up, opposite the front stairs (z≈-1..-5 at x≈0). Two
+// berry bushes flank mid-map for the hurt.
 export const PLANT_PLACEMENT = [
   { type: 'VITALITY', pos: [9, 0, -8] },
   { type: 'VITALITY', pos: [-9, 0, 12] },
-  { type: 'BOUNCE', pos: [4, 0, -1] },
+  { type: 'BOUNCE', pos: [-8, 0, 8] },
   { type: 'TAIL_GUARD', pos: [-5, 0, 5] },
   { type: 'OAKSHIELD', pos: [-7.6, 1.3, 4] },   // clings to the west ancient tree
   { type: 'FLAME_CHILI', pos: [6, 0, -16] },

@@ -30,6 +30,28 @@ export class Plant {
     this.glow = new THREE.PointLight(def.glow, 2.2, 5, 2);
     this.glow.position.y = 0.6;
     this.group.add(this.glow);
+
+    this._buildBeacon(def);
+  }
+
+  // Floating "interact here" beacon: a glowing downward chevron ringed by a halo,
+  // hovering above the plant so pickups read from across the arena (mirrors the
+  // caged-animal rescue beacon). Hidden while the plant is dormant.
+  _buildBeacon(def) {
+    const beacon = new THREE.Group();
+    beacon.position.y = 1.6;
+    const mat = new THREE.MeshBasicMaterial({ color: def.glow });
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.3, 4), mat);
+    arrow.rotation.x = Math.PI; // point down at the plant
+    arrow.layers.enable(BLOOM_LAYER);
+    beacon.add(arrow);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 6, 20), mat);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.22;
+    ring.layers.enable(BLOOM_LAYER);
+    beacon.add(ring);
+    this.beacon = beacon;
+    this._beaconRing = ring;
+    this.group.add(beacon);
   }
 
   interactKind() { return this.def.interact; } // 'touch' | 'shoot' | 'both'
@@ -230,6 +252,7 @@ export class Plant {
     this._respawnT = this.def.respawn;
     this.bob.visible = false;
     if (this.ring) this.ring.visible = false;
+    if (this.beacon) this.beacon.visible = false;
     this.glow.intensity = 0;
     return this.def.effect;
   }
@@ -242,6 +265,7 @@ export class Plant {
         this.dormant = false;
         this.bob.visible = true;
         if (this.ring) this.ring.visible = true;
+        if (this.beacon) this.beacon.visible = true;
       }
       return;
     }
@@ -250,6 +274,12 @@ export class Plant {
     this.bob.scale.setScalar(1 + Math.sin(this._t * 3) * 0.03);
     this.glow.intensity = 1.8 + Math.sin(this._t * 4) * 0.6;
     if (this.ring) { this.ring.rotation.z = this._t * 1.6; this.ring.scale.setScalar(1 + Math.sin(this._t * 3) * 0.08); }
+    // Beacon hovers, bobs, and spins its halo to draw the eye.
+    if (this.beacon) {
+      this.beacon.position.y = 1.6 + Math.sin(this._t * 2) * 0.14;
+      this.beacon.rotation.y = this._t * 0.9;
+      if (this._beaconRing) this._beaconRing.rotation.z = this._t * 1.8;
+    }
   }
 
   dispose() { this.scene.remove(this.group); }

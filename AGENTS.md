@@ -3,6 +3,13 @@
 <!-- Running log of non-obvious bugs, gotchas, and fixes discovered by coding agents.
      Append newest entry to the top. Keep each entry focused: symptom, root cause, fix. -->
 
+> **For AI coding agents:** This file is the log for **bugs, gotchas, and fixes**.
+> Feature work, polish, and creative/visual improvements made *after the migration from
+> the original Godot version* go in [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md) instead.
+> Keep **both** files current: when you fix a non-obvious bug, append here; when you add or
+> refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
+> both. This running history is how future agents avoid re-deriving past decisions.
+
 ## Progressive FPS degradation over play sessions, especially after death/retry
 
 **Date:** 2026-06-28 · **Files:** `src/core/Game.js`, `src/weapons/Projectile.js`,
