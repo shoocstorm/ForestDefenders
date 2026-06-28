@@ -36,6 +36,7 @@ export class PostFX {
     this.quality = QUALITY.DEFAULT;
     this.aoLevel = AO_QUALITY.DEFAULT; // player-facing GTAO tier (HIGH | LOW | OFF)
     this.aoScale = 1; // GTAO resolution multiplier for the active tier
+    this.gtaoEnabled = true; // player override: false force-drops the GTAO pass entirely
     this.postEnabled = true; // false → bypass the whole composer stack (Performance preset)
     this.mode = 'full'; // 'full' | 'nopost' | 'bloom' | 'ao'
     const w = window.innerWidth, h = window.innerHeight;
@@ -61,7 +62,7 @@ export class PostFX {
     // AO runs only when the global quality tier allows it AND the player hasn't
     // turned it off. LOW renders GTAO at a fraction of screen resolution (aoScale)
     // — the dominant mobile-FPS lever — then composites onto the full-res beauty.
-    if (q.ao && ao.enabled) {
+    if (q.ao && ao.enabled && this.gtaoEnabled) {
       // GTAO's OUTPUT.Default composites AO onto the beauty already living in the
       // composer's readBuffer — it does NOT render the scene itself. A RenderPass
       // must run first to fill that buffer, otherwise the beauty pass comes out
@@ -102,6 +103,13 @@ export class PostFX {
   setAOLevel(name) {
     if (!AO_QUALITY[name] || name === 'DEFAULT' || name === 'ORDER') return;
     this.aoLevel = name;
+    this._buildFinal(window.innerWidth, window.innerHeight);
+  }
+
+  // Player override (Settings → Graphics → Ambient Occlusion). Independent of the
+  // quality preset's AO tier: false force-drops the GTAO pass even on High/Balanced.
+  setGTAOEnabled(on) {
+    this.gtaoEnabled = on;
     this._buildFinal(window.innerWidth, window.innerHeight);
   }
 

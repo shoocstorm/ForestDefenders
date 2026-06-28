@@ -118,6 +118,7 @@ export class Game {
       audioSystem: this.audio,
       gameManager: this.gameManager,
       onGfxChange: (preset) => this.setGraphics(preset),
+      onGTAOChange: (on) => this.postfx?.setGTAOEnabled(on),
       onClose: () => this._persist(),
     });
 
@@ -176,6 +177,8 @@ export class Game {
     // Apply the player's graphics preset (Settings → Graphics). Defaults to
     // Performance on touch devices — phones can't afford the full post stack.
     this.setGraphics(this._initialGraphicsPreset());
+    // Independent GTAO override (defaults on; users can force it off for FPS).
+    if (this.gameManager.settings.gtao === false) this.postfx.setGTAOEnabled(false);
 
     this.state = 'playing'; // 'playing' | 'victory' | 'defeat'
     this.waves = new WaveManager(this.enemies, this.gameManager, {

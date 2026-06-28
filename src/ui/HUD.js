@@ -26,7 +26,7 @@ export class HUD {
 
         /* ---- shared panel chrome ---- */
         .fd-panel{position:absolute;
-          background:linear-gradient(160deg,#0e1a12d9,#070d0acc);
+          background:linear-gradient(160deg,#0e1a1273,#070d0a66);
           border:1px solid #49e8ff2e;border-radius:0;padding:11px 15px;
           backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
           box-shadow:0 6px 26px #000a, inset 0 1px 0 #ffffff14, 0 0 18px #49e8ff10;
@@ -49,7 +49,7 @@ export class HUD {
         /* ---- radar (top-left) ---- */
         #fd-radar-panel{top:16px;left:16px;padding:10px;border-radius:50%;width:172px;height:172px;
           clip-path:none;display:flex;align-items:center;justify-content:center;
-          background:radial-gradient(circle at 50% 45%,#0d2017e0,#05100bdd);}
+          background:radial-gradient(circle at 50% 45%,#0d201788,#05100b80);}
         #fd-radar-panel::before,#fd-radar-panel::after{display:none;}
         #fd-radar{width:150px;height:150px;border-radius:50%;
           box-shadow:inset 0 0 22px #00000088, 0 0 0 1px #5fe0c033;}
@@ -63,49 +63,38 @@ export class HUD {
         #fd-rc-e{right:11px;top:50%;transform:translateY(-50%);}
         #fd-rc-w{left:11px;top:50%;transform:translateY(-50%);}
 
-        /* ---- vitals (left) — sci-fi tactical readout ---- */
-        #fd-vitals{top:200px;left:16px;width:236px;border-color:#49e8ff33;
-          /* notched / chamfered panel corners — kill the base radius so the
-             rounded background corner doesn't peek through the diagonal cut */
-          border-radius:0;
-          clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px));}
-        #fd-vitals::after{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;
-          background:linear-gradient(#49e8ff,#49e8ff22);box-shadow:0 0 10px #49e8ffaa;}
-        #fd-vitals-hd{display:flex;align-items:center;gap:7px;margin-bottom:10px;
-          font-size:9px;letter-spacing:3.5px;font-weight:800;text-transform:uppercase;color:#7fd8ff;}
-        #fd-vitals-hd::before{content:"";width:6px;height:6px;background:#49e8ff;flex:none;
-          transform:rotate(45deg);box-shadow:0 0 8px #49e8ff;}
-        #fd-vitals-hd::after{content:"";flex:1;height:1px;
-          background:linear-gradient(90deg,#49e8ff66,transparent);}
-        .fd-bar-row{margin-top:11px;}
-        .fd-bar-row:first-child{margin-top:0;}
-        .fd-bar-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
-        .fd-bar-name{font-size:10px;letter-spacing:3px;font-weight:800;text-transform:uppercase;}
-        .fd-bar-name::before{content:"▸ ";opacity:.6;}
-        .fd-bar-val{font-size:16px;font-weight:800;text-shadow:0 0 9px currentColor;}
-        /* skewed parallelogram track with a tech grid backing */
-        .fd-track{height:13px;background:#02080c;overflow:hidden;position:relative;
-          border:1px solid #ffffff1f;
-          clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);}
-        .fd-fill{height:100%;width:100%;position:relative;
-          transition:width .18s ease,background .3s;}
-        /* segment dividers painted over the fill for a charge-cell look */
-        .fd-track::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
-          background:repeating-linear-gradient(90deg,#0000 0 12px,#02080c 12px 14px);}
-        /* animated scan sweep */
-        .fd-track::after{content:"";position:absolute;top:0;bottom:0;left:-45px;width:45px;z-index:3;
-          pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff55,transparent);
-          animation:fdscan 2.6s linear infinite;}
-        @keyframes fdscan{0%{left:-45px;}60%,100%{left:115%;}}
-        #fd-hpfill{background:linear-gradient(90deg,#5fc23e,#9fe35a);}
-        #fd-shfill{background:linear-gradient(90deg,#3fb6e8,#8fe0ff);}
+        /* ---- vitals — vertical edge bars (HP left, Shield right) ---- */
+        .fd-vbar{position:absolute;top:50%;transform:translateY(-50%);
+          display:flex;flex-direction:column;align-items:center;gap:7px;
+          pointer-events:none;text-shadow:0 1px 3px #000c;transition:opacity .3s;}
+        #fd-hp-bar{left:22px;}
+        #fd-sh-bar{right:22px;}
+        #fd-sh-bar.empty{opacity:.32;}
+        .fd-vname{font-size:10px;letter-spacing:3px;font-weight:800;text-transform:uppercase;}
+        .fd-vval{font-size:22px;font-weight:800;line-height:1;text-shadow:0 0 10px currentColor;}
+        .fd-vmax{font-size:10px;font-weight:700;opacity:.5;letter-spacing:1px;}
+        /* tall chamfered (hex-cap) track with a dark tech backing */
+        .fd-vtrack{position:relative;width:16px;height:44vh;max-height:380px;min-height:180px;
+          background:#02080c;overflow:hidden;border:1px solid #ffffff1f;
+          clip-path:polygon(0 7px,50% 0,100% 7px,100% calc(100% - 7px),50% 100%,0 calc(100% - 7px));}
+        /* fill rises from the bottom */
+        .fd-vfill{position:absolute;left:0;right:0;bottom:0;height:100%;
+          transition:height .18s ease,background .3s;}
+        /* horizontal segment dividers painted over the fill (charge-cell look) */
+        .fd-vtrack::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+          background:repeating-linear-gradient(0deg,#0000 0 14px,#02080c 14px 16px);}
+        /* vertical scan sweep */
+        .fd-vtrack::after{content:"";position:absolute;left:0;right:0;top:-32px;height:32px;z-index:3;
+          pointer-events:none;background:linear-gradient(0deg,transparent,#ffffff55,transparent);
+          animation:fdvscan 2.8s linear infinite;}
+        @keyframes fdvscan{0%{top:-32px;}55%,100%{top:115%;}}
+        #fd-hpfill{background:linear-gradient(0deg,#3f9e2a,#9fe35a);}
+        #fd-shfill{background:linear-gradient(0deg,#2f8ec8,#9fe6ff);}
         /* glow via drop-shadow so it follows the chamfer and isn't clipped */
-        .fd-bar-row:first-child .fd-track{filter:drop-shadow(0 0 6px #6fe04a88);}
-        #fd-shrow .fd-track{filter:drop-shadow(0 0 6px #6fd4ff88);}
+        #fd-hp-bar .fd-vtrack{filter:drop-shadow(0 0 7px #6fe04a88);}
+        #fd-sh-bar .fd-vtrack{filter:drop-shadow(0 0 7px #6fd4ff88);}
         #fd-hpfill.crit{animation:fdcrit .7s steps(1) infinite;}
-        @keyframes fdcrit{50%{filter:brightness(1.6);}}
-        #fd-shrow{transition:opacity .3s;}
-        #fd-shrow.empty{opacity:.3;}
+        @keyframes fdcrit{50%{filter:brightness(1.7);}}
 
         /* ---- wave / enemies (top-right) ---- */
         #fd-topright{top:16px;right:16px;text-align:right;min-width:230px;}
@@ -220,9 +209,11 @@ export class HUD {
           #fd-ammo-gauge,#fd-slots{display:none!important;}
           /* score panel keeps only the animals counter on touch */
           #fd-gold-line,#fd-kills-line{display:none!important;}
-          /* vitals → top-left */
-          #fd-vitals{top:calc(14px + env(safe-area-inset-top));
-            left:calc(14px + env(safe-area-inset-left));width:188px;padding:9px 12px;}
+          /* vitals → shorter vertical bars hugging the safe-area edges */
+          #fd-hp-bar{left:calc(10px + env(safe-area-inset-left));}
+          #fd-sh-bar{right:calc(10px + env(safe-area-inset-right));}
+          .fd-vtrack{height:34vh;min-height:140px;width:13px;}
+          .fd-vval{font-size:18px;}
           /* wave/enemies → top-centre (clear of the cam/shop/gallery buttons) */
           #fd-topright{top:calc(12px + env(safe-area-inset-top));
             left:50%;right:auto;transform:translateX(-50%);text-align:center;min-width:0;padding:8px 16px;}
@@ -253,22 +244,18 @@ export class HUD {
         <span class="fd-radar-card" id="fd-rc-w">W</span>
       </div>
 
-      <div class="fd-panel" id="fd-vitals">
-        <div id="fd-vitals-hd">SQ-01 · LIFE SUPPORT</div>
-        <div class="fd-bar-row">
-          <div class="fd-bar-head">
-            <span class="fd-bar-name" style="color:#9fe35a;">Health</span>
-            <span class="fd-bar-val"><span id="fd-hpnum" class="fd-mono">100</span><span style="opacity:.55;font-size:12px;">/<span id="fd-hpmax">100</span></span></span>
-          </div>
-          <div class="fd-track"><div class="fd-fill" id="fd-hpfill"></div></div>
-        </div>
-        <div class="fd-bar-row empty" id="fd-shrow">
-          <div class="fd-bar-head">
-            <span class="fd-bar-name" style="color:#8fd6ff;">Shield</span>
-            <span class="fd-bar-val"><span id="fd-shnum" class="fd-mono">0</span><span style="opacity:.55;font-size:12px;">/<span id="fd-shmax">30</span></span></span>
-          </div>
-          <div class="fd-track"><div class="fd-fill" id="fd-shfill" style="width:0;"></div></div>
-        </div>
+      <div class="fd-vbar" id="fd-hp-bar">
+        <div class="fd-vname" style="color:#9fe35a;">HP</div>
+        <div class="fd-vval" style="color:#9fe35a;"><span id="fd-hpnum" class="fd-mono">100</span></div>
+        <div class="fd-vtrack"><div class="fd-vfill" id="fd-hpfill"></div></div>
+        <div class="fd-vmax">/<span id="fd-hpmax">100</span></div>
+      </div>
+
+      <div class="fd-vbar empty" id="fd-sh-bar">
+        <div class="fd-vname" style="color:#8fd6ff;">SHD</div>
+        <div class="fd-vval" style="color:#8fd6ff;"><span id="fd-shnum" class="fd-mono">0</span></div>
+        <div class="fd-vtrack"><div class="fd-vfill" id="fd-shfill" style="height:0;"></div></div>
+        <div class="fd-vmax">/<span id="fd-shmax">30</span></div>
       </div>
 
       <div class="fd-panel" id="fd-topright">
@@ -318,7 +305,7 @@ export class HUD {
 
     // Vitals
     this.hpFill = $('#fd-hpfill'); this.hpNum = $('#fd-hpnum'); this.hpMax = $('#fd-hpmax');
-    this.shRow = $('#fd-shrow'); this.shFill = $('#fd-shfill');
+    this.shRow = $('#fd-sh-bar'); this.shFill = $('#fd-shfill');
     this.shNum = $('#fd-shnum'); this.shMax = $('#fd-shmax');
     // Wave / enemies
     this.waveEl = $('#fd-wave'); this.enemiesEl = $('#fd-enemies'); this.badgesEl = $('#fd-badges');
@@ -402,14 +389,14 @@ export class HUD {
     // --- Health ---
     if (state.hp !== L.hp || state.maxHp !== this._maxHp) {
       const pct = Math.max(0, Math.min(1, state.hp / state.maxHp));
-      this.hpFill.style.width = (pct * 100) + '%';
+      this.hpFill.style.height = (pct * 100) + '%';
       this.hpNum.textContent = Math.ceil(state.hp);
       this.hpMax.textContent = state.maxHp;
       const [grad, glow] = pct > 0.5
-        ? ['linear-gradient(90deg,#5fc23e,#9fe35a)', '#6fe04a99']
+        ? ['linear-gradient(0deg,#3f9e2a,#9fe35a)', '#6fe04a99']
         : pct > 0.25
-          ? ['linear-gradient(90deg,#d6b43a,#f0d24a)', '#f0d24a99']
-          : ['linear-gradient(90deg,#d34a4a,#ff7a6a)', '#ff5a4aaa'];
+          ? ['linear-gradient(0deg,#c79a2a,#f0d24a)', '#f0d24a99']
+          : ['linear-gradient(0deg,#c43a3a,#ff7a6a)', '#ff5a4aaa'];
       this.hpFill.style.background = grad;
       this.hpFill.parentElement.style.filter = `drop-shadow(0 0 6px ${glow})`;
       this.hpFill.classList.toggle('crit', pct <= 0.25);
@@ -421,7 +408,7 @@ export class HUD {
       const max = state.maxShield || 30;
       this.shMax.textContent = max;
       this.shNum.textContent = Math.ceil(state.shield);
-      this.shFill.style.width = Math.min(100, (state.shield / max) * 100) + '%';
+      this.shFill.style.height = Math.min(100, (state.shield / max) * 100) + '%';
       this.shRow.classList.toggle('empty', state.shield <= 0);
       L.shield = state.shield;
     }

@@ -5,12 +5,14 @@
 import { GRAPHICS } from '../config/Constants.js';
 
 export class Settings {
-  constructor({ audioSystem, gameManager, onGfxChange, onClose }) {
+  constructor({ audioSystem, gameManager, onGfxChange, onGTAOChange, onClose }) {
     this.audio = audioSystem;
     this.gm = gameManager;
     this.onGfxChange = onGfxChange; // live-preview the graphics preset in Game
+    this.onGTAOChange = onGTAOChange; // live-preview the GTAO override in Game
     this.onClose = onClose;
     this.isOpen = false;
+    this._gtaoOn = gameManager.settings.gtao !== false; // defaults on
     this._gfx = gameManager.settings.gfx || GRAPHICS.DEFAULT;
 
     // Working copy of settings (committed on save)
@@ -310,6 +312,11 @@ export class Settings {
               <button class="stg-toggle" id="stg-gfx">High</button>
             </div>
             <div class="stg-hint">Choose <b>Performance</b> if the game runs slowly on mobile — it lowers the render resolution, skips post-processing, and softens shadows.</div>
+            <div class="stg-row" style="margin-top:12px">
+              <span class="stg-row-name">Ambient Occlusion</span>
+              <button class="stg-toggle" id="stg-gtao">ON</button>
+            </div>
+            <div class="stg-hint">Turn this <b>Off</b> for extra FPS — GTAO adds soft contact shadows but is the heaviest effect.</div>
           </div>
         </div>
         <div id="stg-foot">
@@ -323,6 +330,7 @@ export class Settings {
     this.saveBtn = this.root.querySelector('#stg-save');
     this.motionBtn = this.root.querySelector('#stg-motion');
     this.gfxBtn = this.root.querySelector('#stg-gfx');
+    this.gtaoBtn = this.root.querySelector('#stg-gtao');
 
     // Volume sliders
     this.masterSlider = this.root.querySelector('#stg-master');
@@ -351,6 +359,20 @@ export class Settings {
 
     // Graphics quality preset (cycles High → Balanced → Performance, live preview)
     this.gfxBtn.addEventListener('click', () => this._cycleGfx());
+
+    // GTAO on/off override (live preview)
+    this.gtaoBtn.addEventListener('click', () => this._toggleGTAO());
+  }
+
+  _renderGTAO() {
+    this.gtaoBtn.classList.toggle('on', this._gtaoOn);
+    this.gtaoBtn.textContent = this._gtaoOn ? 'ON' : 'OFF';
+  }
+
+  _toggleGTAO() {
+    this._gtaoOn = !this._gtaoOn;
+    this._renderGTAO();
+    this.onGTAOChange?.(this._gtaoOn); // live preview
   }
 
   _renderGfx() {
@@ -394,6 +416,8 @@ export class Settings {
     // Sync graphics control to the persisted preset.
     this._gfx = this.gm.settings.gfx || GRAPHICS.DEFAULT;
     this._renderGfx();
+    this._gtaoOn = this.gm.settings.gtao !== false;
+    this._renderGTAO();
   }
 
   close() {
@@ -404,7 +428,7 @@ export class Settings {
   _saveAndClose() {
     // Commit settings to both audio system and game manager
     this.audio.setVolumes(this.settings);
-    this.gm.settings = { ...this.gm.settings, ...this.settings, gfx: this._gfx };
+    this.gm.settings = { ...this.gm.settings, ...this.settings, gfx: this._gfx, gtao: this._gtaoOn };
 
     // Apply reduce motion setting
     if (this._motionOn) {
