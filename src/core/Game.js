@@ -399,6 +399,13 @@ export class Game {
     this.plants.dispose();
     this.plants = new PlantManager(this.scene);
 
+    // CRITICAL: Clear accumulated resources to prevent FPS degradation over time.
+    // These systems persist across level loads but their dynamic content accumulates.
+    this.projectiles.clear();
+    this.vfx.clear();
+    this.loot.clear();
+    this.damageNumbers.clear();
+
     // Rebuild arena with the new biome.
     this.arena.dispose();
     this.arena = new Arena(this.scene, CAMPAIGN[this.campaignLevel].biome);

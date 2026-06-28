@@ -86,4 +86,13 @@ export class DamageNumbers {
       it.el.style.opacity = Math.min(1, t * 2);
     }
   }
+
+  // Clear all active damage numbers (called on level restart).
+  clear() {
+    for (const it of this.items) {
+      it.el.style.display = 'none';
+      it.active = false;
+    }
+    this.items.length = 0;
+  }
 }

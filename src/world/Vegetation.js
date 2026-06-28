@@ -309,4 +309,23 @@ export class Vegetation {
   // Wind is shader-driven (CelMaterial.updateTime advances all wind materials);
   // here we just keep a time reference in case per-tree variation is needed later.
   update(dt) { this._t += dt; }
+
+  dispose() {
+    // Remove all tree groups from the scene and dispose their geometries/materials
+    for (const t of this.trees) {
+      this.scene.remove(t.group);
+      t.group.traverse((c) => {
+        if (c.isMesh) {
+          c.geometry?.dispose?.();
+          if (Array.isArray(c.material)) {
+            c.material.forEach((m) => m?.dispose?.());
+          } else {
+            c.material?.dispose?.();
+          }
+        }
+      });
+    }
+    this.trees.length = 0;
+    this.colliders.length = 0;
+  }
 }

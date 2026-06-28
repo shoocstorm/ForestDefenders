@@ -58,6 +58,10 @@ export class Arena {
     this.colliders.length = 0;
     this._rings = null;
     this.fireflies = null;
+    // Dispose child systems that add their own objects to the scene
+    this.vegetation?.dispose();
+    this.water?.dispose();
+    this.lanterns?.dispose();
     this.vegetation = null;
     this.water = null;
     this.lanterns = null;

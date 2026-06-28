@@ -91,4 +91,12 @@ export class Loot {
       }
     }
   }
+
+  // Clear all loot items (called on level restart to prevent accumulation).
+  clear() {
+    for (const it of this.items) {
+      this.scene.remove(it.mesh);
+    }
+    this.items.length = 0;
+  }
 }

@@ -6,8 +6,10 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 // bloom layer) and pulses gently. The lit orbs are the path's main bloom accents.
 export class Lanterns {
   constructor(scene, pal) {
+    this.scene = scene;
     this._t = 0;
     this.lit = [];
+    this.allMeshes = []; // Track all meshes for proper cleanup
     const p = pal || {};
     const postMat = new THREE.MeshToonMaterial({ color: p.post ?? 0x4a5a3a });
     const orbGeo = new THREE.IcosahedronGeometry(0.18, 1);
@@ -29,6 +31,7 @@ export class Lanterns {
       post.position.set(x, 0.7, z);
       post.castShadow = true;
       scene.add(post);
+      this.allMeshes.push(post);
 
       const orb = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({
         color: lit ? litColor : unlitColor,
@@ -37,6 +40,7 @@ export class Lanterns {
       }));
       orb.position.set(x, 1.5, z);
       scene.add(orb);
+      this.allMeshes.push(orb);
 
       if (lit) {
         orb.layers.enable(BLOOM_LAYER);
@@ -55,5 +59,19 @@ export class Lanterns {
       l.orb.material.emissiveIntensity = l.baseE * p;
       l.light.intensity = l.baseI * p;
     }
+  }
+
+  dispose() {
+    // Remove all posts, orbs, and lights from the scene
+    for (const mesh of this.allMeshes) {
+      this.scene.remove(mesh);
+      mesh.geometry?.dispose?.();
+      mesh.material?.dispose?.();
+    }
+    this.allMeshes.length = 0;
+    for (const l of this.lit) {
+      this.scene.remove(l.light);
+    }
+    this.lit.length = 0;
   }
 }

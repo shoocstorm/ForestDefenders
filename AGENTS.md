@@ -3,6 +3,85 @@
 <!-- Running log of non-obvious bugs, gotchas, and fixes discovered by coding agents.
      Append newest entry to the top. Keep each entry focused: symptom, root cause, fix. -->
 
+## Progressive FPS degradation over play sessions, especially after death/retry
+
+**Date:** 2026-06-28 · **Files:** `src/core/Game.js`, `src/weapons/Projectile.js`,
+`src/vfx/VFX.js`, `src/vfx/Loot.js`, `src/world/Water.js`, `src/world/Lanterns.js`,
+`src/world/Vegetation.js`, `src/ui/DamageNumbers.js`
+
+**Symptom:** Game gets progressively slower the longer you play. FPS drops significantly
+after the hero dies and the player retries a new round. The more you restart levels,
+the worse the performance becomes. Eventually the game gets stuck/freezes periodically.
+
+**Root cause:** Resource accumulation — Three.js objects, DOM elements, and scene meshes
+were accumulating without proper cleanup on `Game.loadLevel()`.
+
+When the level restarts, several systems persist across loads (by design — they're not
+recreated) but their **dynamic content** was never cleared:
+- `ProjectilePool` — in-flight bullets stayed active
+- `VFX` — shockwave rings, debris chunks, particle bursts, laser beams
+- `Loot` — gold coin meshes piled up
+- `Water`, `Lanterns`, `Vegetation` — added objects to scene but had no `dispose()`
+- These were recreated by `Arena` but old instances' scene objects lingered
+
+Each restart ~doubled the accumulated objects in the scene, causing:
+- More draw calls and GPU work
+- Larger scene graphs to traverse
+- DOM element leaks (damage numbers divs)
+- Eventual GC pressure and renderer stalls
+
+**Fix:** Added cleanup methods to every system that accumulates dynamic state:
+
+```javascript
+// In Game.loadLevel(), added these critical cleanup calls:
+this.projectiles.clear();   // deactivates all in-flight projectiles
+this.vfx.clear();          // disposes rings, debris, bursts, hides laser
+this.loot.clear();         // removes all loot meshes from scene
+this.damageNumbers.clear(); // hides all active damage number divs
+
+// Also added dispose() methods to:
+// - Water (water geometry + rocks)
+// - Lanterns (posts, orbs, lights) — now tracks allMeshes
+// - Vegetation (all tree groups + geometries)
+// - Arena.dispose() now calls vegetation?.dispose(), water?.dispose(), lanterns?.dispose()
+```
+
+**Gotcha to remember:** In Three.js games with level transitions, **every system that
+adds objects to the scene must have a corresponding cleanup method**. This includes:
+- Objects added via `scene.add()` must be removed via `scene.remove()`
+- Geometries and materials must be `dispose()`'d when no longer needed
+- DOM elements should be pooled/recycled rather than created/destroyed
+- Event listeners added in constructors should be removed on teardown
+
+**Pattern for level-restartable systems:**
+```javascript
+// Good pattern for any system that adds to the scene:
+class Foo {
+  constructor(scene) {
+    this.scene = scene;
+    this.items = [];
+  }
+
+  spawn() {
+    const mesh = new THREE.Mesh(...);
+    this.scene.add(mesh);
+    this.items.push(mesh);
+  }
+
+  dispose() {
+    for (const item of this.items) {
+      this.scene.remove(item);
+      item.geometry?.dispose?.();
+      item.material?.dispose?.();
+    }
+    this.items.length = 0;
+  }
+}
+```
+
+Then in your level reload function, always call `foo.dispose()` before creating a
+new `Foo` instance or clearing its state.
+
 ## Severe CPU/GPU stutter & freezes, worst when firing the Machine Gun (esp. L2)
 
 **Date:** 2026-06-28 · **Files:** `src/vfx/VFX.js`, `src/weapons/Projectile.js`,

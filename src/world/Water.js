@@ -57,4 +57,17 @@ export class Water {
     if (this._uTime) this._uTime.value = this._t;
     this.surface.material.emissiveIntensity = 0.5 + Math.sin(this._t * 1.4) * 0.18;
   }
+
+  dispose() {
+    this.scene.remove(this.group);
+    this.surface.geometry.dispose();
+    this.surface.material.dispose();
+    // Dispose rock materials
+    this.group.traverse((c) => {
+      if (c.isMesh) {
+        c.geometry?.dispose?.();
+        c.material?.dispose?.();
+      }
+    });
+  }
 }

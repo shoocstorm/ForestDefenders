@@ -319,4 +319,42 @@ export class VFX {
       }
     }
   }
+
+  // Clear all dynamic VFX (called on level restart to prevent accumulation).
+  // Clears rings, debris, and active bursts, but keeps pooled resources (lights, burst pool).
+  clear() {
+    // Clear and dispose all shockwave rings
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const r = this.rings[i];
+      this.scene.remove(r.mesh);
+      r.mesh.material.dispose();
+    }
+    this.rings.length = 0;
+
+    // Clear and dispose all debris chunks
+    if (this.debris) {
+      for (const d of this.debris) {
+        for (const c of d.chunks) {
+          this.scene.remove(c);
+          c.geometry.dispose();
+          c.material.dispose();
+        }
+      }
+      this.debris.length = 0;
+    }
+
+    // Reset all active bursts to pool
+    for (const b of this.active) {
+      b.points.visible = false;
+      b.active = false;
+    }
+    this.active.length = 0;
+
+    // Hide laser beam
+    if (this._laser) {
+      this._laser.group.visible = false;
+      this._laser.light.intensity = 0;
+      this._laser.ttl = 0;
+    }
+  }
 }

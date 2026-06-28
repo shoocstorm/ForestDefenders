@@ -163,4 +163,16 @@ export class ProjectilePool {
     if (p.empRadius > 0) ctx.audio?.zap();
     else ctx.audio?.explosion();
   }
+
+  // Clear all active projectiles (called on level restart to prevent accumulation).
+  clear() {
+    for (const p of this.items) {
+      if (p.active) {
+        p.active = false;
+        p.mesh.visible = false;
+        p.light.intensity = 0;
+        if (p.lit) { p.lit = false; this._litActive--; }
+      }
+    }
+  }
 }
