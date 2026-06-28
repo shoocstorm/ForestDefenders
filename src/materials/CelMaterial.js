@@ -22,11 +22,19 @@ import * as THREE from 'three';
 // (hero pivot rig, mushroom Cap/Stem/Base) keep their outlines in sync.
 
 // --- Shared 3-band gradient map (hard cel transitions: shadow / mid / lit) ---
+// RGBAFormat (not RGBFormat): WebGL2's glTexStorage2D rejects the unsized GL_RGB
+// (0x1907) internal format on strict drivers (SwiftShader, some Mobile/Apple GPUs),
+// which silently leaves the texture empty and makes MeshToonMaterial render as if
+// every surface faced away from every light. RGBA8 is sized and works everywhere.
 let _gradient;
 function gradientMap() {
   if (_gradient) return _gradient;
-  const data = new Uint8Array([80, 80, 80, 160, 160, 160, 255, 255, 255]); // 3 steps
-  const tex = new THREE.DataTexture(data, 3, 1, THREE.RGBFormat);
+  const data = new Uint8Array([
+    80, 80, 80, 255,
+    160, 160, 160, 255,
+    255, 255, 255, 255,
+  ]); // 3 steps, 4 bytes/texel
+  const tex = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.generateMipmaps = false;
@@ -79,12 +87,12 @@ function injectExtras(mat, { rim, wind } = {}) {
         `#include <common>\n` +
         `varying vec3 vCelWN;\nvarying vec3 vCelWP;\n` +
         `uniform vec3 uRimColor;\nuniform float uRimPower;\nuniform float uRimIntensity;\n`)
-      .replace('#include <output_fragment>',
+      .replace('#include <opaque_fragment>',
         `{ vec3 V = normalize(cameraPosition - vCelWP);\n` +
         `  float f = 1.0 - clamp(dot(normalize(vCelWN), V), 0.0, 1.0);\n` +
         `  float rim = pow(f, uRimPower) * uRimIntensity;\n` +
         `  outgoingLight += uRimColor * rim; }\n` +
-        `#include <output_fragment>`);
+        `#include <opaque_fragment>`);
 
     shader.uniforms.uRimColor = { value: new THREE.Color(rim.color) };
     shader.uniforms.uRimPower = { value: rim.power };

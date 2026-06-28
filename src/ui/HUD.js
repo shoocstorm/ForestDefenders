@@ -174,6 +174,32 @@ export class HUD {
         @keyframes fdbanner{0%{opacity:0;transform:translateX(-50%) scale(.6);}
           15%{opacity:1;transform:translateX(-50%) scale(1.06);}
           30%{transform:translateX(-50%) scale(1);}80%{opacity:1;}100%{opacity:0;}}
+
+        /* ---- Mobile (touch): minimal HUD that stays clear of the on-screen
+           controls. Hide decorative panels (radar, score, badges, weapon slot
+           strip + buffs); keep vitals, wave/enemies, animals and a bare ammo
+           count. Panels move into the safe zones: top-left, top-centre, and
+           just above the bottom-right button cluster. ---- */
+        @media (pointer:coarse){
+          #fd-radar-panel,#fd-score,#fd-badges,#fd-buffs,#fd-wpn-head,
+          #fd-ammo-gauge,#fd-slots{display:none!important;}
+          /* vitals → top-left */
+          #fd-vitals{top:calc(14px + env(safe-area-inset-top));
+            left:calc(14px + env(safe-area-inset-left));width:188px;padding:9px 12px;}
+          /* wave/enemies → top-centre (clear of the cam/shop/gallery buttons) */
+          #fd-topright{top:calc(12px + env(safe-area-inset-top));
+            left:50%;right:auto;transform:translateX(-50%);text-align:center;min-width:0;padding:8px 16px;}
+          #fd-wave{font-size:22px;} #fd-wave small{font-size:13px;}
+          /* ammo only → above the bottom-right action cluster, no panel chrome */
+          #fd-weapon-panel{bottom:288px;right:calc(20px + env(safe-area-inset-right));
+            min-width:0;padding:0;background:none;border:none;box-shadow:none;
+            backdrop-filter:none;-webkit-backdrop-filter:none;}
+          #fd-weapon-panel::before{display:none;}
+          #fd-ammo-row{margin-top:0;}#fd-ammo{font-size:26px;}
+          /* animals saved counter → bottom-centre; drop the [E] key hint glyph */
+          #fd-animals{bottom:calc(14px + env(safe-area-inset-bottom));}
+          #fd-free b{display:none;}
+        }
       </style>
 
       <div id="fd-vignette"></div>

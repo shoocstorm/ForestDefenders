@@ -81,7 +81,9 @@ export class Arena {
     const sun = new THREE.DirectionalLight(b.sun.color, b.sun.intensity);
     sun.position.set(...b.sun.pos);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(4096, 4096); // [up from 2048] the larger shadow frustum
+    // (±110 over a 2× arena) needs more texels to stay crisp, otherwise softer
+    // shadows spread and muddy the lit ground.
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 300; // [2x] covers the doubled arena depth
     const s = 110; // [2x] shadow frustum half-extent matches the larger ground

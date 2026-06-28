@@ -2,12 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Forest Defender: Mushroom Mayhem</title>
     <style>
       :root { color-scheme: dark; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1410; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1410;
+        touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
       #app { position: fixed; inset: 0; }
       canvas { display: block; }
 
@@ -44,12 +45,38 @@
         background: #0b141066; padding: 6px 14px; border-radius: 20px;
         border: 1px solid #ffffff1a; pointer-events: none; text-align: center;
       }
+
+      /* --- Touch devices: hide desktop key hints, lock the canvas to no-scroll --- */
+      @media (pointer: coarse) {
+        #help { display: none; }
+      }
+
+      /* --- Rotate-to-landscape prompt (portrait phones only) --- */
+      #rotate {
+        position: fixed; inset: 0; z-index: 60; display: none;
+        flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+        background: radial-gradient(circle at 50% 40%, #1a3326, #0b1410 75%);
+        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6; text-align: center;
+        padding: 24px;
+      }
+      #rotate .glyph { font-size: 56px; animation: rot 1.8s ease-in-out infinite; }
+      #rotate h2 { font-size: 22px; letter-spacing: 1px; }
+      #rotate p { font-size: 14px; opacity: 0.7; }
+      @keyframes rot { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(78deg); } }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate { display: flex; }
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="stats"></div>
     <div id="help">WASD move · Shift run · Space jump (×2) · Click/Z fire · Q/wheel weapon · V kick · R tail · E free animal · Mouse look · 1/2/3 camera</div>
+    <div id="rotate">
+      <div class="glyph">📱</div>
+      <h2>Rotate your device</h2>
+      <p>Forest Defender plays best in landscape.</p>
+    </div>
     <div id="boot">
       <h1>🌰 Forest Defender</h1>
       <div class="sub">Mushroom Mayhem</div>

@@ -257,7 +257,6 @@ export class Player {
 
     // --- Weapon firing (left mouse or Z; muzzle origin + camera aim ray) ---
     if (ctx) {
-      const firing = input.mouseDown(0) || input.isDown('KeyZ');
       const origin = this.model.muzzleWorldPosition;
       const camDir = rig.getAimDirection(this._aim);
 
@@ -265,6 +264,9 @@ export class Player {
       // and reuse it for both the reticle and the shot direction.
       const target = this._acquireTarget(origin, camDir, ctx);
       this.hasLock = !!target;
+
+      // Touch builds auto-fire: shoot whenever aim-assist has an enemy in cone.
+      const firing = input.mouseDown(0) || input.isDown('KeyZ') || (input.autoFire && !!target);
       if (target) this.aimPoint.copy(target.position).setY(target.position.y + AIM_ASSIST.TARGET_Y);
       else this.aimPoint.copy(origin).addScaledVector(camDir, AIM_ASSIST.RETICLE_DIST);
       const dir = this._fireDir.copy(this.aimPoint).sub(origin).normalize();

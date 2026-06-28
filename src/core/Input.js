@@ -13,6 +13,14 @@ export class Input {
     this.wheel = 0;
     this.pointerLocked = false;
 
+    // --- Virtual (touch) input, fed by TouchControls. Merged into the getters
+    // below so the rest of the game is agnostic to the input source. ---
+    this.touchAxis = { x: 0, y: 0 };   // movement from the on-screen joystick
+    this.virtualHeld = new Set();      // virtual key codes down this frame
+    this.virtualPressed = new Set();   // virtual key codes tapped this frame
+    this.virtualMouse = new Set();     // virtual mouse buttons held
+    this.autoFire = false;             // touch build: fire when a target is in cone
+
     this._onKeyDown = (e) => {
       if (e.repeat) return;
       this.held.add(e.code);
@@ -63,14 +71,18 @@ export class Input {
     this.dom.addEventListener('click', this._onClickToLock);
   }
 
-  isDown(code) { return this.held.has(code); }
-  wasPressed(code) { return this.pressed.has(code); }
+  isDown(code) { return this.held.has(code) || this.virtualHeld.has(code); }
+  wasPressed(code) { return this.pressed.has(code) || this.virtualPressed.has(code); }
   wasReleased(code) { return this.released.has(code); }
-  mouseDown(btn = 0) { return this.mouseButtons.has(btn); }
+  mouseDown(btn = 0) { return this.mouseButtons.has(btn) || this.virtualMouse.has(btn); }
   mouseWasPressed(btn = 0) { return this.mousePressed.has(btn); }
 
   // Movement vector in local space: x = strafe (+right), y = forward (+forward).
+  // Touch joystick (if active) takes priority over the keyboard.
   moveAxis() {
+    if (this.touchAxis.x !== 0 || this.touchAxis.y !== 0) {
+      return { x: this.touchAxis.x, y: this.touchAxis.y };
+    }
     let x = 0, y = 0;
     if (this.isDown('KeyW') || this.isDown('ArrowUp')) y += 1;
     if (this.isDown('KeyS') || this.isDown('ArrowDown')) y -= 1;
@@ -78,6 +90,12 @@ export class Input {
     if (this.isDown('KeyA') || this.isDown('ArrowLeft')) x -= 1;
     return { x, y };
   }
+
+  // --- Virtual input injection (called by TouchControls) ---
+  // Feed camera-look delta, bypassing the pointer-lock guard used for the mouse.
+  addLook(dx, dy) { this.mouseDelta.x += dx; this.mouseDelta.y += dy; }
+  // Register a one-frame virtual tap for an edge-triggered action (jump, etc.).
+  pressVirtual(code) { this.virtualHeld.add(code); this.virtualPressed.add(code); }
 
   consumeMouseDelta() {
     const d = { x: this.mouseDelta.x, y: this.mouseDelta.y };
@@ -95,5 +113,8 @@ export class Input {
     this.released.clear();
     this.mousePressed.clear();
     this.wheel = 0;
+    // Virtual taps last exactly one frame (movement uses touchAxis, not held keys).
+    for (const code of this.virtualPressed) this.virtualHeld.delete(code);
+    this.virtualPressed.clear();
   }
 }

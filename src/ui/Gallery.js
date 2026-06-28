@@ -26,7 +26,7 @@ export class Gallery {
       'font-family:"Trebuchet MS",system-ui,sans-serif;color:#eaf7df;';
     this.root.innerHTML = `
       <style>
-        #gal-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,#0e1a2a,#050810 80%);}
+        #gal-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,#1a2c44,#070c16 82%);}
         #gal-canvas{position:absolute;inset:0;}
         #gal-panel{position:absolute;right:0;top:0;bottom:0;width:340px;padding:28px 24px;
           background:linear-gradient(160deg,#0e1f1aee,#08120ce8);border-left:1px solid #ffffff1a;
@@ -42,7 +42,12 @@ export class Gallery {
           color:#eaf7df;border:1px solid #ffffff2a;border-radius:24px;background:#ffffff0a;
           transition:background .15s,border-color .15s;}
         .gal-btn:hover{background:#ffffff1a;border-color:#ffffff4a;}
-        #gal-close{font-size:12px;opacity:0.5;text-align:center;margin-top:8px;}
+        #gal-close{pointer-events:auto;cursor:pointer;margin-top:12px;align-self:center;
+          padding:9px 22px;font-size:14px;font-weight:800;letter-spacing:1px;color:#eaf7df;
+          border:1px solid #ffffff2a;border-radius:24px;background:#ffffff10;
+          transition:background .15s,border-color .15s;}
+        #gal-close:hover{background:#ffffff1f;border-color:#ffffff4a;}
+        #gal-close:active{transform:translateY(2px);}
         #gal-hint{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);
           font-size:12px;opacity:0.4;text-align:center;}
         #gal-locked{display:none;font-size:42px;text-align:center;letter-spacing:6px;
@@ -59,7 +64,7 @@ export class Gallery {
           <button class="gal-btn" id="gal-prev">◀ PREV</button>
           <button class="gal-btn" id="gal-next">NEXT ▶</button>
         </div>
-        <div id="gal-close">Press G to close</div>
+        <div id="gal-close">✕ Close</div>
       </div>
       <div id="gal-hint">A / D or arrows to cycle · G to close</div>`;
     document.body.appendChild(this.root);
@@ -73,6 +78,8 @@ export class Gallery {
 
     this.prevBtn.addEventListener('click', () => this._cycle(-1));
     this.nextBtn.addEventListener('click', () => this._cycle(1));
+    // Tappable close (touch devices have no keyboard for the G hotkey).
+    this.root.querySelector('#gal-close').addEventListener('click', () => this.close());
 
     // Keyboard: A/D + arrow keys cycle weapons while the gallery is open.
     // Attached to window so focus doesn't need to be on the canvas/buttons.
@@ -97,10 +104,12 @@ export class Gallery {
     const rim = new THREE.DirectionalLight(0x49e8ff, 1.5);
     rim.position.set(-3, 1, -2);
     this.gScene.add(rim);
-    const fill = new THREE.DirectionalLight(0xffd24a, 0.6);
+    const fill = new THREE.DirectionalLight(0xffd24a, 0.7);
     fill.position.set(0, -2, 2);
     this.gScene.add(fill);
-    this.gScene.add(new THREE.HemisphereLight(0x6a8aaa, 0x1a1a2a, 0.4));
+    // Ambient hemi keeps the weapon's shadowed side readable so the model never
+    // sinks into the dark backdrop (gallery has its own renderer — no tone mapping).
+    this.gScene.add(new THREE.HemisphereLight(0x8aa6c8, 0x24242f, 0.75));
 
     // Turntable: a disc that rotates with the weapon on top.
     const discGeo = new THREE.CylinderGeometry(0.9, 1.0, 0.08, 32);

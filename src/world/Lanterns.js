@@ -21,7 +21,9 @@ export class Lanterns {
     for (let z = -ARENA.LENGTH / 2 + 8; z <= ARENA.LENGTH / 2 - 8; z += 6, idx++) {
       const side = idx % 2 === 0 ? -1 : 1;
       const x = side * 2.8;
-      const lit = idx % 2 === 0;
+      // All lanterns are lit — both sides of the path glow. Earlier only even-index
+      // (one bank) were lit, which read as a bug on the doubled, longer lane.
+      const lit = true;
 
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.4, 6), postMat);
       post.position.set(x, 0.7, z);

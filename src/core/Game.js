@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Input } from './Input.js';
 import { CameraRig } from './CameraRig.js';
+import { TouchControls } from './TouchControls.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
@@ -42,7 +43,9 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.7; // [from 1.5] 1.5 blew out highlights and
+    // washed the cel shading flat; 0.7 restores contrast and mood.
+    // Per-biome sun/hemi/fill carry the rest so foliage still reads under ACES.
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -82,6 +85,11 @@ export class Game {
     this.enemies = new EnemyManager(this.scene);
     this.hud = new HUD();
     this.hud.initWeapons(this.player.weapons.weapons.map((w) => ({ name: w.name, element: w.element })));
+    // On-screen controls for phones/tablets (null on non-touch devices).
+    this.touch = TouchControls.maybeCreate(this.input, {
+      toggleShop: () => this._toggleShop(),
+      toggleGallery: () => this._toggleGallery(),
+    });
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
     this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx, this.audio);
