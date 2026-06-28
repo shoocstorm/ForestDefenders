@@ -36,6 +36,22 @@ const WOOD     = 0x6e4a26;
 
 const T = (c, o = {}) => toon({ color: c, ...o });
 
+// Per-weapon gun silhouettes (keyed by WEAPONS id). The hero rebuilds its held
+// gun from these so the selected weapon is visible in the hand, without authoring
+// 9 separate GLBs. `barL`/`barR` size the barrel; `barrels` adds a side-by-side
+// twin; `tip` adds a distinctive muzzle device; `bigMag`/`bow` toggle extras.
+const GUN_SHAPES = {
+  ACORN:       { body: WOOD,     metal: METAL,    barL: 0.34, barR: 0.022, barrels: 1, tip: 'none' },
+  GANON:       { body: 0x2c3550, metal: 0x35507a, barL: 0.30, barR: 0.030, barrels: 1, tip: 'coil' },
+  MACHINE:     { body: 0x33363d, metal: METAL,    barL: 0.44, barR: 0.024, barrels: 1, tip: 'vent', bigMag: true },
+  BOOM:        { body: WOOD,     metal: 0x4a3115, barL: 0.24, barR: 0.050, barrels: 2, tip: 'none' },
+  LASER:       { body: 0x3a2230, metal: 0x6a2240, barL: 0.36, barR: 0.018, barrels: 1, tip: 'emitter' },
+  SHOTGUN:     { body: WOOD,     metal: METAL,    barL: 0.26, barR: 0.046, barrels: 2, tip: 'none' },
+  FIRE_BULLET: { body: 0x4a2a18, metal: 0x6e3a1a, barL: 0.30, barR: 0.030, barrels: 1, tip: 'vent' },
+  BOW:         { body: 0x2f5a2a, metal: 0x3f7a35, barL: 0.30, barR: 0.016, barrels: 1, tip: 'none', bow: true },
+  TOROID:      { body: 0x214a55, metal: 0x2c6470, barL: 0.20, barR: 0.070, barrels: 1, tip: 'ring' },
+};
+
 function mesh(geo, mat, parent, pos = [0, 0, 0], rot = [0, 0, 0]) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(...pos);
@@ -160,12 +176,12 @@ export class HeroModel {
     gun.position.set(0.02, 0.26, -0.18);
     body.add(gun);
     this.rig.gun = gun;
-    const stock = mesh(new THREE.BoxGeometry(0.07, 0.09, 0.20), T(WOOD), gun, [0, 0, 0.12]);
-    stock.rotation.x = 0.15;
-    mesh(new THREE.BoxGeometry(0.06, 0.07, 0.26), T(METAL), gun, [0, 0.01, -0.06]);     // receiver
-    mesh(new THREE.BoxGeometry(0.05, 0.045, 0.16), T(WOOD), gun, [0, 0.0, -0.20]);       // forestock (fore-grip rests here)
-    mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.34, 10), T(METAL), gun, [0, 0.02, -0.30], [Math.PI / 2, 0, 0]); // barrel
-    mesh(new THREE.BoxGeometry(0.035, 0.10, 0.05), T(METAL), gun, [0, -0.08, 0.0]);      // magazine
+    // Disposable visual shell — rebuilt per selected weapon by setWeapon(). The
+    // grips/muzzle/bolt/accent pivots below are persistent so the IK + VFX keep
+    // working across swaps.
+    const gunMeshes = new THREE.Group();
+    gun.add(gunMeshes);
+    this.rig.gunMeshes = gunMeshes;
     // Charging bolt: rides on top of the receiver and slides back on each shot.
     const bolt = mesh(new THREE.BoxGeometry(0.03, 0.03, 0.08), T(0x202227), gun, [0.045, 0.06, -0.06]);
     this.rig.bolt = bolt;
@@ -179,19 +195,22 @@ export class HeroModel {
     gripFore.position.set(-0.02, -0.04, -0.16);
     gun.add(gripFore);
     this.pivots.gripFore = gripFore;
-    // Muzzle origin at the barrel tip (non-mesh → no outline).
+    // Muzzle origin at the barrel tip (non-mesh → no outline). Repositioned per
+    // weapon (barrel length varies) by setWeapon().
     const muzzle = new THREE.Object3D();
     muzzle.position.set(0, 0.02, -0.48);
     gun.add(muzzle);
     this.pivots.muzzle = muzzle;
     // Glowing energy cell — recolored per weapon (setWeaponTint) so each weapon
-    // reads distinctly without modeling 9 separate guns (special meshes → M5).
+    // reads distinctly on top of the per-weapon silhouette.
     const accent = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, 0.11),
       new THREE.MeshBasicMaterial({ color: 0xc7e08a }));
     accent.position.set(-0.045, 0.055, -0.02);
     accent.userData.__outline = true; // skip inverted-hull outline on the glow cell
     gun.add(accent);
     this.gunAccent = accent;
+    // Build the default silhouette; Player calls setWeapon() with the real def.
+    this._buildGunMeshes(null);
 
     // --- Bushy tail: S-curve of swelling spheres rising up behind the back. ---
     const tail = new THREE.Group();
@@ -229,6 +248,60 @@ export class HeroModel {
   playTail() { this._tailT = TAIL_DUR; }
   setFirstPerson(fp) { this.modelRoot.visible = !fp; }
   setWeaponTint(color) { this.gunAccent?.material.color.setHex(color); }
+
+  // Swap the held weapon: rebuild the gun silhouette + retint the glow cell so the
+  // hero visibly holds whatever the player selected. Called by Player on switch.
+  setWeapon(def) {
+    this._buildGunMeshes(def);
+    if (def?.muzzleColor != null) this.setWeaponTint(def.muzzleColor);
+  }
+
+  // (Re)build the disposable gun shell from the weapon's GUN_SHAPES profile and
+  // park the muzzle pivot at the new barrel tip. Pivots/bolt/accent are untouched.
+  _buildGunMeshes(def) {
+    const g = this.rig.gunMeshes;
+    for (let i = g.children.length - 1; i >= 0; i--) {
+      const c = g.children[i];
+      c.traverse?.((o) => o.geometry?.dispose?.());
+      g.remove(c);
+    }
+    const s = GUN_SHAPES[def?.id] || GUN_SHAPES.ACORN;
+    const rearZ = -0.13;                 // barrel root, just ahead of the receiver
+    const barCenterZ = rearZ - s.barL / 2;
+    const tipZ = rearZ - s.barL;
+
+    const stock = mesh(new THREE.BoxGeometry(0.07, 0.09, 0.20), T(s.body), g, [0, 0, 0.12]);
+    stock.rotation.x = 0.15;
+    mesh(new THREE.BoxGeometry(0.06, 0.07, 0.26), T(s.metal), g, [0, 0.01, -0.06]);   // receiver
+    mesh(new THREE.BoxGeometry(0.05, 0.045, 0.16), T(s.body), g, [0, 0.0, -0.20]);     // forestock
+    const offsets = s.barrels === 2 ? [-0.028, 0.028] : [0];
+    for (const ox of offsets) {
+      mesh(new THREE.CylinderGeometry(s.barR, s.barR, s.barL, 10), T(s.metal), g,
+        [ox, 0.02, barCenterZ], [Math.PI / 2, 0, 0]);
+    }
+    mesh(new THREE.BoxGeometry(0.035, s.bigMag ? 0.14 : 0.10, 0.05), T(s.metal), g, [0, -0.08, 0.0]); // magazine
+
+    // Distinctive muzzle device at the tip.
+    if (s.tip === 'coil') {
+      mesh(new THREE.TorusGeometry(s.barR + 0.02, 0.012, 6, 12), T(s.metal), g, [0, 0.02, tipZ + 0.03], [0, 0, 0]);
+    } else if (s.tip === 'vent') {
+      mesh(new THREE.BoxGeometry(0.055, 0.05, 0.06), T(s.metal), g, [0, 0.02, tipZ + 0.02]);
+    } else if (s.tip === 'emitter') {
+      mesh(new THREE.CylinderGeometry(0.01, 0.026, 0.07, 10), T(s.metal), g, [0, 0.02, tipZ - 0.02], [Math.PI / 2, 0, 0]);
+    } else if (s.tip === 'ring') {
+      mesh(new THREE.TorusGeometry(s.barR + 0.01, 0.018, 8, 16), T(s.metal), g, [0, 0.02, tipZ + 0.02], [0, 0, 0]);
+    }
+    // Forest Bow: a pair of curved limbs framing the barrel instead of a tube body.
+    if (s.bow) {
+      for (const sy of [-1, 1]) {
+        mesh(new THREE.TorusGeometry(0.16, 0.012, 6, 10, Math.PI * 0.7), T(s.metal), g,
+          [0, 0.02 + sy * 0.0, barCenterZ + 0.04], [0, sy > 0 ? 0 : Math.PI, sy * 0.9]);
+      }
+    }
+
+    this.pivots.muzzle.position.set(0, 0.02, tipZ - 0.02);
+    addOutlines(g, { thickness: 0.014 });
+  }
 
   get muzzleWorldPosition() {
     return this.pivots.muzzle.getWorldPosition(new THREE.Vector3());

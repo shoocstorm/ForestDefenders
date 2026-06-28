@@ -27,22 +27,30 @@ export class HUD {
         /* ---- shared panel chrome ---- */
         .fd-panel{position:absolute;
           background:linear-gradient(160deg,#0e1a12d9,#070d0acc);
-          border:1px solid #ffffff1f;border-radius:14px;padding:11px 15px;
+          border:1px solid #49e8ff2e;border-radius:0;padding:11px 15px;
           backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
-          box-shadow:0 6px 26px #000a, inset 0 1px 0 #ffffff14;
-          text-shadow:0 1px 3px #000c;}
+          box-shadow:0 6px 26px #000a, inset 0 1px 0 #ffffff14, 0 0 18px #49e8ff10;
+          text-shadow:0 1px 3px #000c;
+          /* chamfered top-right + bottom-left corners (left-side panels) */
+          clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));}
         .fd-panel::before{content:"";position:absolute;left:14px;right:14px;top:0;height:2px;
-          border-radius:2px;background:linear-gradient(90deg,transparent,#7fe3ffcc,transparent);
-          opacity:.7;}
+          background:linear-gradient(90deg,transparent,#7fe3ffcc,transparent);opacity:.7;}
+        /* glowing accent edge down the leading side */
+        .fd-panel::after{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;
+          background:linear-gradient(#49e8ff,#49e8ff22);box-shadow:0 0 10px #49e8ff88;}
+        /* right-aligned panels: mirror the chamfer + accent edge to the right side */
+        #fd-topright,#fd-weapon-panel{
+          clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);}
+        #fd-topright::after,#fd-weapon-panel::after{left:auto;right:0;}
         .fd-label{font-size:11px;letter-spacing:2.5px;font-weight:700;text-transform:uppercase;
           color:#9fdca0;opacity:.92;}
         .fd-mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
 
         /* ---- radar (top-left) ---- */
         #fd-radar-panel{top:16px;left:16px;padding:10px;border-radius:50%;width:172px;height:172px;
-          display:flex;align-items:center;justify-content:center;
+          clip-path:none;display:flex;align-items:center;justify-content:center;
           background:radial-gradient(circle at 50% 45%,#0d2017e0,#05100bdd);}
-        #fd-radar-panel::before{display:none;}
+        #fd-radar-panel::before,#fd-radar-panel::after{display:none;}
         #fd-radar{width:150px;height:150px;border-radius:50%;
           box-shadow:inset 0 0 22px #00000088, 0 0 0 1px #5fe0c033;}
         #fd-radar-ring{position:absolute;inset:6px;border-radius:50%;
@@ -55,22 +63,49 @@ export class HUD {
         #fd-rc-e{right:11px;top:50%;transform:translateY(-50%);}
         #fd-rc-w{left:11px;top:50%;transform:translateY(-50%);}
 
-        /* ---- vitals (left) ---- */
-        #fd-vitals{top:200px;left:16px;width:236px;}
-        .fd-bar-row{margin-top:9px;}
+        /* ---- vitals (left) — sci-fi tactical readout ---- */
+        #fd-vitals{top:200px;left:16px;width:236px;border-color:#49e8ff33;
+          /* notched / chamfered panel corners — kill the base radius so the
+             rounded background corner doesn't peek through the diagonal cut */
+          border-radius:0;
+          clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px));}
+        #fd-vitals::after{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;
+          background:linear-gradient(#49e8ff,#49e8ff22);box-shadow:0 0 10px #49e8ffaa;}
+        #fd-vitals-hd{display:flex;align-items:center;gap:7px;margin-bottom:10px;
+          font-size:9px;letter-spacing:3.5px;font-weight:800;text-transform:uppercase;color:#7fd8ff;}
+        #fd-vitals-hd::before{content:"";width:6px;height:6px;background:#49e8ff;flex:none;
+          transform:rotate(45deg);box-shadow:0 0 8px #49e8ff;}
+        #fd-vitals-hd::after{content:"";flex:1;height:1px;
+          background:linear-gradient(90deg,#49e8ff66,transparent);}
+        .fd-bar-row{margin-top:11px;}
         .fd-bar-row:first-child{margin-top:0;}
-        .fd-bar-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
-        .fd-bar-name{font-size:11px;letter-spacing:2px;font-weight:800;text-transform:uppercase;}
-        .fd-bar-val{font-size:15px;font-weight:800;}
-        .fd-track{height:14px;border-radius:7px;background:#00000066;overflow:hidden;
-          border:1px solid #ffffff22;position:relative;
-          background-image:repeating-linear-gradient(90deg,#0000 0 22px,#ffffff14 22px 23px);}
-        .fd-fill{height:100%;width:100%;border-radius:6px;transition:width .18s ease,background .3s;
-          box-shadow:0 0 10px #0006 inset;}
+        .fd-bar-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
+        .fd-bar-name{font-size:10px;letter-spacing:3px;font-weight:800;text-transform:uppercase;}
+        .fd-bar-name::before{content:"▸ ";opacity:.6;}
+        .fd-bar-val{font-size:16px;font-weight:800;text-shadow:0 0 9px currentColor;}
+        /* skewed parallelogram track with a tech grid backing */
+        .fd-track{height:13px;background:#02080c;overflow:hidden;position:relative;
+          border:1px solid #ffffff1f;
+          clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);}
+        .fd-fill{height:100%;width:100%;position:relative;
+          transition:width .18s ease,background .3s;}
+        /* segment dividers painted over the fill for a charge-cell look */
+        .fd-track::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+          background:repeating-linear-gradient(90deg,#0000 0 12px,#02080c 12px 14px);}
+        /* animated scan sweep */
+        .fd-track::after{content:"";position:absolute;top:0;bottom:0;left:-45px;width:45px;z-index:3;
+          pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff55,transparent);
+          animation:fdscan 2.6s linear infinite;}
+        @keyframes fdscan{0%{left:-45px;}60%,100%{left:115%;}}
         #fd-hpfill{background:linear-gradient(90deg,#5fc23e,#9fe35a);}
         #fd-shfill{background:linear-gradient(90deg,#3fb6e8,#8fe0ff);}
+        /* glow via drop-shadow so it follows the chamfer and isn't clipped */
+        .fd-bar-row:first-child .fd-track{filter:drop-shadow(0 0 6px #6fe04a88);}
+        #fd-shrow .fd-track{filter:drop-shadow(0 0 6px #6fd4ff88);}
+        #fd-hpfill.crit{animation:fdcrit .7s steps(1) infinite;}
+        @keyframes fdcrit{50%{filter:brightness(1.6);}}
         #fd-shrow{transition:opacity .3s;}
-        #fd-shrow.empty{opacity:.32;}
+        #fd-shrow.empty{opacity:.3;}
 
         /* ---- wave / enemies (top-right) ---- */
         #fd-topright{top:16px;right:16px;text-align:right;min-width:230px;}
@@ -104,7 +139,8 @@ export class HUD {
 
         /* ---- animals (merged into the bottom-left score panel) ---- */
         #fd-animals-row{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:7px;}
-        #fd-paw{font-size:18px;filter:drop-shadow(0 0 6px #8fe0a055);}
+        #fd-paw{width:20px;height:20px;flex:none;fill:#9fe8c0;
+          filter:drop-shadow(0 0 6px #8fe0a077);}
         #fd-saved{font-size:20px;font-weight:800;color:#9fe8c0;line-height:1;
           text-shadow:0 2px 0 #0008,0 0 16px #4fe09a55;}
         #fd-saved small{font-size:12px;color:#cfeed6;opacity:.8;}
@@ -218,6 +254,7 @@ export class HUD {
       </div>
 
       <div class="fd-panel" id="fd-vitals">
+        <div id="fd-vitals-hd">SQ-01 · LIFE SUPPORT</div>
         <div class="fd-bar-row">
           <div class="fd-bar-head">
             <span class="fd-bar-name" style="color:#9fe35a;">Health</span>
@@ -247,7 +284,13 @@ export class HUD {
         </div>
         <div id="fd-kills-line">KILLS <span id="fd-kills" class="fd-mono">0</span></div>
         <div id="fd-animals-row">
-          <span id="fd-paw">🐾</span>
+          <svg id="fd-paw" viewBox="0 0 24 24" aria-label="animals saved">
+            <ellipse cx="12" cy="16" rx="5.2" ry="4.2"/>
+            <ellipse cx="5.5" cy="11" rx="2.1" ry="2.8"/>
+            <ellipse cx="9.5" cy="7.2" rx="2.1" ry="2.8"/>
+            <ellipse cx="14.5" cy="7.2" rx="2.1" ry="2.8"/>
+            <ellipse cx="18.5" cy="11" rx="2.1" ry="2.8"/>
+          </svg>
           <span id="fd-saved" class="fd-mono">0<small>/3 SAFE</small></span>
         </div>
         <div id="fd-free"><b>E</b>FREE ANIMAL</div>
@@ -362,11 +405,14 @@ export class HUD {
       this.hpFill.style.width = (pct * 100) + '%';
       this.hpNum.textContent = Math.ceil(state.hp);
       this.hpMax.textContent = state.maxHp;
-      this.hpFill.style.background = pct > 0.5
-        ? 'linear-gradient(90deg,#5fc23e,#9fe35a)'
+      const [grad, glow] = pct > 0.5
+        ? ['linear-gradient(90deg,#5fc23e,#9fe35a)', '#6fe04a99']
         : pct > 0.25
-          ? 'linear-gradient(90deg,#d6b43a,#f0d24a)'
-          : 'linear-gradient(90deg,#d34a4a,#ff7a6a)';
+          ? ['linear-gradient(90deg,#d6b43a,#f0d24a)', '#f0d24a99']
+          : ['linear-gradient(90deg,#d34a4a,#ff7a6a)', '#ff5a4aaa'];
+      this.hpFill.style.background = grad;
+      this.hpFill.parentElement.style.filter = `drop-shadow(0 0 6px ${glow})`;
+      this.hpFill.classList.toggle('crit', pct <= 0.25);
       L.hp = state.hp; this._maxHp = state.maxHp;
     }
 

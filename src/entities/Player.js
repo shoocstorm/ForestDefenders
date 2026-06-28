@@ -32,7 +32,7 @@ export class Player {
     this._tailCd = 0;
 
     this.model = new HeroModel();
-    this.model.setWeaponTint(this.weapon.def.muzzleColor);
+    this.model.setWeapon(this.weapon.def);
     scene.add(this.model.group);
     this.model.group.position.copy(this.position);
 
@@ -305,7 +305,7 @@ export class Player {
     if (!changed) return;
     this.weapon = changed;
     this.model.playSwitch?.();
-    this.model.setWeaponTint?.(changed.def.muzzleColor);
+    this.model.setWeapon?.(changed.def);
   }
 
   // Kick (V): forward cone melee — damage + knockback to enemies ahead (HERO_SPEC §6.3).
