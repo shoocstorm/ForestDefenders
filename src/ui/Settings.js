@@ -2,12 +2,16 @@
 // display settings. Integrates with AudioSystem for live preview and persists
 // via GameManager.settings.
 
+import { GRAPHICS } from '../config/Constants.js';
+
 export class Settings {
-  constructor({ audioSystem, gameManager, onClose }) {
+  constructor({ audioSystem, gameManager, onGfxChange, onClose }) {
     this.audio = audioSystem;
     this.gm = gameManager;
+    this.onGfxChange = onGfxChange; // live-preview the graphics preset in Game
     this.onClose = onClose;
     this.isOpen = false;
+    this._gfx = gameManager.settings.gfx || GRAPHICS.DEFAULT;
 
     // Working copy of settings (committed on save)
     this.settings = { ...audioSystem.settings };
@@ -206,6 +210,14 @@ export class Settings {
           filter: brightness(1.15);
         }
 
+        .stg-hint {
+          margin-top: 8px;
+          font-size: 12px;
+          line-height: 1.4;
+          color: #9bbf8a;
+          opacity: 0.75;
+        }
+
         #stg-foot {
           padding: 16px 26px 20px;
           border-top: 1px solid #ffffff18;
@@ -291,6 +303,14 @@ export class Settings {
               <button class="stg-toggle" id="stg-motion">OFF</button>
             </div>
           </div>
+          <div class="stg-section">
+            <div class="stg-label">GRAPHICS</div>
+            <div class="stg-row">
+              <span class="stg-row-name">Quality</span>
+              <button class="stg-toggle" id="stg-gfx">High</button>
+            </div>
+            <div class="stg-hint">Choose <b>Performance</b> if the game runs slowly on mobile — it lowers the render resolution, skips post-processing, and softens shadows.</div>
+          </div>
         </div>
         <div id="stg-foot">
           <button id="stg-save">SAVE & CLOSE</button>
@@ -302,6 +322,7 @@ export class Settings {
     this.closeBtn = this.root.querySelector('#stg-close');
     this.saveBtn = this.root.querySelector('#stg-save');
     this.motionBtn = this.root.querySelector('#stg-motion');
+    this.gfxBtn = this.root.querySelector('#stg-gfx');
 
     // Volume sliders
     this.masterSlider = this.root.querySelector('#stg-master');
@@ -327,6 +348,24 @@ export class Settings {
 
     // Motion toggle
     this.motionBtn.addEventListener('click', () => this._toggleMotion());
+
+    // Graphics quality preset (cycles High → Balanced → Performance, live preview)
+    this.gfxBtn.addEventListener('click', () => this._cycleGfx());
+  }
+
+  _renderGfx() {
+    const cfg = GRAPHICS[this._gfx] || GRAPHICS[GRAPHICS.DEFAULT];
+    this.gfxBtn.textContent = cfg.label;
+    // "On" styling for the full-quality tier; muted for the reduced presets.
+    this.gfxBtn.classList.toggle('on', this._gfx === 'HIGH');
+  }
+
+  _cycleGfx() {
+    const order = GRAPHICS.ORDER;
+    const next = order[(order.indexOf(this._gfx) + 1) % order.length];
+    this._gfx = next;
+    this._renderGfx();
+    this.onGfxChange?.(next); // live preview
   }
 
   open() {
@@ -351,6 +390,10 @@ export class Settings {
     this._motionOn = prefersReduced;
     this.motionBtn.classList.toggle('on', this._motionOn);
     this.motionBtn.textContent = this._motionOn ? 'ON' : 'OFF';
+
+    // Sync graphics control to the persisted preset.
+    this._gfx = this.gm.settings.gfx || GRAPHICS.DEFAULT;
+    this._renderGfx();
   }
 
   close() {
@@ -361,7 +404,7 @@ export class Settings {
   _saveAndClose() {
     // Commit settings to both audio system and game manager
     this.audio.setVolumes(this.settings);
-    this.gm.settings = { ...this.gm.settings, ...this.settings };
+    this.gm.settings = { ...this.gm.settings, ...this.settings, gfx: this._gfx };
 
     // Apply reduce motion setting
     if (this._motionOn) {

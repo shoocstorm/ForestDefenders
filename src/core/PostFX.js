@@ -5,7 +5,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
-import { POST, QUALITY, BLOOM_LAYER } from '../config/Constants.js';
+import { POST, QUALITY, AO_QUALITY, BLOOM_LAYER } from '../config/Constants.js';
 
 // Cinematic-cel post pipeline (threejs-bloom + image-pipeline ordering).
 //
@@ -34,6 +34,9 @@ export class PostFX {
     this.scene = scene;
     this.camera = camera;
     this.quality = QUALITY.DEFAULT;
+    this.aoLevel = AO_QUALITY.DEFAULT; // player-facing GTAO tier (HIGH | LOW | OFF)
+    this.aoScale = 1; // GTAO resolution multiplier for the active tier
+    this.postEnabled = true; // false → bypass the whole composer stack (Performance preset)
     this.mode = 'full'; // 'full' | 'nopost' | 'bloom' | 'ao'
     const w = window.innerWidth, h = window.innerHeight;
 
@@ -51,15 +54,22 @@ export class PostFX {
 
   _buildFinal(w, h) {
     const q = QUALITY[this.quality];
+    const ao = AO_QUALITY[this.aoLevel] || AO_QUALITY[AO_QUALITY.DEFAULT];
+    this.aoScale = ao.scale;
     this.finalComposer = new EffectComposer(this.renderer);
 
-    if (q.ao) {
+    // AO runs only when the global quality tier allows it AND the player hasn't
+    // turned it off. LOW renders GTAO at a fraction of screen resolution (aoScale)
+    // — the dominant mobile-FPS lever — then composites onto the full-res beauty.
+    if (q.ao && ao.enabled) {
       // GTAO's OUTPUT.Default composites AO onto the beauty already living in the
       // composer's readBuffer — it does NOT render the scene itself. A RenderPass
       // must run first to fill that buffer, otherwise the beauty pass comes out
       // black and only the separate bloom layer shows through.
       this.finalComposer.addPass(new RenderPass(this.scene, this.camera));
-      this.gtao = new GTAOPass(this.scene, this.camera, w, h);
+      const aw = Math.max(1, Math.round(w * ao.scale));
+      const ah = Math.max(1, Math.round(h * ao.scale));
+      this.gtao = new GTAOPass(this.scene, this.camera, aw, ah);
       this.gtao.output = GTAOPass.OUTPUT.Default; // composites AO onto the beauty render
       this.gtao.blendIntensity = POST.AO_INTENSITY;
       this.finalComposer.addPass(this.gtao);
@@ -87,10 +97,23 @@ export class PostFX {
   }
   toggleQuality() { this.setQuality(this.quality === 'HIGH' ? 'LOW' : 'HIGH'); }
 
+  // Player-facing GTAO tier (Settings → Graphics). Rebuilds the final composer so
+  // the pass is added/dropped or its render targets resized to the new aoScale.
+  setAOLevel(name) {
+    if (!AO_QUALITY[name] || name === 'DEFAULT' || name === 'ORDER') return;
+    this.aoLevel = name;
+    this._buildFinal(window.innerWidth, window.innerHeight);
+  }
+
   setMode(mode) { this.mode = mode; }
 
+  // Performance preset: when false, render() does a single direct scene render,
+  // skipping the bloom composer's extra full-scene pass, the bloom blur mips, the
+  // GTAO pass and the OutputPass. The renderer's own ACES tone mapping still applies.
+  setPostEnabled(on) { this.postEnabled = on; }
+
   render() {
-    if (this.mode === 'nopost') { this.renderer.render(this.scene, this.camera); return; }
+    if (!this.postEnabled || this.mode === 'nopost') { this.renderer.render(this.scene, this.camera); return; }
 
     // Bloom pass: isolate the bloom layer on a black background.
     const bg = this.scene.background;
@@ -114,7 +137,7 @@ export class PostFX {
     this.bloomComposer.setSize(w, h);
     this.bloom.setSize(w, h);
     this.finalComposer.setSize(w, h);
-    this.gtao?.setSize(w, h);
+    this.gtao?.setSize(Math.max(1, Math.round(w * this.aoScale)), Math.max(1, Math.round(h * this.aoScale)));
     this.combine.material.uniforms.tBloom.value = this.bloomComposer.renderTarget2.texture;
   }
 }

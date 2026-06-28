@@ -62,11 +62,19 @@ export class CameraRig {
     const eye = this._target.copy(playerPos);
 
     if (this.mode === CAMERA.FP) {
-      // Eye at head height; Player hides the hero mesh in FP so the camera isn't
-      // looking at the inside of the head's (black) outline shell.
-      eye.y = playerPos.y + CAMERA.EYE_HEIGHT;
+      // Near first-person: eye pulled back behind + above the head and nudged to
+      // one shoulder, so the hero stays visible and the muzzle plume fires down
+      // an empty lane instead of curtaining screen-centre.
+      const right = this._tmp2 ||= new THREE.Vector3();
+      right.set(aim.z, 0, -aim.x).normalize();
+      eye.y = playerPos.y + CAMERA.EYE_HEIGHT + CAMERA.FP_LIFT;
+      eye.addScaledVector(aim, -CAMERA.FP_BACK).addScaledVector(right, CAMERA.FP_SHOULDER);
       this.camera.position.copy(eye);
-      this._desired.copy(eye).addScaledVector(aim, 1);
+      this._desired
+        .copy(playerPos)
+        .setY(playerPos.y + CAMERA.EYE_HEIGHT)
+        .addScaledVector(aim, 2)
+        .addScaledVector(right, CAMERA.FP_SHOULDER);
       this.camera.lookAt(this._desired);
     } else if (this.mode === CAMERA.TOP) {
       this.camera.position.set(playerPos.x, playerPos.y + CAMERA.TOP_HEIGHT, playerPos.z + 0.01);
@@ -75,11 +83,20 @@ export class CameraRig {
       // Third-person over-shoulder: orbit behind hero based on yaw/pitch.
       const pivot = this._desired.copy(playerPos);
       pivot.y += CAMERA.TP_HEIGHT;
+      // Right vector (horizontal) for an over-shoulder offset: pushes the hero
+      // off-centre so the muzzle/particle plume fires down an empty lane.
+      const right = this._tmp2 ||= new THREE.Vector3();
+      right.set(aim.z, 0, -aim.x).normalize();
       const back = this.camera.position
         .copy(pivot)
-        .addScaledVector(aim, -CAMERA.TP_DISTANCE);
+        .addScaledVector(aim, -CAMERA.TP_DISTANCE)
+        .addScaledVector(right, CAMERA.TP_SHOULDER);
       back.y = Math.max(back.y, playerPos.y + 0.5); // keep above ground
-      this.camera.lookAt(playerPos.x, playerPos.y + 1.1, playerPos.z);
+      this.camera.lookAt(
+        playerPos.x + right.x * CAMERA.TP_SHOULDER,
+        playerPos.y + 1.0,
+        playerPos.z + right.z * CAMERA.TP_SHOULDER,
+      );
     }
 
     // Apply recoil kick by nudging the camera's rotation (pitch up + yaw chaos).

@@ -29,11 +29,15 @@ export const CAMERA = {
   TOP: 'top',
   FOV: 70,
   EYE_HEIGHT: 1.02, // first-person eye height above the hero's feet (clears the torso top)
+  FP_BACK: 1.6,     // pull the FP eye back behind the head so the hero stays in view
+  FP_LIFT: 0.5,     // raise the FP eye so it looks over the head, not into it
+  FP_SHOULDER: 0.7, // lateral FP offset so the muzzle plume fires down an empty lane
   MOUSE_SENS: 0.0022,
   PITCH_MIN: -1.3,
   PITCH_MAX: 1.3,
-  TP_DISTANCE: 6.0,
-  TP_HEIGHT: 2.4,
+  TP_DISTANCE: 7.0,
+  TP_HEIGHT: 3.1,
+  TP_SHOULDER: 1.1, // lateral over-shoulder offset (keeps muzzle plume out of centre)
   TOP_HEIGHT: 52.0, // [2x] raised so the top-down camera frames the doubled arena
 };
 
@@ -383,6 +387,34 @@ export const POST = {
   BLOOM_STRENGTH: 0.9, BLOOM_RADIUS: 0.5, BLOOM_THRESHOLD: 0.0, // selective: threshold 0 (bloom layer only)
   AO_RADIUS: 0.5, AO_INTENSITY: 1.0,
   GODRAY_STRENGTH: 0.45,
+};
+// GTAO is the single heaviest pass on mobile GPUs. This player-facing tier lets
+// users render it at reduced resolution (LOW) or drop it entirely (OFF) to claw
+// back FPS, independent of the global HIGH/LOW quality toggle. `scale` is the
+// linear resolution multiplier applied to the GTAO render targets.
+export const AO_QUALITY = {
+  DEFAULT: 'HIGH',
+  ORDER: ['HIGH', 'LOW', 'OFF'], // cycle order for the Settings toggle
+  HIGH: { enabled: true,  scale: 1.0,  label: 'High' },
+  LOW:  { enabled: true,  scale: 0.5,  label: 'Low'  }, // quarter the AO pixels
+  OFF:  { enabled: false, scale: 1.0,  label: 'Off'  },
+};
+
+// Player-facing graphics preset (Settings → Graphics). One lever drives every
+// dominant mobile-FPS cost at once, because GTAO alone is not enough on phones:
+//   - pixelRatio: the cap passed to renderer.setPixelRatio. Pixel count scales
+//     with its square, so 2.0 → 1.0 is ~4× fewer fragments on a DPR-3 phone —
+//     the single biggest win.
+//   - post: 'full' runs the bloom+GTAO+ACES composer stack; 'none' bypasses it
+//     for one direct scene render (kills a whole extra scene pass + bloom mips).
+//   - ao: which AO_QUALITY tier the GTAO pass uses when post is 'full'.
+//   - shadowMap: sun shadow-map resolution (4096² PCF-soft is very costly on mobile).
+export const GRAPHICS = {
+  DEFAULT: 'HIGH',
+  ORDER: ['HIGH', 'BALANCED', 'PERFORMANCE'], // cycle order for the Settings toggle
+  HIGH:        { label: 'High',        pixelRatio: 2,   post: 'full', ao: 'HIGH', shadowMap: 4096 },
+  BALANCED:    { label: 'Balanced',    pixelRatio: 1.5, post: 'full', ao: 'LOW',  shadowMap: 2048 },
+  PERFORMANCE: { label: 'Performance', pixelRatio: 1,   post: 'none', ao: 'OFF',  shadowMap: 1024 },
 };
 export const BLOOM_LAYER = 1; // objects on this layer glow (boss, rings, lanterns, spores)
 

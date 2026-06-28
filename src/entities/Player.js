@@ -244,10 +244,9 @@ export class Player {
     // --- Apply transform to model ---
     this.model.group.position.copy(this.position);
     this.model.group.rotation.y = this.facing;
-    // First-person: hide the whole hero model so the camera (at eye height inside
-    // the head) never sees the inside of its mesh. Firing feedback still comes
-    // from the muzzle flash + projectile + camera recoil.
-    this.model.setFirstPerson?.(rig.mode === CAMERA.FP);
+    // The FP camera now sits behind/above the head (near first-person), so the
+    // hero stays visible in every mode — no need to hide the mesh.
+    this.model.setFirstPerson?.(false);
 
     // --- Animation: authored clips via the model's AnimationMixer. ---
     const planarSpeed = Math.hypot(this.velocity.x, this.velocity.z);

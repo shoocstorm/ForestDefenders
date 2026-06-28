@@ -160,7 +160,7 @@ export class VFX {
   }
 
   muzzleFlash(pos, color = 0xc7e08a) {
-    this._burst(pos, { count: 10, color, size: 0.16, speed: 4, spread: 0.6, life: 0.18 });
+    this._burst(pos, { count: 8, color, size: 0.11, speed: 4, spread: 0.45, life: 0.1 });
     this._flash(pos, color, 6, 5);
   }
 

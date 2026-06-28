@@ -5,7 +5,7 @@ import { TouchControls } from './TouchControls.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
-import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES } from '../config/Constants.js';
+import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES, GRAPHICS } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
 import { GameManager } from '../systems/GameManager.js';
 import { EnemyManager } from '../systems/EnemyManager.js';
@@ -117,6 +117,7 @@ export class Game {
     this.settings = new Settings({
       audioSystem: this.audio,
       gameManager: this.gameManager,
+      onGfxChange: (preset) => this.setGraphics(preset),
       onClose: () => this._persist(),
     });
 
@@ -172,6 +173,9 @@ export class Game {
 
     // Cinematic-cel post pipeline (selective bloom + GTAO + ACES output).
     this.postfx = new PostFX(this.renderer, this.scene, this.cameraRig.camera);
+    // Apply the player's graphics preset (Settings → Graphics). Defaults to
+    // Performance on touch devices — phones can't afford the full post stack.
+    this.setGraphics(this._initialGraphicsPreset());
 
     this.state = 'playing'; // 'playing' | 'victory' | 'defeat'
     this.waves = new WaveManager(this.enemies, this.gameManager, {
@@ -576,6 +580,9 @@ export class Game {
     this.arena = new Arena(this.scene, CAMPAIGN[this.campaignLevel].biome);
     this.ctx.colliders = this.arena.colliders;
     this.ctx.standables = this.arena.standables;
+    // The fresh arena builds its sun at full 4096² — re-apply the active preset's
+    // shadow resolution so Performance/Balanced players keep their cheaper map.
+    this._applyShadowQuality((GRAPHICS[this.graphics] || GRAPHICS[GRAPHICS.DEFAULT]).shadowMap);
 
     // Reset run state + reposition the player.
     this.gameManager.resetRun();
@@ -677,5 +684,44 @@ export class Game {
     this.renderer.setSize(w, h);
     this.cameraRig.resize(w / h);
     this.postfx?.setSize(w, h);
+  }
+
+  // First-run graphics preset: honour the saved choice, else default Performance
+  // on touch devices (phones/tablets) and High on desktop.
+  _initialGraphicsPreset() {
+    const saved = this.gameManager.settings.gfx;
+    if (saved && GRAPHICS[saved]) return saved;
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    return isTouch ? 'PERFORMANCE' : GRAPHICS.DEFAULT;
+  }
+
+  // Apply a graphics preset across every dominant cost: render resolution
+  // (pixel ratio), the post stack, the GTAO tier and shadow-map resolution.
+  setGraphics(name) {
+    const cfg = GRAPHICS[name] || GRAPHICS[GRAPHICS.DEFAULT];
+    this.graphics = name;
+    this.gameManager.settings.gfx = name; // persisted with the save
+
+    // Render resolution — the biggest mobile lever (pixel count ∝ ratio²).
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, cfg.pixelRatio));
+    const w = window.innerWidth, h = window.innerHeight;
+    this.renderer.setSize(w, h);
+    this.postfx?.setSize(w, h);
+
+    // Post stack + AO tier.
+    this.postfx?.setPostEnabled(cfg.post !== 'none');
+    this.postfx?.setAOLevel(cfg.ao);
+
+    // Sun shadow-map resolution.
+    this._applyShadowQuality(cfg.shadowMap);
+  }
+
+  // Resize the sun's shadow map. Disposing the existing target forces three.js
+  // to reallocate at the new resolution on the next frame.
+  _applyShadowQuality(size) {
+    const sun = this.arena?.sun;
+    if (!sun?.shadow) return;
+    sun.shadow.mapSize.set(size, size);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
   }
 }

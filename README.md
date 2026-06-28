@@ -11,6 +11,7 @@ Uses [Bun](https://bun.sh) (1.3+) for dependency install, dev server, and bundli
 bun install
 bun run dev      # http://localhost:3000 (Bun dev server + HMR)
 bun run build    # production bundle in dist/
+bun run build && npx serve dist
 ```
 
 Click the canvas to capture the mouse (pointer-lock look).
