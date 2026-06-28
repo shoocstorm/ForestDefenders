@@ -36,9 +36,12 @@ export class AnimalManager {
     }
     if (this.nearestCaged && ctx.input &&
         (ctx.input.wasPressed('KeyE') || ctx.input.wasPressed('KeyF'))) {
-      this.nearestCaged.free(ctx);
+      // Count it before freeing so the rescue hook (weapon unlocks) sees the
+      // updated freedCount (e.g. "all animals rescued" → Fire Bullet).
+      const animal = this.nearestCaged;
       this.rescued += 1;
       this.nearestCaged = null;
+      animal.free(ctx);
     }
   }
 }

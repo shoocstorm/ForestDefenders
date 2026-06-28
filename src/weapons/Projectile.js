@@ -82,6 +82,7 @@ export class ProjectilePool {
               if (!aoe) { // AOE shots detonate below instead of single-target hit
                 e.takeDamage(p.damage, p.element, ctx);
                 ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+                ctx.gameManager?.registerAccurateShot?.(); // Sharpshooter achievement
               }
               dead = true;
               break;
@@ -127,18 +128,22 @@ export class ProjectilePool {
   _detonate(p, ctx) {
     const radius = Math.max(p.explodeRadius, p.empRadius);
     const color = p.mat.color.getHex();
+    let kills = 0; // 3+ kills in one blast → multi-kill (Shotgun unlock / Combo King)
     for (const e of ctx.enemies) {
       if (e.dead) continue;
       const d = this._tmp.copy(e.position).setY(e.position.y + 0.6).distanceTo(p.pos);
       if (d > radius + e.hitRadius) continue;
       const falloff = 1 - Math.min(1, d / (radius + e.hitRadius));
       e.takeDamage(p.damage * (0.4 + 0.6 * falloff), p.element, ctx);
+      ctx.gameManager?.registerAccurateShot?.();
       if (p.knockback) {
         this._up.copy(e.position).sub(p.pos).setY(0).normalize();
         e.applyKnockback?.(this._up, p.knockback * (0.5 + falloff));
       }
       if (p.empDuration) e.stun?.(p.empDuration);
+      if (e.dead) kills++; // takeDamage resolves death synchronously
     }
+    if (kills >= 3) ctx.onMultiKill?.(kills);
     ctx.vfx.explosion?.(p.pos, color, radius);
     ctx.cameraRig?.addShake?.(0.5);
     ctx.juice?.hitStop?.();

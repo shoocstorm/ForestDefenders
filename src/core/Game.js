@@ -4,7 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
-import { CAMERA, AIM_ASSIST, BUFFS } from '../config/Constants.js';
+import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
 import { GameManager } from '../systems/GameManager.js';
 import { EnemyManager } from '../systems/EnemyManager.js';
@@ -17,6 +17,11 @@ import { WorldLabels } from '../ui/WorldLabels.js';
 import { Overlays } from '../ui/Overlays.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { AnimalManager } from '../systems/AnimalManager.js';
+import { SaveManager } from '../systems/SaveManager.js';
+import { Achievements } from '../systems/Achievements.js';
+import { PlantManager } from '../systems/PlantManager.js';
+import { Toasts } from '../ui/Toasts.js';
+import { Shop } from '../ui/Shop.js';
 import { updateTime as updateWindTime } from '../materials/CelMaterial.js';
 
 // Top-level game: owns renderer, scene, the fixed-step update loop, and the
@@ -40,11 +45,22 @@ export class Game {
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
 
     this.arena = new Arena(this.scene);
-    this.player = new Player(this.scene, this.cameraRig);
 
-    // --- M2 combat systems ---
+    // --- M5 meta-progression: load the save and wire achievements before the
+    // player is built, so weapon unlocks + derived stats apply from frame one. ---
+    this.save = new SaveManager();
     this.juice = new Juice();
     this.gameManager = new GameManager();
+    this.gameManager.loadSave(this.save.load());
+    this.toasts = new Toasts();
+    this.achievements = new Achievements((a) => this.toasts.achievement(a));
+    this.gameManager.achievements = this.achievements;
+
+    this.player = new Player(this.scene, this.cameraRig, this.gameManager.unlockedWeapons);
+    this.gameManager.applyDerived(this.player, { fullHeal: true });
+    this.plants = new PlantManager(this.scene);
+
+    // --- M2 combat systems ---
     this.vfx = new VFX(this.scene);
     this.projectiles = new ProjectilePool(this.scene);
     this.enemies = new EnemyManager(this.scene);
@@ -55,7 +71,11 @@ export class Game {
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
     this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx);
     this.animals = new AnimalManager(this.scene);
-    this.overlays = new Overlays(() => this.resetLevel());
+    this.overlays = new Overlays(() => this.resetLevel(), () => this.shop.open());
+    this.shop = new Shop({
+      gameManager: this.gameManager, player: this.player, toasts: this.toasts,
+      onPurchase: () => this._persist(),
+    });
 
     // Reused per-frame combat context (avoids per-step allocation).
     this.ctx = {
@@ -74,6 +94,9 @@ export class Game {
       hud: this.hud,
       cameraRig: this.cameraRig,
       onPlayerDeath: () => this._onDefeat(),
+      onEnemyDied: (e) => this.gameManager.registerEnemyDefeated(e),
+      onMultiKill: (n) => this._onMultiKill(n),
+      onAnimalRescued: (type) => this._onAnimalRescued(type),
     };
 
     // Cinematic-cel post pipeline (selective bloom + GTAO + ACES output).
@@ -154,12 +177,15 @@ export class Game {
     if (this.input.wasPressed('Digit2')) this.cameraRig.setMode(CAMERA.TP);
     if (this.input.wasPressed('Digit3')) this.cameraRig.setMode(CAMERA.TOP);
 
+    // Shop hotkey (P) — opens "Old Owl's Outfitters" mid-run; freezes the sim.
+    if (this.input.wasPressed('KeyP')) this._toggleShop();
+
     // Mouse-look (apply accumulated delta once per frame — never time-scaled).
     const md = this.input.consumeMouseDelta();
     if (md.x || md.y) this.cameraRig.applyMouse(md.x, md.y);
 
-    // Fixed-step simulation (scaled accumulator). Frozen while an overlay is up.
-    if (this.state === 'playing') {
+    // Fixed-step simulation (scaled accumulator). Frozen while an overlay/shop is up.
+    if (this.state === 'playing' && !this.shop.isOpen) {
       this.accum += simDt;
       let steps = 0;
       while (this.accum >= this.fixedDt && steps < 5) {
@@ -191,23 +217,70 @@ export class Game {
   }
 
   _fixedUpdate(dt) {
+    this.gameManager.updateTimers(dt); // timed buffs (Tail Guard countdown)
     this.waves.update(dt);
     this.player.update(dt, this.input, this.ctx);
     this.animals.update(dt, this.ctx);   // before enemies so targeting is current
     this.enemies.update(dt, this.ctx);
     this.projectiles.update(dt, this.ctx);
+    this.plants.update(dt, this.ctx);
   }
 
   _onVictory() {
     if (this.state !== 'playing') return;
     this.state = 'victory';
     document.exitPointerLock?.();
+    const gm = this.gameManager;
     const saved = this.animals.savedCount;
-    const r = this.gameManager.computeRank(saved);
+    gm.addGold(ECONOMY.LEVEL_CLEAR_GOLD);       // base clear reward
+    const r = gm.computeRank(saved);            // + rescue bonus gold
+    // Level-up if cleared flawlessly (all animals rescued + HP > 50%).
+    const allRescued = this.animals.freedCount >= this.animals.total;
+    const leveledUp = gm.tryLevelUp(this.player, { allRescued });
+    if (leveledUp) this.toasts.levelUp(gm.playerLevel);
+    gm.registerLevelCleared(gm.level);
+    this._persist();
     this.overlays.showVictory({
       rank: r.rank, stars: r.stars, bonus: r.bonus, saved, total: this.animals.total,
-      kills: this.gameManager.kills, gold: this.gameManager.gold,
+      kills: gm.kills, gold: gm.gold, leveledUp, playerLevel: gm.playerLevel,
     });
+  }
+
+  // Open/close the shop mid-run (P). Only during active play; releases the mouse.
+  _toggleShop() {
+    if (this.shop.isOpen) { this.shop.close(); return; }
+    if (this.state !== 'playing') return;
+    document.exitPointerLock?.();
+    this.shop.open();
+  }
+
+  // 3+ kills in one shot → unlock the Scattergun (once) + Combo King progress.
+  _onMultiKill(n) {
+    this.gameManager.registerMultiKill();
+    if (this.gameManager.unlockWeapon('SHOTGUN')) {
+      this.toasts.weapon('Scattergun');
+      this._persist();
+    }
+  }
+
+  // Rescue-driven weapon unlocks (ECONOMY_SHOP_SPEC §3) + rescue achievements.
+  _onAnimalRescued(type) {
+    const gm = this.gameManager;
+    gm.registerAnimalRescued();
+    const unlocked = [];
+    if (gm.unlockWeapon('MACHINE')) unlocked.push('Machine Gun');         // cage reward L1
+    if (type === 'BIRD' && gm.unlockWeapon('TOROID')) unlocked.push('Toroid Cannon');
+    if (this.animals.freedCount >= this.animals.total && gm.unlockWeapon('FIRE_BULLET')) {
+      unlocked.push('Fire Bullet');                                       // all animals rescued
+    }
+    for (const name of unlocked) this.toasts.weapon(name);
+    if (unlocked.length) this._persist();
+  }
+
+  // Write meta-progression to the save (level win, purchase, unlock).
+  _persist() {
+    this.gameManager.currentWeapon = this.player.weapons.index;
+    this.save.save(this.gameManager.toSave());
   }
 
   _onDefeat() {
@@ -220,15 +293,22 @@ export class Game {
   }
 
   // Rebuild the level in place (Retry / Play Again) — no full page reload.
+  // Meta-progression (gold, level, upgrades, unlocks, achievements) survives; only
+  // per-run state (HP, buffs, plants, double-jump) is wiped (ECONOMY_SHOP_SPEC §6.1).
   resetLevel() {
+    if (this.shop.isOpen) this.shop.close();
     for (const e of this.enemies.enemies) this.scene.remove(e.group);
     this.enemies.enemies.length = 0;
     for (const a of this.animals.animals) a.dispose();
     this.animals = new AnimalManager(this.scene);
     this.ctx.animals = this.animals.animals;
+    this.plants.dispose();
+    this.plants = new PlantManager(this.scene);
 
-    this.gameManager.reset();
-    this.player.hp = this.player.maxHp;
+    this.gameManager.resetRun();
+    this.gameManager.applyDerived(this.player, { fullHeal: true });
+    this.player.hasDoubleJump = false;
+    this.player.jumpsLeft = 1;
     this.player.dead = false;
     this.player.position.copy(this.player._spawn);
     this.player.velocity.set(0, 0, 0);
@@ -270,7 +350,11 @@ export class Game {
       element: p.weapon.element,
       ammo: p.weapon.ammoInfo(),
       weaponIndex: p.weapons.index,
+      unlocked: p.weapons.weapons.map((w) => this.gameManager.isWeaponUnlocked(w.def.id)),
       buffs: this.gameManager.buffs,
+      timedBuffs: this.gameManager.timedBuffs,
+      fireRounds: this.gameManager.fireRounds,
+      hitShield: this.gameManager.hitShield,
       saved: this.animals.savedCount,
       totalAnimals: this.animals.total,
       freePrompt: !!this.animals.nearestCaged,

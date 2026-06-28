@@ -93,6 +93,11 @@ export class Weapon {
     else if (a.type === 'energy') { a.energy -= this.def.ammo.perShot; }
   }
 
+  // Top up magazine reserve (shop ammo packs). No-op for non-magazine weapons.
+  addReserve(amount) {
+    if (this.ammo.type === 'magazine') this.ammo.reserve += amount;
+  }
+
   // Short HUD ammo string.
   ammoText() {
     const a = this.ammo;
@@ -141,9 +146,12 @@ export class Weapon {
 
   _spawn(ctx, dir, mult = 1, extra = {}) {
     const d = this.def;
+    // Fire Rounds buff (Flame Chili / shop) temporarily overrides the shot element.
+    const element = ctx.elementOverride ?? d.element;
+    const color = ctx.elementOverride === 'FIRE' ? 0xff6a2a : d.color;
     ctx.projectiles.spawn(ctx.origin, dir, {
       team: 'player', speed: d.projectileSpeed, damage: d.damage * mult,
-      element: d.element, color: d.color, radius: d.projectileRadius, ...extra,
+      element, color, radius: d.projectileRadius, ...extra,
     });
   }
 

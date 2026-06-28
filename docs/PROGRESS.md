@@ -4,7 +4,7 @@
 > work session so a fresh conversation can continue without re-deriving context.
 
 **Last updated:** 2026-06-28
-**Current milestone:** M4 complete ✅ · next up: **M5 — Economy & systems**
+**Current milestone:** M5 complete ✅ · next up: **M6 — Full campaign & audio**
 
 ---
 
@@ -68,13 +68,22 @@ src/
   vfx/
     VFX.js              pooled additive particle bursts + flash lights + shockwave rings: muzzleFlash / hitSpark / spore (simplified)
     Loot.js             gold "acorn" drops that scatter then magnetize to camera → GameManager.gold + HUD pulse
+    SaveManager.js      M5: localStorage JSON store ('forestdefender_save'); GameManager owns the schema (toSave/loadSave)
+    Achievements.js     M5: catalog (Constants.ACHIEVEMENTS) + idempotent unlock + evaluate(gm) vs counters; fires toast
+    PlantManager.js     M5: spawns/updates level plants; routes touch/shoot triggers → Player/GameManager effects
   ui/
     DamageNumbers.js    DOM floating combat text (white/green WEAK!/yellow EFFECTIVE/red RESIST), world→screen projected
-    HUD.js              DOM overlay: HP bar (color ramp), gold, enemies/kills, weapon/ammo, crosshair, damage vignette
+    HUD.js              DOM overlay: HP bar (color ramp), gold, enemies/kills, weapon/ammo (locked slots dimmed), buff/timed-buff pills, crosshair, vignette
+    Shop.js             M5: "Old Owl's Outfitters" overlay (P / victory button) — upgrade + weapon + consumable cards, gold balance, tabs
+    Toasts.js           M5: achievement / weapon-unlock / level-up notification queue
   systems/
     Juice.js            global timeScale (impactFreeze/hitStop/slowMo, token-guarded) — Game scales sim dt by it
     GameManager.js      gold, kills, level (enemy scaling), playerDamageMult
     EnemyManager.js     enemy list: spawn / update / reap; exposes list on ctx for separation
+    GameManager.js      (M5) split into META (gold/level/upgrades/unlocks/achievement counters, persisted) +
+                        RUN (shield/buffs/fire-rounds/hit-shield, reset per level); applyDerived() pushes maxHp/dmg to Player
+  entities/
+    Plant.js            M5: interactive plant prop (procedural) — Bounce/Vitality/Tail-Guard/Oakshield/Flame-Chili; touch/shoot + respawn
 ```
 
 **Key integration points already in place for later milestones:**
@@ -84,7 +93,9 @@ src/
 - `Arena.colliders` — array of `{type:'cylinder', x, z, r}` for tree trunks (enemy nav / collision, M2/M3).
 - `Constants.elementMultiplier(attackElement, targetElement)` — damage pipeline (M2).
 - `Game.systems` pattern: add per-frame systems by extending `_fixedUpdate` / `_raf`.
-- `Player`: `hasDoubleJump` currently forced `true` for testing — should become a Bounce-Fruit unlock (M5).
+- `Player`: `hasDoubleJump` now defaults `false` and is unlocked per-level by the Bounce Fruit plant (M5 done).
+- `GameManager.applyDerived(player)` pushes meta-derived max-HP/damage/speed onto the Player; the shop +
+  level-up just bump the inputs and re-derive. `Game._persist()` writes the save (call after any meta change).
 
 ## 4. Milestone roadmap
 
@@ -94,7 +105,7 @@ src/
 | **M2 — Combat core** | Acorn gun + projectiles, 2 enemy types + pursue/attack AI, health + element matrix + damage pipeline, death VFX, gold drops, basic HUD (HP/gold/ammo/crosshair) | ✅ done |
 | **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ✅ done |
 | **M4 — Weapons & juice** | All 9 weapons + switching, kick/tail melee, camera recoil/shake/hit-stop/slow-mo, muzzle flashes, full spore-death VFX | ✅ done |
-| **M5 — Economy & systems** | Shop, permanent upgrades, plants, achievements, JSON save/load, level-up | ⬜ |
+| **M5 — Economy & systems** | Shop, permanent upgrades, plants, achievements, save/load, level-up, weapon unlock gating | ✅ done |
 | **M6 — Full campaign & audio** | L2/L3 biomes, procedural audio, ambient particles, atmosphere/bloom polish | ⬜ |
 
 ## 5. M1 — done
@@ -197,13 +208,53 @@ src/
 - Boomstick/Fire-Bullet world interactions (blow rocks, ignite `burnable` trees) deferred — needs the
   obstacle/plant systems (`OBSTACLE_PHYSICS_SPEC`, `PLANTS_SPEC`) from M5.
 
-## 6e. M5 — plan (next session starts here)
+## 6e. M5 — done
 
-Goal (`ECONOMY_SHOP_SPEC` + `PLANTS_SPEC` + `OBSTACLE_PHYSICS_SPEC`): shop, permanent upgrades, plants,
-achievements, JSON save/load, level-up, and weapon **unlock gating** (wire the M4 roster behind unlocks).
+- [x] **Persistence** (`systems/SaveManager.js`): localStorage JSON under `forestdefender_save`
+      (schema `ECONOMY_SHOP_SPEC §6`), with an in-memory fallback when storage is blocked.
+      `GameManager.toSave/loadSave` own the schema. Auto-saved on level win, purchase, and weapon unlock.
+- [x] **Meta vs run state** (`systems/GameManager.js` rewrite): META (gold, player level, 3 upgrade tiers,
+      `unlockedWeapons` set, achievement counters) persists; RUN (shield, buffs, fire-rounds, hit-shield,
+      timed buffs, kills) wiped by `resetRun()`. `applyDerived()` recomputes max-HP + damage-mult + speed-mult
+      from level + upgrades and pushes them onto the Player. Starting gold 50.
+- [x] **Shop** (`ui/Shop.js`) "Old Owl's Outfitters" — P hotkey (freezes sim) **or** victory-screen button.
+      Tabs All/Weapons/Hero/Supplies; 3 permanent upgrades (max 5 tiers, before→after preview), Laser unlock,
+      8 consumables (heal/shield/ammo packs/fire rounds/tail guard/speed). Buys deduct gold + persist.
+- [x] **Weapon unlock gating** (`weapons/WeaponManager.js`): only weapons in the GM's `unlockedWeapons` set
+      are selectable; Q/wheel skip locked; HUD dims locked slots. Wiring: **Machine Gun** = first rescue,
+      **Toroid** = Bird rescue, **Fire Bullet** = all animals rescued, **Scattergun** = a 3+ multi-kill
+      (`Projectile._detonate` counts blast kills → `onMultiKill`), **Laser** = shop. Default: Acorn + Ganon.
+- [x] **Achievements** (`systems/Achievements.js` + `ui/Toasts.js`): 9-entry catalog; `evaluate(gm)` checks
+      thresholds against counters on every hook (enemy/boss kill, rescue, accurate shot, multi-kill, gold
+      collected/spent); idempotent unlock → toast.
+- [x] **Level-up** (`ECONOMY_SHOP_SPEC §5`): on victory with all animals rescued AND HP > 50% →
+      level+1, +20 max HP, +15% damage, full heal; toast + victory-screen banner.
+- [x] **Plants** (`entities/Plant.js` + `systems/PlantManager.js`, `PLANTS_SPEC`): Bounce Fruit (launch +
+      unlock double-jump — `hasDoubleJump` now defaults **false**), Vitality Berry Bush ×2 (heal 25,
+      touch/shoot), Tail Guard Fruit (60s auto-tail-swing buff — Player auto-swings when an enemy enters
+      range), Oakshield Moss (2-hit shield via `hitShield`), Flame Chili Fern (10 fire-element shots via
+      `elementOverride`). Procedural meshes + glow + respawn timers.
+- [x] **Verified:** `bun build` clean (66 modules); 50 headless logic assertions pass (meta/achievements/
+      save-roundtrip/weapon-gating/consumables/level-up); live CDP test confirms shop (12 cards), plant
+      triggers, rescue/multi-kill unlocks, and a persisted save; headless render shows gold 50 + dimmed
+      locked slots + plants, zero app JS errors.
 
-Specs to read first for M5: `ECONOMY_SHOP_SPEC.md`, `PLANTS_SPEC.md`, `OBSTACLE_PHYSICS_SPEC.md`,
-`GALLERY_SPEC.md`, `SEASONS_SPEC.md`.
+### M5 deferrals (intentional — pushed to M6/polish)
+- **Weapon Gallery** viewer (`GALLERY_SPEC`, hotkey G) — not built; weapons still use the energy-cell tint,
+  not 9 distinct meshes.
+- **Obstacle physics** tree-fire (Fire Bullet ignite) + rock-blast (Boomstick fling) (`OBSTACLE_PHYSICS_SPEC`)
+  — Fire Rounds set FIRE element but don't ignite `burnable` trees yet; no `blowable` rocks.
+- **Starlight Dandelion** (overcharge) + **Mutant Spore Bloom** (mutate enemies to elites) plants — the other
+  2 of the 7-plant catalog; the 5 placed in L1 are done.
+- **Seasons** biome re-skin (`SEASONS_SPEC`) — palettes only; applied with L2/L3 in M6.
+- **Static Harvest** (Toroid energy refund on EMP kills) still deferred. Plant floating text labels use the
+  damage-number system rather than dedicated WorldLabels.
+
+## 6f. M6 — plan (next session starts here)
+
+Goal (`LEVELS_SPEC` L2/L3 + `AUDIO_SPEC` + atmosphere polish): second/third biomes (reuse Arena + apply
+`SEASONS_SPEC` palettes), procedural audio, the Weapon Gallery, and the deferred obstacle-physics interactions.
+Specs to read first: `LEVELS_SPEC.md`, `AUDIO_SPEC.md`, `GALLERY_SPEC.md`, `OBSTACLE_PHYSICS_SPEC.md`, `SEASONS_SPEC.md`.
 
 ## 7. Tuning reference (already in `src/config/Constants.js`)
 
@@ -215,6 +266,10 @@ Specs to read first for M5: `ECONOMY_SHOP_SPEC.md`, `PLANTS_SPEC.md`, `OBSTACLE_
 - **M2 added:** `WEAPONS.ACORN` (10 dmg / 0.3s cd / NATURE), `RECOIL`, `ENEMY_DEFS` (WOOD_SHROOM melee 30hp,
   FIRE_SHROOM ranged 20hp), `COMBAT` (player i-frames 0.6s, enemy radius/separation, level scale 0.15, gold 1–5),
   `JUICE` (impact-freeze 0.05/0.07, hit-stop, slow-mo).
+- **M5 added:** `ECONOMY` (start gold 50, level-clear 30), `UPGRADES` (Sharpened Tips +12%/Tough Hide +25hp/
+  Fleet Footed +7%, 5 tiers, escalating prices), `CONSUMABLES` (8), `SHOP_WEAPONS` (Laser 180g), `ACHIEVEMENTS`
+  (9), `LEVEL_UP` (+20hp/+15% dmg, 50% HP gate), `PLANTS` + `PLANT_PLACEMENT` (L1: 2× berry, bounce, tail-guard,
+  oakshield, flame-chili), `TAIL_GUARD` (range 3.4, warn 5s), `DEFAULT_WEAPON_UNLOCKS` (Acorn+Ganon).
 
 ## 8. Conventions
 

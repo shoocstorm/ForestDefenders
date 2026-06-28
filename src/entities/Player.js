@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER, CAMERA, ARENA, COMBAT, AIM_ASSIST } from '../config/Constants.js';
+import { PLAYER, CAMERA, ARENA, COMBAT, AIM_ASSIST, TAIL_GUARD } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
 import { WeaponManager } from '../weapons/WeaponManager.js';
 import { resolveCircleColliders } from '../util/Collision.js';
@@ -9,14 +9,14 @@ import { clamp, lerp, damp, dampAngle } from '../util/MathUtils.js';
 // run, facing toward movement/aim, and a lightweight procedural locomotion
 // animator that drives the HeroModel pivots (legs, arms, tail, body bob).
 export class Player {
-  constructor(scene, cameraRig) {
+  constructor(scene, cameraRig, unlockedWeapons) {
     this.cameraRig = cameraRig;
     this.position = new THREE.Vector3(0, 0, -ARENA.LENGTH / 2 + 6); // west end
     this.velocity = new THREE.Vector3();
     this.facing = 0;          // yaw of the model
     this.grounded = true;
-    this.jumpsLeft = 2;
-    this.hasDoubleJump = true; // unlocked by default in M1 for testing
+    this.jumpsLeft = 1;
+    this.hasDoubleJump = false; // Bounce-Fruit unlock for the level (PLANTS_SPEC)
     this.speedScale = 1;       // run blend for animation
     this.animTime = 0;
     this.oneShot = null;       // { name, t, dur } for jump/shot/etc later
@@ -26,7 +26,7 @@ export class Player {
     this._spawn = this.position.clone();
     this.dead = false;
 
-    this.weapons = new WeaponManager();
+    this.weapons = new WeaponManager(unlockedWeapons);
     this.weapon = this.weapons.current; // active weapon (mirrored for HUD/firing)
     this._kickCd = 0;
     this._tailCd = 0;
@@ -123,6 +123,20 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
+  // Bounce Fruit (PLANTS_SPEC): unlock double-jump for the rest of the level.
+  unlockDoubleJump() {
+    this.hasDoubleJump = true;
+    if (this.grounded) this.jumpsLeft = 2;
+  }
+
+  // Bounce Fruit launch: fling the player upward and refresh the air jump.
+  bounce(strength) {
+    this.velocity.y = strength;
+    this.grounded = false;
+    this.jumpsLeft = this.hasDoubleJump ? 1 : 0;
+    this.model.playJump?.();
+  }
+
   update(dt, input, ctx) {
     const rig = this.cameraRig;
     if (this._invuln > 0) this._invuln -= dt;
@@ -147,6 +161,12 @@ export class Player {
     else if (wheel < 0) this._setWeapon(this.weapons.prev());
     if (input.wasPressed('KeyV')) this._kick(ctx);
     if (input.wasPressed('KeyR')) this._tailSwing(ctx);
+
+    // Tail Guard Fruit buff: auto-swing the tail when an enemy enters range
+    // (respects the normal tail cooldown), clearing crowders off the player.
+    if (this._tailCd <= 0 && ctx?.gameManager?.timedBuffs?.TAIL_GUARD > 0 && this._enemyInRange(ctx, TAIL_GUARD.RANGE)) {
+      this._tailSwing(ctx);
+    }
 
     const axis = input.moveAxis();
     const running = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
@@ -252,9 +272,27 @@ export class Player {
       const fc = this._fireCtx;
       Object.assign(fc, ctx);
       fc.origin = origin; fc.dir = dir; fc.cameraRig = rig;
+      // Fire Rounds buff (Flame Chili / shop): override shot element to FIRE while
+      // charges remain; one charge is spent per shot that actually leaves the barrel.
+      fc.elementOverride = ctx.gameManager?.fireRounds > 0 ? 'FIRE' : null;
       this.weapon.update(dt, firing, fc);
-      if (this.weapon.justFired) this.model.playShot?.();
+      if (this.weapon.justFired) {
+        this.model.playShot?.();
+        if (ctx.gameManager?.fireRounds > 0) ctx.gameManager.fireRounds -= 1;
+      }
     }
+  }
+
+  // True if any alive enemy is within `range` on the XZ plane (auto-tail-guard).
+  _enemyInRange(ctx, range) {
+    if (!ctx?.enemies) return false;
+    const r2 = range * range;
+    for (const e of ctx.enemies) {
+      if (e.dead) continue;
+      const dx = e.position.x - this.position.x, dz = e.position.z - this.position.z;
+      if (dx * dx + dz * dz < r2) return true;
+    }
+    return false;
   }
 
   // Apply a weapon change from the WeaponManager (null = no change): mirror the

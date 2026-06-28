@@ -96,6 +96,9 @@ export class Animal {
     ctx.gameManager.addGold(gold);
     ctx.player.heal?.(hp);
 
+    // Meta-progression hook (M5): weapon unlocks + rescue achievements.
+    ctx.onAnimalRescued?.(this.type);
+
     // Feedback: rescue burst + floating reward numbers + gold pulse.
     _v.copy(this.position).setY(this.position.y + 0.6);
     ctx.vfx.rescueBurst(_v);

@@ -146,6 +146,8 @@ export class HUD {
           box-shadow:0 0 14px -2px currentColor;transform:translateY(-2px);}
         .fd-slot.active .name{display:inline;}
         .fd-slot .name{display:none;letter-spacing:.5px;}
+        .fd-slot.locked{opacity:.28;filter:grayscale(1);}
+        .fd-slot.locked .key{text-decoration:line-through;}
 
         /* ---- reticle ---- */
         #fd-reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
@@ -398,6 +400,14 @@ export class HUD {
       this.slotEls.forEach((el, i) => el.classList.toggle('active', i === state.weaponIndex));
       L.weaponIndex = state.weaponIndex;
     }
+    // Dim locked weapon slots (M5 unlock gating).
+    if (state.unlocked) {
+      const lockKey = state.unlocked.map((u) => (u ? 1 : 0)).join('');
+      if (lockKey !== L.unlocked) {
+        this.slotEls.forEach((el, i) => el.classList.toggle('locked', !state.unlocked[i]));
+        L.unlocked = lockKey;
+      }
+    }
     const info = state.ammo;
     if (info) {
       if (info.label !== L.ammo) { this.ammoEl.textContent = info.label; L.ammo = info.label; }
@@ -407,13 +417,22 @@ export class HUD {
       if (this.ammoIconEl.textContent !== icon) this.ammoIconEl.textContent = icon;
     }
 
-    // --- Buff pills ---
-    const buffKey = [...(state.buffs || [])].sort().join(',');
+    // --- Buff pills (incl. timed Tail Guard countdown + charge/round counters) ---
+    const tb = state.timedBuffs || {};
+    const tg = tb.TAIL_GUARD ? Math.ceil(tb.TAIL_GUARD) : 0;
+    const fr = state.fireRounds || 0, hs = state.hitShield || 0;
+    const buffKey = [...(state.buffs || [])].sort().join(',') + `|${tg}|${fr}|${hs}`;
     if (buffKey !== L.buffs) {
       L.buffs = buffKey;
-      const label = { SHIELD: '🛡 SHIELD', SPEED: '⚡ SPEED', REVEAL: '👁 REVEAL' };
-      this.buffsEl.innerHTML = [...(state.buffs || [])]
-        .map((b) => `<span class="fd-buff">${label[b] || b}</span>`).join('');
+      const warn = tg > 0 && tg <= 5;
+      const label = {
+        SHIELD: '🛡 SHIELD', SPEED: '⚡ SPEED', REVEAL: '👁 REVEAL',
+        TAIL_GUARD: `🌀 TAIL ${tg}s`, OAKSHIELD: `🛡 GUARD ×${hs}`,
+      };
+      const pills = [...(state.buffs || [])].map((b) =>
+        `<span class="fd-buff"${b === 'TAIL_GUARD' && warn ? ' style="color:#ff7a6a;border-color:#ff7a6a;"' : ''}>${label[b] || b}</span>`);
+      if (fr > 0) pills.push(`<span class="fd-buff" style="color:#ff9a6a;border-color:#ff7a4a;">🔥 FIRE ×${fr}</span>`);
+      this.buffsEl.innerHTML = pills.join('');
     }
 
     // --- Radar ---

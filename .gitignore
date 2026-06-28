@@ -4,3 +4,4 @@ models.bundle
 *.log
 .DS_Store
 .claude
+assets/references/
