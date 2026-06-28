@@ -70,7 +70,7 @@ export function elementMultiplier(attackElement, targetElement) {
   return idx < 0 ? 1.0 : row[idx];
 }
 
-// --- Weapons (WEAPONS_SPEC §2–3). All 9 ship in M4; switching via Q / wheel.
+// --- Weapons (WEAPONS_SPEC §2–3). All 9 ship in M4; switching via number keys 1-9 / Q.
 // `mode` drives the firing behavior in weapons/Weapon.js. `ammo` shapes:
 //   { type:'infinite' } | { type:'magazine', mag, max } |
 //   { type:'overheat', perShot, cool, lockout } | { type:'energy', max, perShot, regen }
@@ -133,7 +133,7 @@ export const WEAPONS = {
   },
 };
 
-// Catalog order for Q / wheel cycling (WEAPONS_SPEC §2 table order).
+// Catalog order for 1-9 selection / Q cycling (WEAPONS_SPEC §2 table order).
 export const WEAPON_ORDER = ['ACORN', 'GANON', 'MACHINE', 'BOOM', 'LASER', 'SHOTGUN', 'FIRE_BULLET', 'BOW', 'TOROID'];
 
 // Shared camera-recoil tuning (JUICE_SPEC §2); per-weapon `recoil` scales it.

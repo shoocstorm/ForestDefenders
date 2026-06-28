@@ -263,10 +263,8 @@ export class Game {
     this.juice.update(realDt);
     const simDt = realDt * this.juice.timeScale;
 
-    // Camera mode switching.
-    if (this.input.wasPressed('Digit1')) this.cameraRig.setMode(CAMERA.FP);
-    if (this.input.wasPressed('Digit2')) this.cameraRig.setMode(CAMERA.TP);
-    if (this.input.wasPressed('Digit3')) this.cameraRig.setMode(CAMERA.TOP);
+    // Camera mode switching — dedicated C key cycles FP → TP → TOP.
+    if (this.input.wasPressed('KeyC')) this.cameraRig.cycleMode();
 
     // ESC for pause menu
     if (this.input.wasPressed('Escape')) this._togglePause();

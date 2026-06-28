@@ -102,14 +102,13 @@ export class HUD {
         #fd-kills-line{margin-top:7px;font-size:12px;letter-spacing:2px;font-weight:700;color:#bfe0a8;}
         #fd-kills{color:#fff;font-weight:800;}
 
-        /* ---- animals (bottom-centre) ---- */
-        #fd-animals{bottom:18px;left:50%;transform:translateX(-50%);text-align:center;min-width:180px;}
-        #fd-animals-row{display:flex;align-items:center;justify-content:center;gap:10px;}
-        #fd-paw{font-size:24px;filter:drop-shadow(0 0 6px #8fe0a055);}
-        #fd-saved{font-size:30px;font-weight:800;color:#9fe8c0;line-height:1;
+        /* ---- animals (merged into the bottom-left score panel) ---- */
+        #fd-animals-row{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:7px;}
+        #fd-paw{font-size:18px;filter:drop-shadow(0 0 6px #8fe0a055);}
+        #fd-saved{font-size:20px;font-weight:800;color:#9fe8c0;line-height:1;
           text-shadow:0 2px 0 #0008,0 0 16px #4fe09a55;}
-        #fd-saved small{font-size:15px;color:#cfeed6;opacity:.8;}
-        #fd-free{margin-top:8px;font-size:12px;font-weight:800;letter-spacing:1.5px;
+        #fd-saved small{font-size:12px;color:#cfeed6;opacity:.8;}
+        #fd-free{margin-top:7px;font-size:12px;font-weight:800;letter-spacing:1.5px;
           color:#0a160e;background:linear-gradient(90deg,#bfe36a,#8fe04a);
           border-radius:8px;padding:5px 12px;display:none;
           box-shadow:0 0 16px #9fe06a66;animation:fdpromptpulse 1.1s ease-in-out infinite;}
@@ -119,7 +118,7 @@ export class HUD {
         @keyframes fdpromptpulse{0%,100%{transform:scale(1);}50%{transform:scale(1.06);}}
 
         /* ---- weapon panel (bottom-right) ---- */
-        #fd-weapon-panel{bottom:18px;right:16px;min-width:268px;}
+        #fd-weapon-panel{bottom:18px;right:16px;min-width:198px;padding:8px 11px;}
         #fd-buffs{display:flex;gap:6px;justify-content:flex-end;margin-bottom:9px;min-height:0;}
         .fd-buff{font-size:10px;font-weight:800;letter-spacing:1px;padding:3px 9px;border-radius:9px;
           background:#0a1810cc;border:1px solid #ffffff2e;color:#dfffc0;white-space:nowrap;
@@ -127,25 +126,25 @@ export class HUD {
         #fd-wpn-head{display:flex;align-items:center;justify-content:flex-end;gap:9px;}
         #fd-element{font-size:10px;font-weight:800;letter-spacing:1.5px;padding:3px 9px;border-radius:8px;
           border:1px solid currentColor;text-transform:uppercase;}
-        #fd-weapon{font-size:18px;font-weight:800;letter-spacing:1px;color:#fff;}
+        #fd-weapon{font-size:15px;font-weight:800;letter-spacing:1px;color:#fff;}
         #fd-ammo-row{display:flex;align-items:flex-end;justify-content:flex-end;gap:10px;margin-top:6px;}
-        #fd-ammo{font-size:34px;font-weight:800;line-height:.9;letter-spacing:1px;}
+        #fd-ammo{font-size:26px;font-weight:800;line-height:.9;letter-spacing:1px;}
         #fd-ammo.low{color:#ff6a5a;animation:fdblink .6s steps(1) infinite;}
         @keyframes fdblink{50%{opacity:.4;}}
         #fd-ammo-icon{font-size:18px;opacity:.85;}
         #fd-ammo-gauge{height:6px;border-radius:4px;background:#00000066;overflow:hidden;
           border:1px solid #ffffff22;margin-top:7px;}
         #fd-ammo-fill{height:100%;width:100%;border-radius:3px;transition:width .12s ease;}
-        #fd-slots{display:flex;gap:6px;justify-content:flex-end;margin-top:11px;flex-wrap:wrap;}
-        .fd-slot{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;
-          padding:4px 7px;border-radius:8px;background:#06120cb0;border:1px solid #ffffff1a;
+        #fd-slots{display:flex;gap:5px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap;}
+        .fd-slot{display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;
+          padding:3px 6px;border-radius:7px;background:#06120cb0;border:1px solid #ffffff1a;
           color:#9bbf8a;transition:all .15s ease;}
         .fd-slot .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none;}
         .fd-slot .key{font-family:monospace;opacity:.7;}
         .fd-slot.active{background:#0e1f14;border-color:currentColor;color:#fff;
           box-shadow:0 0 14px -2px currentColor;transform:translateY(-2px);}
-        .fd-slot.active .name{display:inline;}
-        .fd-slot .name{display:none;letter-spacing:.5px;}
+        /* Name shown in the panel header already — slots stay seq-number only. */
+        .fd-slot .name{display:none;}
         .fd-slot.locked{opacity:.28;filter:grayscale(1);}
         .fd-slot.locked .key{text-decoration:line-through;}
 
@@ -181,8 +180,10 @@ export class HUD {
            count. Panels move into the safe zones: top-left, top-centre, and
            just above the bottom-right button cluster. ---- */
         @media (pointer:coarse){
-          #fd-radar-panel,#fd-score,#fd-badges,#fd-buffs,#fd-wpn-head,
+          #fd-radar-panel,#fd-badges,#fd-buffs,#fd-wpn-head,
           #fd-ammo-gauge,#fd-slots{display:none!important;}
+          /* score panel keeps only the animals counter on touch */
+          #fd-gold-line,#fd-kills-line{display:none!important;}
           /* vitals → top-left */
           #fd-vitals{top:calc(14px + env(safe-area-inset-top));
             left:calc(14px + env(safe-area-inset-left));width:188px;padding:9px 12px;}
@@ -196,8 +197,10 @@ export class HUD {
             backdrop-filter:none;-webkit-backdrop-filter:none;}
           #fd-weapon-panel::before{display:none;}
           #fd-ammo-row{margin-top:0;}#fd-ammo{font-size:26px;}
-          /* animals saved counter → bottom-centre; drop the [E] key hint glyph */
-          #fd-animals{bottom:calc(14px + env(safe-area-inset-bottom));}
+          /* score panel (now just the animals counter) → bottom-centre; drop the [E] hint glyph */
+          #fd-score{left:50%;transform:translateX(-50%);text-align:center;
+            bottom:calc(14px + env(safe-area-inset-bottom));}
+          #fd-animals-row{justify-content:center;margin-top:0;}
           #fd-free b{display:none;}
         }
       </style>
@@ -243,9 +246,6 @@ export class HUD {
           <span class="fd-gold fd-mono" id="fd-gold">0</span>
         </div>
         <div id="fd-kills-line">KILLS <span id="fd-kills" class="fd-mono">0</span></div>
-      </div>
-
-      <div class="fd-panel" id="fd-animals">
         <div id="fd-animals-row">
           <span id="fd-paw">🐾</span>
           <span id="fd-saved" class="fd-mono">0<small>/3 SAFE</small></span>

@@ -8,7 +8,7 @@ import { clamp, damp } from '../util/MathUtils.js';
 export class CameraRig {
   constructor(aspect) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.FOV, aspect, 0.05, 600);
-    this.mode = CAMERA.TP;
+    this.mode = CAMERA.FP;
     // Around world Y; 0 looks toward -Z. Player spawns at the west end (-Z) so
     // start facing +Z toward the arena center (origin). Hero idle-facing follows.
     this.yaw = Math.PI;

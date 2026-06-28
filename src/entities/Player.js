@@ -155,11 +155,11 @@ export class Player {
     this._fwd.normalize();
     this._right.set(-this._fwd.z, 0, this._fwd.x); // screen-right for a -Z forward
 
-    // --- Weapon switch (Q / mouse wheel) + melee (V kick, R tail) ---
+    // --- Weapon switch (number keys 1-9 / Q cycles) + melee (V kick, R tail) ---
+    for (let i = 0; i < this.weapons.weapons.length; i++) {
+      if (input.wasPressed(`Digit${i + 1}`)) this._setWeapon(this.weapons.select(i));
+    }
     if (input.wasPressed('KeyQ')) this._setWeapon(this.weapons.next());
-    const wheel = input.consumeWheel();
-    if (wheel > 0) this._setWeapon(this.weapons.next());
-    else if (wheel < 0) this._setWeapon(this.weapons.prev());
     if (input.wasPressed('KeyV')) this._kick(ctx);
     if (input.wasPressed('KeyR')) this._tailSwing(ctx);
 
