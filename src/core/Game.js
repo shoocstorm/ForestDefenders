@@ -4,7 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
-import { CAMERA } from '../config/Constants.js';
+import { CAMERA, AIM_ASSIST, BUFFS } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
 import { GameManager } from '../systems/GameManager.js';
 import { EnemyManager } from '../systems/EnemyManager.js';
@@ -49,6 +49,8 @@ export class Game {
     this.projectiles = new ProjectilePool(this.scene);
     this.enemies = new EnemyManager(this.scene);
     this.hud = new HUD();
+    // Build the weapon slot strip once from the static roster.
+    this.hud.initWeapons(this.player.weapons.weapons.map((w) => ({ name: w.name, element: w.element })));
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
     this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx);
@@ -253,20 +255,31 @@ export class Game {
 
   _updateHud() {
     this._updateCrosshair();
+    const p = this.player;
     this.hud.update({
-      hp: this.player.hp,
-      maxHp: this.player.maxHp,
-      gold: this.gameManager.gold,
-      enemies: this.enemies.aliveCount,
-      kills: this.gameManager.kills,
-      weapon: this.player.weapon.name,
-      ammo: this.player.weapon.ammoText(),
-      element: this.player.weapon.element,
+      hp: p.hp,
+      maxHp: p.maxHp,
       shield: this.gameManager.shield,
-      buffs: this.gameManager.buffs,
+      maxShield: BUFFS.SHIELD_POWER,
+      gold: this.gameManager.gold,
+      kills: this.gameManager.kills,
+      enemies: this.enemies.aliveCount,
       wave: this.waves.waveNumber || 1,
       totalWaves: this.waves.total,
+      weapon: p.weapon.name,
+      element: p.weapon.element,
+      ammo: p.weapon.ammoInfo(),
+      weaponIndex: p.weapons.index,
+      buffs: this.gameManager.buffs,
       saved: this.animals.savedCount,
+      totalAnimals: this.animals.total,
+      freePrompt: !!this.animals.nearestCaged,
+      aimAssist: AIM_ASSIST.ENABLED,
+      reveal: this.gameManager.reveal,
+      radar: {
+        px: p.position.x, pz: p.position.z, facing: p.facing,
+        enemies: this.enemies.enemies, animals: this.animals.animals,
+      },
     });
   }
 

@@ -33,9 +33,25 @@ export class Input {
     this._onPointerLockChange = () => {
       this.pointerLocked = document.pointerLockElement === this.dom;
     };
-    this._onClickToLock = () => {
-      if (!this.pointerLocked) this.dom.requestPointerLock?.();
+    this._relockTimer = null;
+    this._requestLock = () => {
+      if (this.pointerLocked) return;
+      // requestPointerLock returns a Promise in modern browsers. It rejects with
+      // a SecurityError if called during the browser's post-ESC cooldown
+      // (~1.25s in Chrome). Swallow that and retry once after the cooldown so a
+      // quick click after ESC still re-captures the mouse.
+      const p = this.dom.requestPointerLock?.();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          if (this._relockTimer) return;
+          this._relockTimer = setTimeout(() => {
+            this._relockTimer = null;
+            if (!this.pointerLocked) this.dom.requestPointerLock?.().catch(() => {});
+          }, 1300);
+        });
+      }
     };
+    this._onClickToLock = () => { this._requestLock(); };
 
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);

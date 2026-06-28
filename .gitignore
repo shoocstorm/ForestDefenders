@@ -3,3 +3,4 @@ dist/
 models.bundle
 *.log
 .DS_Store
+.claude

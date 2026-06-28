@@ -43,6 +43,7 @@ export class Player {
     this._fireDir = new THREE.Vector3();
     this._aimTarget = new THREE.Vector3();
     this._toEnemy = new THREE.Vector3();
+    this._fireCtx = {};   // reused weapon-fire context (full game ctx + origin/dir)
 
     // World-space point the reticle marks (locked enemy torso, else a point down
     // the aim ray). The HUD projects this so the crosshair sits on the real aim,
@@ -245,15 +246,13 @@ export class Player {
       else this.aimPoint.copy(origin).addScaledVector(camDir, AIM_ASSIST.RETICLE_DIST);
       const dir = this._fireDir.copy(this.aimPoint).sub(origin).normalize();
 
-      this.weapon.update(dt, firing, {
-        origin,
-        dir,
-        projectiles: ctx.projectiles,
-        vfx: ctx.vfx,
-        cameraRig: rig,
-        enemies: ctx.enemies,
-        juice: ctx.juice,
-      });
+      // Beam weapons damage enemies directly (hit-scan), so the weapon ctx must
+      // carry everything EnemyBase.takeDamage reads (gameManager, damageNumbers,
+      // …). Reuse the full game ctx + the per-shot origin/dir/cameraRig.
+      const fc = this._fireCtx;
+      Object.assign(fc, ctx);
+      fc.origin = origin; fc.dir = dir; fc.cameraRig = rig;
+      this.weapon.update(dt, firing, fc);
       if (this.weapon.justFired) this.model.playShot?.();
     }
   }

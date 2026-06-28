@@ -12,14 +12,39 @@ export class VFX {
     this.active = [];     // particle bursts
     this.lights = [];     // fading flash lights
     this.rings = [];      // expanding shockwave meshes
-    this.beams = [];      // instant hit-scan beams (laser)
     this._ringGeo = new THREE.RingGeometry(0.6, 0.85, 24);
     this._ringGeo.rotateX(-Math.PI / 2);
-    // Unit-length +Y cylinder (centered) reused for every beam — scaled by length
-    // and oriented per shot, positioned at the segment midpoint.
+    // Unit-length +Y cylinder (centered) reused for the laser beam — scaled by
+    // length and oriented per frame, positioned at the segment midpoint.
     this._beamGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 7, 1, true);
     this._beamUp = new THREE.Vector3(0, 1, 0);
     this._beamV0 = new THREE.Vector3();
+    // Persistent laser beam — built once, repositioned/toggled each frame while
+    // firing. Never added/removed per-frame (that would change the scene light
+    // count and force a full material shader recompile every frame → stutter).
+    this._laser = null;
+  }
+
+  _buildLaser() {
+    const group = new THREE.Group();
+    group.visible = false;
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff3a4a, transparent: true,
+      opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true,
+      opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    for (const [mat, radius] of [[glowMat, 0.13], [coreMat, 0.05]]) {
+      const m = new THREE.Mesh(this._beamGeo, mat);
+      m.scale.set(radius / 0.05, 1, radius / 0.05);
+      m.layers.enable(BLOOM_LAYER);
+      group.add(m);
+    }
+    // One persistent muzzle-glow light (intensity toggled, never re-added).
+    const light = new THREE.PointLight(0xff3a4a, 0, 6, 2);
+    this.scene.add(group);
+    this.scene.add(light);
+    this._laser = { group, glow: group.children[0], core: group.children[1],
+      glowMat, coreMat, light, ttl: 0 };
+    return this._laser;
   }
 
   _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2 }) {
@@ -107,23 +132,25 @@ export class VFX {
     for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : color, radius * (1.4 + i * 0.4), 0.35 + i * 0.12);
   }
 
-  // Instant beam (Laser Rifle): a thin glowing cylinder origin→end that flashes out.
+  // Sustained laser beam (Laser Rifle): reposition the ONE persistent beam object
+  // each frame the weapon fires. No per-frame allocation / scene mutation, so the
+  // light count is stable and materials never recompile (the old per-frame version
+  // froze the renderer). Held briefly via ttl so it reads as a continuous beam and
+  // fades out a few frames after firing stops.
   beam(origin, end, color = 0xff3a4a) {
+    const L = this._laser || this._buildLaser();
     const dir = this._beamV0.subVectors(end, origin);
     const len = dir.length();
-    if (len < 0.01) return;
-    const mat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(this._beamGeo, mat);
-    mesh.scale.set(1, len, 1);
-    mesh.position.copy(origin).addScaledVector(dir, 0.5);
-    mesh.quaternion.setFromUnitVectors(this._beamUp, dir.normalize());
-    mesh.layers.enable(BLOOM_LAYER);
-    this.scene.add(mesh);
-    this.beams.push({ mesh, life: 0.09, maxLife: 0.09 });
-    this._flash(end, color, 10, 4);
+    if (len < 0.05) return;
+    L.glowMat.color.setHex(color);
+    L.light.color.setHex(color);
+    L.glow.scale.y = len;
+    L.core.scale.y = len;
+    L.group.position.copy(origin).addScaledVector(dir, 0.5);
+    L.group.quaternion.setFromUnitVectors(this._beamUp, dir.normalize());
+    L.light.position.copy(origin);
+    L.group.visible = true;
+    L.ttl = 0.05; // refreshed every fire frame; decays a hair after release
   }
 
   hitSpark(pos, color = 0xffffff) {
@@ -206,16 +233,21 @@ export class VFX {
       }
     }
 
-    // Beams: hold a moment then flash out.
-    for (let i = this.beams.length - 1; i >= 0; i--) {
-      const b = this.beams[i];
-      b.life -= dt;
-      if (b.life <= 0) {
-        this.scene.remove(b.mesh);
-        b.mesh.material.dispose();
-        this.beams.splice(i, 1);
+    // Persistent laser: fade the held beam out over its ttl, then hide it (kept in
+    // the scene — never removed — so the light count stays constant).
+    const L = this._laser;
+    if (L && L.group.visible) {
+      L.ttl -= dt;
+      if (L.ttl <= 0) {
+        L.group.visible = false;
+        L.light.intensity = 0;
       } else {
-        b.mesh.material.opacity = 0.9 * (b.life / b.maxLife);
+        const f = Math.min(1, L.ttl / 0.05);
+        L.glowMat.opacity = 0.5 * f;
+        L.coreMat.opacity = 1.0 * f;
+        L.light.intensity = 7 * f;
+        // Subtle core flicker so the beam looks like live energy, not a static bar.
+        L.core.scale.x = L.core.scale.z = 1 + Math.sin(performance.now() * 0.05) * 0.15;
       }
     }
 

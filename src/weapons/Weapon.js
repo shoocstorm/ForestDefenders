@@ -23,6 +23,8 @@ export class Weapon {
     // Per-weapon scratch (no per-frame allocation in the hot path).
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
+    this._end = new THREE.Vector3();   // beam endpoint (kept distinct from _v1/_v2,
+                                       // which _beamDamage reuses while scanning)
     this._right = new THREE.Vector3();
     this._up = new THREE.Vector3();
     this._dir = new THREE.Vector3();
@@ -100,6 +102,29 @@ export class Weapon {
     return '∞';
   }
 
+  // Structured ammo readout for the rich HUD weapon panel. `ratio` (0..1) drives a
+  // small fill gauge; `low` flags the danger tint; `kind` selects the icon/label.
+  ammoInfo() {
+    const a = this.ammo;
+    if (a.type === 'magazine') {
+      const reloading = a.reloading > 0;
+      return { kind: 'mag', label: reloading ? 'RELOADING' : `${a.mag}/${a.reserve}`,
+        primary: a.mag, secondary: a.reserve, ratio: this._clip ? a.mag / this._clip : 0,
+        reloading, low: !reloading && a.mag <= Math.max(1, this._clip * 0.25) };
+    }
+    if (a.type === 'overheat') {
+      const locked = a.locked > 0, h = Math.round(a.heat);
+      return { kind: 'heat', label: locked ? 'OVERHEAT' : `${h}%`,
+        ratio: 1 - a.heat / 100, low: locked || a.heat >= 75, danger: locked };
+    }
+    if (a.type === 'energy') {
+      const max = this.def.ammo.max;
+      return { kind: 'energy', label: `${Math.round(a.energy)}`,
+        ratio: max ? a.energy / max : 0, low: a.energy < this.def.ammo.perShot };
+    }
+    return { kind: 'infinite', label: '∞', ratio: 1, low: false };
+  }
+
   // --- Firing dispatch ----------------------------------------------------
   _fire(ctx, mult, extra) {
     switch (this.def.mode) {
@@ -161,14 +186,18 @@ export class Weapon {
     this._wasFiring = firing;
     if (!firing || !this._canFire()) return;
     const d = this.def;
-    const end = this._v2.copy(ctx.origin).addScaledVector(ctx.dir, d.beamRange);
+    // Stop the beam at the first enemy it strikes (so it visibly terminates on a
+    // target instead of always shooting to max range). _beamDamage returns the
+    // nearest hit distance, or beamRange when it hits nothing.
+    const hitDist = this._cd <= 0 ? this._beamDamage(ctx) : (this._lastBeamDist ?? d.beamRange);
+    this._lastBeamDist = hitDist;
     if (this._cd <= 0) {
-      this._beamDamage(ctx);
       this._cd = d.cooldown;
       this.justFired = true;
       ctx.cameraRig.addRecoil(d.recoil);
     }
-    ctx.vfx.beam(ctx.origin, end, d.color);
+    const end = this._end.copy(ctx.origin).addScaledVector(ctx.dir, hitDist);
+    ctx.vfx.beam(ctx.origin, end, d.color); // persistent beam (no per-frame alloc)
   }
 
   _beamDamage(ctx) {
@@ -188,5 +217,10 @@ export class Weapon {
       hits[i].e.takeDamage(d.damage, d.element, ctx);
       ctx.vfx.hitSpark(this._v1.copy(o).addScaledVector(dir, hits[i].t), d.color);
     }
+    // Beam terminates just past the last penetrated enemy (or max range if it
+    // penetrated all hits / hit nothing).
+    if (hits.length === 0) return d.beamRange;
+    const lastIdx = Math.min(hits.length, d.penetrate) - 1;
+    return Math.min(d.beamRange, hits[lastIdx].t + 0.6);
   }
 }
