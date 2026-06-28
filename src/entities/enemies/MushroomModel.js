@@ -12,8 +12,8 @@ import { buildProceduralMushroom } from './ProceduralMushroom.js';
 // and face the player's -Z game-forward convention (180° Y flip) so the existing
 // facing-yaw math in EnemyBase is unchanged.
 
-// Fire & Earth have no GLB anymore — route them to the procedural builder.
-const PROCEDURAL = new Set(['FIRE_SHROOM', 'EARTH_SHROOM']);
+// Fire, Earth, Water, Ice & Metal have no GLB — route them to the procedural builder.
+const PROCEDURAL = new Set(['FIRE_SHROOM', 'EARTH_SHROOM', 'WATER_SHROOM', 'ICE_SHROOM', 'METAL_SHROOM']);
 
 const TYPE = {
   WOOD_SHROOM:  { asset: 'woodShroom', height: 1.25 },

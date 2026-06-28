@@ -11,11 +11,12 @@ const COLLECT_DIST = 0.7;
 const TORSO_Y = 1.05;      // aim above the player's feet so coins sweep low-screen
 
 export class Loot {
-  constructor(scene, gameManager, hud, vfx) {
+  constructor(scene, gameManager, hud, vfx, audio) {
     this.scene = scene;
     this.gameManager = gameManager;
     this.hud = hud;
     this.vfx = vfx;
+    this._audio = audio;
     this.items = [];
     // A flat, faceted coin reads unambiguously as gold and flashes as it spins.
     this._geo = new THREE.CylinderGeometry(0.15, 0.15, 0.045, 10);
@@ -79,6 +80,7 @@ export class Loot {
           this.gameManager.addGold(1);
           this.hud?.pulseGold();
           this.vfx?.hitSpark?.(it.mesh.position, 0xffd24a);
+          this._audio?.coin();
           this.scene.remove(it.mesh);
           this.items.splice(i, 1);
           continue;

@@ -21,12 +21,14 @@ export class GameManager {
   resetMeta() {
     this.gold = ECONOMY.STARTING_GOLD;
     this.playerLevel = 1;
-    this.level = 0;                     // campaign level → enemy scaling (L1 = 0)
+    this.level = 0;                     // campaign level → enemy scaling + biome (L1=0, L2=1, L3=2)
     this.upgrades = { DAMAGE: 0, HP: 0, SPEED: 0 };
     this.unlockedWeapons = new Set(DEFAULT_WEAPON_UNLOCKS);
     this.clearedLevelsMask = 0;
     this.currentWeapon = 0;
     this.goldenKeys = 0;
+    // Audio settings (AUDIO_SPEC §5).
+    this.settings = { vol_master: 0.9, vol_sfx: 0.9, vol_music: 0.6, vol_ambient: 0.65 };
     // Achievement counters (ECONOMY_SHOP_SPEC §4.2).
     this.enemiesDefeatedTotal = 0;
     this.rescuedAnimalsTotal = 0;
@@ -219,6 +221,7 @@ export class GameManager {
       accurate_shots: this.accurateShots,
       cleared_levels_mask: this.clearedLevelsMask,
       golden_keys: this.goldenKeys,
+      settings: this.settings,
     };
   }
 
@@ -241,5 +244,6 @@ export class GameManager {
     this.multiKills = d.multi_kills ?? 0;
     this.accurateShots = d.accurate_shots ?? 0;
     this.goldenKeys = d.golden_keys ?? 0;
+    if (d.settings) this.settings = { ...this.settings, ...d.settings };
   }
 }

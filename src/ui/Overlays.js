@@ -5,9 +5,10 @@
 // confetti; defeat shakes with a red ember pulse. Both offer a Retry/Continue
 // that calls back into Game.resetLevel.
 export class Overlays {
-  constructor(onRestart, onShop) {
+  constructor(onRestart, onShop, onNext) {
     this.onRestart = onRestart;
     this.onShop = onShop;
+    this.onNext = onNext;
     this.root = document.createElement('div');
     this.root.style.cssText =
       'position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;' +
@@ -149,7 +150,12 @@ export class Overlays {
     this.btn = this.root.querySelector('#ov-btn');
     this.shopBtn = this.root.querySelector('#ov-shop');
     this.confetti = this.root.querySelector('#ov-confetti');
-    this.btn.addEventListener('click', () => { this.hide(); this.onRestart?.(); });
+    this.btn.addEventListener('click', () => {
+      this.hide();
+      // Mid-campaign victory: advance to the next level. Final/defeat: restart.
+      if (this._useNext && this.onNext) this.onNext();
+      else this.onRestart?.();
+    });
     // Shop opens over the victory screen and stays up until the player closes it.
     this.shopBtn.addEventListener('click', () => this.onShop?.());
   }
@@ -224,8 +230,9 @@ export class Overlays {
   }
 
   showVictory(s) {
-    this.title.textContent = 'LEVEL 1 CLEAR!';
-    this.title.style.color = '#a8e063';
+    const isFinal = s.isFinal;
+    this.title.textContent = isFinal ? '🏆 CAMPAIGN COMPLETE!' : `LEVEL ${s.levelNum} CLEAR!`;
+    this.title.style.color = isFinal ? '#ffd24a' : '#a8e063';
     this._renderStars(s.stars);
     this.body.innerHTML =
       `<div class="ov-stat">Animals saved <b>${s.saved}/${s.total}</b></div>` +
@@ -235,10 +242,12 @@ export class Overlays {
     this.rankEl.innerHTML = `RANK <span style="color:#ffd24a">${s.rank}</span>`;
     this.levelupEl.textContent = s.leveledUp ? `⬆ LEVEL UP! You are now level ${s.playerLevel}` : '';
     this.levelupEl.classList.toggle('show', !!s.leveledUp);
-    this.btn.textContent = 'PLAY AGAIN';
+    // Final level: "Play Again" restarts; mid-campaign: "Continue" advances.
+    this.btn.textContent = isFinal ? 'PLAY AGAIN' : 'CONTINUE ▶';
+    this._useNext = !isFinal;  // mid-campaign → advance; final → restart
     this._show('victory');
     this.confetti.innerHTML = '';
-    this._confettiBurst();
+    this._confettiBurst(isFinal ? 150 : 90);
   }
 
   showDefeat(s) {

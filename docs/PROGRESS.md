@@ -4,7 +4,11 @@
 > work session so a fresh conversation can continue without re-deriving context.
 
 **Last updated:** 2026-06-28
-**Current milestone:** M5 complete ✅ · next up: **M6 — Full campaign & audio**
+**Current milestone:** M6 complete ✅ · **all milestones shipped**
+
+> M6 ships the full 3-level campaign (L1 Misty Forest → L2 Ember Hollow → L3
+> Ancient Grove), procedural 3-bus audio, the Weapon Gallery, and biome re-skinning
+> via a shared `BIOMES` palette. Polish + content expansions continue from here.
 
 ---
 
@@ -44,46 +48,67 @@ bun run build    # bundle to dist/, then npx http-server dist/
 src/
   main.js               entry: instantiates Game, exposes window.__game for debugging
   core/
-    Game.js             renderer, scene, fixed-step loop (1/60), ambient petals, stats HUD, resize
+    Game.js             renderer, scene, fixed-step loop (1/60), biome-themed ambient particles, stats HUD, resize;
+                        owns campaign flow (campaignLevel, loadLevel, _advanceCampaign, _onVictory/_onDefeat)
     Input.js            keyboard/mouse, pointer-lock, edge-triggered (wasPressed) + held state
     CameraRig.js        FP/TP/TOP modes, mouse-look (yaw/pitch), shake(trauma)/recoil hooks, getAimDirection()
-  config/Constants.js   PLAYER/CAMERA/ARENA tuning + ELEMENT_MATRIX + elementMultiplier()
+  config/Constants.js   PLAYER/CAMERA/ARENA tuning + ELEMENT_MATRIX + elementMultiplier() + BIOMES + CAMPAIGN
   util/MathUtils.js     clamp, lerp, damp, dampAngle, randRange, randInt, pick
-  world/Arena.js        Misty Forest: ground, lights+shadows, fog, trees(+collider data), platform, boss landmark, spawn rings
+  world/Arena.js        biome-driven (M6): ctor takes biomeKey, reads BIOMES palette for sky/fog/lights/ground/
+                        path/boundary/trees/water/landmark/rings/lanterns/platform/fireflies; dispose() tears down
+                        via userData.arenaOwned tag. Landmarks: mushroom (L1), burning tree (L2), portal (L3)
+  world/Vegetation.js   M6: biome palette overrides bark/leaf colors per biome
+  world/Water.js        M6: biome palette (color/emissive/rock)
+  world/Lanterns.js     M6: biome palette (lit/unlit/post/light colors + intensity)
   entities/
     HeroModel.js        procedural "Squrriel" (primitives) with named pivots: torso/head/tail/armL/armR/legL/legR/gun/muzzle
-    Player.js           camera-relative movement, jump+double-jump, facing, locomotion animator; holds hp/maxHp; owns Acorn weapon + takeDamage (i-framed, respawns at 0)
+    Player.js           camera-relative movement, jump+double-jump, facing, locomotion animator; holds hp/maxHp; owns weapons + takeDamage (i-framed, respawns at 0)
     EnemyBase.js        HealthComponent + PURSUE/ATTACK AI, boids separation, anti-stuck veer, hit-squash/flash, death sequence (gold+spore+freeze+squash-flop), level scaling
     enemies/
-      MushroomModel.js  buildMushroom() — wood/boss/glow clone their GLB; FIRE/EARTH dispatch to ProceduralMushroom
-      ProceduralMushroom.js  buildProceduralMushroom() — fire/earth built from primitives (cap/stem/face/legs/arms/prop) with real AnimationClips (idle/walk/attack/hit/dying) on a mixer; replaces the >2MB fire/earth GLBs
+      MushroomModel.js  buildMushroom() — wood/boss/glow clone their GLB; FIRE/EARTH/WATER/ICE/METAL dispatch to ProceduralMushroom
+      ProceduralMushroom.js  buildProceduralMushroom() — fire/earth/water/ice/metal built from primitives (cap/stem/face/legs/arms/prop)
+                              with real AnimationClips (idle/walk/attack/hit/dying) on a mixer. M6 adds bubble/crystal/spikes cap props.
       WoodShroom.js     WOOD melee (vine slash)
       FireShroom.js     FIRE ranged (lobs enemy-team fireball projectile)
+      WaterShroom.js    M6: WATER ranged water jet (knockback)
+      IceShroom.js      M6: ICE ranged icicle (FIRE-vulnerable)
+      MetalShroom.js    M6: METAL tanky melee slam (PHYSICAL-resistant)
   combat/
     HealthComponent.js  dumb HP pool (subtract/heal + onDeath/onChange); damage pipeline lives in EnemyBase.takeDamage
   weapons/
-    Weapon.js           base: cooldown + auto/semi fire mode → spawns projectile + muzzle flash + camera recoil
-    Acorn.js            default NATURE single-shot (WEAPONS.ACORN)
-    Projectile.js       ProjectilePool — team-aware ('player'→enemies, 'enemy'→player), pooled meshes + point light, sphere hit test
+    Weapon.js           base: cooldown + auto/semi fire mode → spawns projectile + muzzle flash + camera recoil + audio.shoot
+    Projectile.js       ProjectilePool — team-aware, pooled meshes + point light, sphere hit test; AOE _detonate() plays zap/explosion
   vfx/
     VFX.js              pooled additive particle bursts + flash lights + shockwave rings: muzzleFlash / hitSpark / spore (simplified)
-    Loot.js             gold "acorn" drops that scatter then magnetize to camera → GameManager.gold + HUD pulse
-    SaveManager.js      M5: localStorage JSON store ('forestdefender_save'); GameManager owns the schema (toSave/loadSave)
-    Achievements.js     M5: catalog (Constants.ACHIEVEMENTS) + idempotent unlock + evaluate(gm) vs counters; fires toast
-    PlantManager.js     M5: spawns/updates level plants; routes touch/shoot triggers → Player/GameManager effects
+    Loot.js             gold "acorn" drops that scatter then magnetize to camera → GameManager.gold + HUD pulse + audio.coin
+    SaveManager.js      localStorage JSON store ('forestdefender_save'); GameManager owns the schema (toSave/loadSave)
+    Achievements.js     catalog (Constants.ACHIEVEMENTS) + idempotent unlock + evaluate(gm) vs counters; fires toast
+    PlantManager.js     spawns/updates level plants; routes touch/shoot triggers → Player/GameManager effects
+  audio/
+    AudioSystem.js      M6: 3-bus engine (SFX/Music/Ambient) summed at master gain; lazy AudioContext resumed on first
+                        gesture; forwards start/stop/update to its sub-controllers; volume settings persist
+    SFX.js              M6: synthesized one-shots — 9 weapons, hit/hurt/death(explosion/zap)/jump/melee/pickup/coin/
+                        cascade/ui/star-chime/rescue/level-up/achievement; compressor on the bus
+    Music.js            M6: generative — look-ahead scheduler (pad+bass+arp), cross-fading channel pairs, per-biome
+                        tonal character (L1 major penta / L2 A minor tense / L3 G minor epic / victory+defeat stingers)
+    Ambient.js          M6: biome beds — drone osc + LFO-filtered noise wind + randomized events (bird/crackle/chime)
   ui/
     DamageNumbers.js    DOM floating combat text (white/green WEAK!/yellow EFFECTIVE/red RESIST), world→screen projected
-    HUD.js              DOM overlay: HP bar (color ramp), gold, enemies/kills, weapon/ammo (locked slots dimmed), buff/timed-buff pills, crosshair, vignette
-    Shop.js             M5: "Old Owl's Outfitters" overlay (P / victory button) — upgrade + weapon + consumable cards, gold balance, tabs
-    Toasts.js           M5: achievement / weapon-unlock / level-up notification queue
+    HUD.js              DOM overlay: HP bar (color ramp), gold, enemies/kills, weapon/ammo (locked slots dimmed), buff/timed-buff pills, crosshair, vignette, level name+num
+    Shop.js             "Old Owl's Outfitters" overlay (P / victory button) — upgrade + weapon + consumable cards, gold balance, tabs
+    Toasts.js           achievement / weapon-unlock / level-up notification queue
+    Gallery.js          M6: weapon model viewer (G) — separate Three.js scene + turntable + rim lights; A/D/arrows cycle;
+                        locked weapons render as silhouettes with "???" + unlock hint
+    WeaponMeshes.js     M6: buildWeaponMesh(id) — distinct procedural mesh per weapon (Acorn/Ganon/Machine/Boom/Laser/Shotgun/Fire-Bullet/Bow/Toroid)
+    Overlays.js         victory/defeat screens — Continue (mid-campaign) / Play Again (final) / 🏆 CAMPAIGN COMPLETE!
   systems/
     Juice.js            global timeScale (impactFreeze/hitStop/slowMo, token-guarded) — Game scales sim dt by it
-    GameManager.js      gold, kills, level (enemy scaling), playerDamageMult
-    EnemyManager.js     enemy list: spawn / update / reap; exposes list on ctx for separation
-    GameManager.js      (M5) split into META (gold/level/upgrades/unlocks/achievement counters, persisted) +
+    GameManager.js      META (gold/level/upgrades/unlocks/achievement counters/audio settings, persisted) +
                         RUN (shield/buffs/fire-rounds/hit-shield, reset per level); applyDerived() pushes maxHp/dmg to Player
+    EnemyManager.js     enemy list: spawn / update / reap; exposes list on ctx for separation
+    WaveManager.js      M6: biome-agnostic 3-wave driver — ctor takes (waves, level); onWaveStart/onAllCleared hooks
   entities/
-    Plant.js            M5: interactive plant prop (procedural) — Bounce/Vitality/Tail-Guard/Oakshield/Flame-Chili; touch/shoot + respawn
+    Plant.js            interactive plant prop (procedural) — Bounce/Vitality/Tail-Guard/Oakshield/Flame-Chili; touch/shoot + respawn
 ```
 
 **Key integration points already in place for later milestones:**
@@ -96,6 +121,12 @@ src/
 - `Player`: `hasDoubleJump` now defaults `false` and is unlocked per-level by the Bounce Fruit plant (M5 done).
 - `GameManager.applyDerived(player)` pushes meta-derived max-HP/damage/speed onto the Player; the shop +
   level-up just bump the inputs and re-derive. `Game._persist()` writes the save (call after any meta change).
+- `Arena(scene, biomeKey)` (M6) — biome re-skin driver; `biomeKey ∈ {'L1','L2','L3'}`. `Arena.dispose()`
+  tears down everything it added (used by `Game.loadLevel` on campaign advance).
+- `Game.audio` (M6) — 3-bus procedural engine; safe to call any method pre-resume (no-op until the first
+  user gesture). `audio.startMusic(trackKey)` / `startAmbient(biomeKey)` cross-fade; keys: `'L1'|'L2'|'L3'|'menu'|'victory'|'defeat'`.
+- `CAMPAIGN[idx]` (M6) — `{ biome, waves: ()=>[...], name }`; `Game.campaignLevel` is the active index and
+  also drives enemy stat scaling via `gm.level`.
 
 ## 4. Milestone roadmap
 
@@ -106,7 +137,7 @@ src/
 | **M3 — Level 1 loop** | Set pieces, 3-wave spawner, animals to rescue, victory/defeat + rescue scoring, full L1 playthrough | ✅ done |
 | **M4 — Weapons & juice** | All 9 weapons + switching, kick/tail melee, camera recoil/shake/hit-stop/slow-mo, muzzle flashes, full spore-death VFX | ✅ done |
 | **M5 — Economy & systems** | Shop, permanent upgrades, plants, achievements, save/load, level-up, weapon unlock gating | ✅ done |
-| **M6 — Full campaign & audio** | L2/L3 biomes, procedural audio, ambient particles, atmosphere/bloom polish | ⬜ |
+| **M6 — Full campaign & audio** | L2/L3 biomes, procedural audio, ambient particles, atmosphere/bloom polish | ✅ done |
 
 ## 5. M1 — done
 
@@ -250,11 +281,61 @@ src/
 - **Static Harvest** (Toroid energy refund on EMP kills) still deferred. Plant floating text labels use the
   damage-number system rather than dedicated WorldLabels.
 
-## 6f. M6 — plan (next session starts here)
+## 6f. M6 — done
 
-Goal (`LEVELS_SPEC` L2/L3 + `AUDIO_SPEC` + atmosphere polish): second/third biomes (reuse Arena + apply
-`SEASONS_SPEC` palettes), procedural audio, the Weapon Gallery, and the deferred obstacle-physics interactions.
-Specs to read first: `LEVELS_SPEC.md`, `AUDIO_SPEC.md`, `GALLERY_SPEC.md`, `OBSTACLE_PHYSICS_SPEC.md`, `SEASONS_SPEC.md`.
+- [x] **3-level campaign + biome re-skin** (`config/Constants.js` `BIOMES` + `CAMPAIGN`,
+      `world/Arena.js` rewrite, `world/Vegetation.js`/`Water.js`/`Lanterns.js` palette hooks):
+  L1 Misty Forest, L2 Ember Hollow (charred autumn), L3 Ancient Grove (moonlit winter). The
+  Arena now takes a `biomeKey` and reads every color/light/landmark/water/lantern/ambient-fall
+  value from a `BIOMES[id]` palette (SEASONS_SPEC), so the same layout re-skins per biome.
+  Per-biome landmarks: colossal violet **mushroom** (L1), **burning tree** with flicker light
+  (L2), **magic portal** with swirling disc + runestones (L3). `Arena.dispose()` tags every
+  owned object via `userData.arenaOwned` and tears them down on level transitions.
+- [x] **Campaign flow + multi-level progression** (`systems/WaveManager.js`, `core/Game.js`):
+  WaveManager now takes a `waves` array + `level` index (was hard-coded to `LEVEL1_WAVES`).
+  Game tracks `campaignLevel`, advances L1→L2→L3 on victory-Continue, and rebuilds the world
+  in place via `loadLevel(idx)` (renamed from `resetLevel`). Each level scales enemy stats via
+  `gm.level`. `LEVEL2_WAVES`/`LEVEL3_WAVES` add Water/Ice/Metal shrooms + tighter spawn delays.
+- [x] **Three new enemy types** (`entities/enemies/WaterShroom.js` / `IceShroom.js` /
+      `MetalShroom.js` + `ProceduralMushroom.js` palettes + `MushroomModel.js` routing):
+  WATER_SHROOM (ranged water jet w/ knockback), ICE_SHROOM (ranged icicle, FIRE-vulnerable),
+  METAL_SHROOM (tanky melee slam, PHYSICAL-resistant). Procedural meshes gain `bubble`,
+  `crystal`, and `spikes` cap props; the slam wind-up clip is shared with Earth (`isTank`).
+- [x] **Procedural audio engine** (`audio/AudioSystem.js` + `SFX.js` + `Music.js` + `Ambient.js`):
+  3-bus architecture (SFX / Music / Ambient) summed at a master gain, all synthesized via Web
+  Audio — no external files. `AudioContext` resumes on the first user gesture (browser autoplay
+  policy). SFX covers all 9 weapons' shoot character + hit/hurt/death/explosion/zap/jump/melee/
+  pickup/coin/cascade/ui/star-chime/rescue/level-up/achievement. **Generative music** uses a
+  look-ahead scheduler with cross-fading channel pairs (pad/bass/arpeggio per biome — major
+  pentatonic for L1, A minor + tense for L2, G minor pentatonic + epic for L3, + victory/defeat
+  stingers). **Ambient beds** layer drone + filtered wind (LFO gusts) + randomized biome events
+  (bird chirps / fire crackle / crystal chimes). Volume settings persist in the save.
+- [x] **Weapon Gallery** (`ui/Gallery.js` + `ui/WeaponMeshes.js`, hotkey **G**):
+  separate lightweight Three.js scene with rim lighting on a rotating turntable. Cycles all 9
+  weapons via on-screen buttons **or A/D/arrow keys**. Locked weapons render as a dark silhouette
+  with "???" + their unlock hint. `WeaponMeshes.js` builds a distinct procedural mesh per weapon
+  (Acorn/Ganon/Machine/Boom/Laser/Shotgun/Fire-Bullet/Bow/Toroid) — no GLB assets.
+- [x] **Biome-themed ambient particles** (`Game._buildAmbientFall(biome)`):
+  petals (L1), glowing ash cinders (L2), glowing leaves (L3) — color/size/opacity from the biome.
+- [x] **HUD level indicator** — top bar now shows the current biome name + level number.
+- [x] **Victory/defeat overlays updated** — "LEVEL N CLEAR!" with a Continue button mid-campaign;
+  final level shows "🏆 CAMPAIGN COMPLETE!" and Play Again. Confetti count scales with the finale.
+- [x] **Verified:** `bun build` clean (75 modules); headless SwiftShader render is healthy
+  (mean brightness 68.2/255, 0.91% black pixels → PostFX beauty pass intact); 18/18 audio smoke
+  assertions pass (Music look-ahead scheduler, Ambient event timer, cross-fades, all SFX paths,
+  volume/duck, pre-resume safety, stop paths).
+
+### M6 deferrals (intentional — open for polish/content)
+- **Obstacle physics** (Fire Bullet ignite `burnable` trees + Boomstick fling `blowable` rocks,
+  `OBSTACLE_PHYSICS_SPEC`) — still not implemented; no `burnable`/`blowable` tags exist yet.
+- **Starlight Dandelion** (overcharge) + **Mutant Spore Bloom** (mutate elites) plants — the other
+  2 of the 7-plant catalog; only the 5 placed in L1 ship.
+- **Static Harvest** (Toroid energy-refund orbs on EMP-stunned kills) — still deferred.
+- **Boss fights** per biome — L2/L3 use heavy mixed waves + multiple Earth bosses but no unique
+  boss mechanics/healthbars; the landmarks are set dressing.
+- **Audio settings UI** — volume is persisted and applied but no in-game slider panel yet (the
+  spec's `vol_master/sfx/music/ambient` keys are wired but not user-editable beyond save edits).
+- **Seasons mid-level** — `SEASONS_SPEC` is applied per-biome only, not as a time-of-day cycle.
 
 ## 7. Tuning reference (already in `src/config/Constants.js`)
 
@@ -270,6 +351,13 @@ Specs to read first: `LEVELS_SPEC.md`, `AUDIO_SPEC.md`, `GALLERY_SPEC.md`, `OBST
   Fleet Footed +7%, 5 tiers, escalating prices), `CONSUMABLES` (8), `SHOP_WEAPONS` (Laser 180g), `ACHIEVEMENTS`
   (9), `LEVEL_UP` (+20hp/+15% dmg, 50% HP gate), `PLANTS` + `PLANT_PLACEMENT` (L1: 2× berry, bounce, tail-guard,
   oakshield, flame-chili), `TAIL_GUARD` (range 3.4, warn 5s), `DEFAULT_WEAPON_UNLOCKS` (Acorn+Ganon).
+- **M6 added:** `BIOMES.{L1,L2,L3}` (full biome palettes — sky/fog/sun/hemi/fill, ground/path/boundary,
+  trees, water, landmark {mushroom|tree|portal}, ring, lantern, platform, firefly, ambientFall),
+  `CAMPAIGN` (3-level index → biome + waves), `LEVEL2_WAVES` + `LEVEL3_WAVES` (Water/Ice/Metal mixes),
+  `ENEMY_DEFS` extended (WATER_SHROOM jet w/ knockback 7, ICE_SHROOM icicle, METAL_SHROOM tank 45hp),
+  `RECOIL` re-tuned to a low-amplitude feel (BACK 0.02 / PITCH 0.001 / YAW 0.001 / FOV 0.1 / RETURN 18),
+  `GameManager.settings` (vol_master/sfx/music/ambient persisted via the save).
+  Audio defaults: master 0.9 / sfx 0.9 / music 0.4 / ambient 0.55.
 
 ## 8. Conventions
 

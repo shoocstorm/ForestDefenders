@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
+import { ARENA, BLOOM_LAYER, BIOMES } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
 import { toon } from '../materials/CelMaterial.js';
 import { clone } from '../core/Assets.js';
@@ -7,19 +7,24 @@ import { Vegetation } from './Vegetation.js';
 import { Water } from './Water.js';
 import { Lanterns } from './Lanterns.js';
 
-// Misty Forest arena (LEVELS_SPEC L1). M1 scope: ground, sky, fog, lighting,
-// boundary, scattered trees, a raised central platform with stairs, and a
-// boss-end landmark placeholder. Set-piece detail expands in M3.
+// Biome-driven arena (LEVELS_SPEC). M1–M5 hard-coded L1 Misty Forest; M6 adds L2
+// Ember Hollow + L3 Ancient Grove by re-skinning all 7 set pieces from a BIOMES
+// palette (SEASONS_SPEC). The same geometry layout + collider structure is reused;
+// only colors, lights, water, landmark, rings, lanterns, and ambient particles
+// change per biome. Constructor takes a biome key ('L1' | 'L2' | 'L3').
 export class Arena {
-  constructor(scene) {
+  constructor(scene, biomeKey = 'L1') {
     this.scene = scene;
-    this.colliders = []; // {type:'cylinder', x, z, r} tree trunks etc. (used later)
+    this.biomeKey = biomeKey;
+    this.biome = BIOMES[biomeKey] || BIOMES.L1;
+    this.colliders = [];
+    this._t = 0;
     this._build();
   }
 
   // Per-frame ambient motion: tree sway, water ripple, lantern/ring pulse, fireflies.
   update(dt) {
-    this._t = (this._t || 0) + dt;
+    this._t += dt;
     this.vegetation?.update(dt);
     this.water?.update(dt);
     this.lanterns?.update(dt);
@@ -39,87 +44,105 @@ export class Arena {
       }
       this.fireflies.geometry.attributes.position.needsUpdate = true;
     }
+    if (this._landmarkUpdate) this._landmarkUpdate(dt, this._t);
+  }
+
+  // Tear down everything this Arena added to the scene (for level transitions).
+  dispose() {
+    const toRemove = [];
+    this.scene.traverse((o) => { if (o.userData.arenaOwned) toRemove.push(o); });
+    for (const o of toRemove) {
+      this.scene.remove(o);
+      o.traverse?.((c) => { if (c.isMesh) { c.geometry.dispose?.(); } });
+    }
+    this.colliders.length = 0;
+    this._rings = null;
+    this.fireflies = null;
+    this.vegetation = null;
+    this.water = null;
+    this.lanterns = null;
+  }
+
+  // Tag objects so dispose() can find and remove them on a biome switch.
+  _add(o) {
+    o.userData.arenaOwned = true;
+    this.scene.add(o);
+    return o;
   }
 
   _build() {
-    const scene = this.scene;
+    const b = this.biome;
 
-    // --- Sky + fog (pale misty daylight; closer near-plane → depth/mist) ---
-    scene.background = new THREE.Color(0xaed2dc);
-    scene.fog = new THREE.Fog(0xc2dbe0, 20, 100);
+    // --- Sky + fog ---
+    this.scene.background = new THREE.Color(b.sky);
+    this.scene.fog = new THREE.Fog(b.fog, b.fogNear, b.fogFar);
 
-    // --- Lighting: soft daylight + warm fill + hemisphere bounce ---
-    const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
-    sun.position.set(-25, 40, -10);
+    // --- Lighting ---
+    const sun = new THREE.DirectionalLight(b.sun.color, b.sun.intensity);
+    sun.position.set(...b.sun.pos);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 140;
-    const s = 55;
+    sun.shadow.camera.far = 300; // [2x] covers the doubled arena depth
+    const s = 110; // [2x] shadow frustum half-extent matches the larger ground
     sun.shadow.camera.left = -s; sun.shadow.camera.right = s;
     sun.shadow.camera.top = s; sun.shadow.camera.bottom = -s;
     sun.shadow.bias = -0.0004;
-    scene.add(sun);
+    this._add(sun);
     this.sun = sun;
 
-    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3a4a2a, 0.9));
-    const fill = new THREE.DirectionalLight(0xa0d8ff, 0.35);
+    const hemi = new THREE.HemisphereLight(b.hemi.sky, b.hemi.ground, b.hemi.intensity);
+    hemi.userData.arenaOwned = true;
+    this.scene.add(hemi);
+
+    const fill = new THREE.DirectionalLight(b.fill.color, b.fill.intensity);
     fill.position.set(20, 15, 20);
-    scene.add(fill);
+    fill.userData.arenaOwned = true;
+    this.scene.add(fill);
 
     // --- Ground ---
     const groundGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH, 1, 1);
     groundGeo.rotateX(-Math.PI / 2);
-    const groundMat = toon({ color: 0x4f7a3a, rim: { color: 0x8fcf6a, intensity: 0.3 } });
+    const groundMat = toon({ color: b.ground, rim: { color: b.groundRim, intensity: b.groundRimI } });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.receiveShadow = true;
-    scene.add(ground);
+    ground.userData.arenaOwned = true;
+    this.scene.add(ground);
 
-    // Stone path down the center lane (visual).
+    // Stone path.
     const pathGeo = new THREE.PlaneGeometry(4.2, ARENA.LENGTH - 6);
     pathGeo.rotateX(-Math.PI / 2);
-    const path = new THREE.Mesh(pathGeo, toon({ color: 0x8a9a7e, rim: { color: 0xcfe0c0, intensity: 0.35 } }));
+    const path = new THREE.Mesh(pathGeo, toon({ color: b.path, rim: { color: b.pathRim, intensity: 0.35 } }));
     path.position.y = 0.01;
     path.receiveShadow = true;
-    scene.add(path);
+    path.userData.arenaOwned = true;
+    this.scene.add(path);
 
-    // --- Boundary walls (low decorative hedges marking the arena edge) ---
     this._boundary();
-
-    // --- Procedural trees scattered off the lane (Vegetation owns colliders) ---
-    this.vegetation = new Vegetation(scene);
+    this.vegetation = new Vegetation(this.scene, b.trees);
     for (const c of this.vegetation.colliders) this.colliders.push(c);
-
-    // --- Scenic enchanted pond (SW glade) + path lanterns ---
-    this.water = new Water(scene, -9, -12, 4.5);
-    this.lanterns = new Lanterns(scene);
-
-    // --- Raised central platform + stairs ---
+    this.water = new Water(this.scene, ...b.water.pos, b.water.radius, b.water);
+    this.lanterns = new Lanterns(this.scene, b.lantern);
     this._platform();
-
-    // --- Scattered GLB props: landmark trees, rocks, stumps, ferns (set pieces) ---
     this._scatterProps();
-
-    // --- Boss-end landmark: giant violet mushroom ---
     this._bossLandmark();
 
-    // --- Spawn telegraph rings over the east-end spawn zone (emissive, pulsing) ---
+    // --- Spawn-telegraph rings ---
     this._rings = [];
-    for (let i = 0; i < 3; i++) {
-      this._spawnRing(randRange(-9, 9), ARENA.LENGTH / 2 - randRange(7, 14));
-    }
+    for (let i = 0; i < 3; i++) this._spawnRing(randRange(-9, 9), ARENA.LENGTH / 2 - randRange(7, 14));
 
-    // --- Ambient fireflies drifting near the ground (bloom accents) ---
     this._fireflies();
   }
 
   _boundary() {
-    const mat = toon({ color: 0x2f5a2c, rim: { color: 0x4f8a3c, intensity: 0.3 } });
+    const b = this.biome;
+    const mat = toon({ color: b.boundary, rim: { color: b.boundaryRim, intensity: 0.3 } });
     const hx = ARENA.WIDTH / 2, hz = ARENA.LENGTH / 2;
     const make = (w, d, x, z) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), mat);
       m.position.set(x, 0.6, z);
       m.castShadow = true; m.receiveShadow = true;
+      m.userData.arenaOwned = true;
       this.scene.add(m);
     };
     make(ARENA.WIDTH, 0.6, 0, -hz);
@@ -128,94 +151,83 @@ export class Arena {
     make(0.6, ARENA.LENGTH, hx, 0);
   }
 
-  _treeMesh(x, z, scale = 1) {
-    const tree = new THREE.Group();
-    const trunkH = 2.4 * scale;
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.25 * scale, 0.35 * scale, trunkH, 8),
-      new THREE.MeshToonMaterial({ color: 0x6e4a2a })
-    );
-    trunk.position.y = trunkH / 2;
-    trunk.castShadow = true;
-    tree.add(trunk);
-    // Layered canopy (stylized).
-    const canopyMat = new THREE.MeshToonMaterial({ color: 0x3f7d34 });
-    for (let i = 0; i < 3; i++) {
-      const r = (1.6 - i * 0.35) * scale;
-      const c = new THREE.Mesh(new THREE.ConeGeometry(r, 1.5 * scale, 9), canopyMat);
-      c.position.y = trunkH + i * 0.9 * scale;
-      c.castShadow = true;
-      tree.add(c);
-    }
-    tree.position.set(x, 0, z);
-    this.scene.add(tree);
-    this.colliders.push({ type: 'cylinder', x, z, r: 0.45 * scale });
-    return tree;
-  }
-
-  _trees() {
-    const lane = 3.5;
-    for (let i = 0; i < 26; i++) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const x = side * randRange(lane, ARENA.WIDTH / 2 - 1.5);
-      const z = randRange(-ARENA.LENGTH / 2 + 4, ARENA.LENGTH / 2 - 6);
-      this._treeMesh(x, z, randRange(0.8, 1.5));
-    }
-  }
-
   _platform() {
+    const b = this.biome;
     const h = ARENA.PLATFORM_HEIGHT;
     const top = new THREE.Mesh(
       new THREE.BoxGeometry(10, h, 10),
-      toon({ color: 0x6b7d5a, rim: { color: 0xcfe0b0, intensity: 0.35 } })
+      toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.35 } })
     );
     top.position.set(0, h / 2, 4);
     top.castShadow = true; top.receiveShadow = true;
+    top.userData.arenaOwned = true;
     this.scene.add(top);
-    // Mossy top cap
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(10.2, 0.2, 10.2),
-      toon({ color: 0x5a8a3f, rim: { color: 0xbfe88a, intensity: 0.4 }, wind: { base: 0.0, freq: 2.4, amp: 0.02 } })
+      toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.4 }, wind: { base: 0.0, freq: 2.4, amp: 0.02 } })
     );
     cap.position.set(0, h + 0.1, 4);
+    cap.userData.arenaOwned = true;
     this.scene.add(cap);
-    // Corner pillars
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const pil = new THREE.Mesh(
         new THREE.CylinderGeometry(0.4, 0.45, h + 1.2, 8),
-        toon({ color: 0x8a8475, rim: { color: 0xcfe0c0, intensity: 0.3 } })
+        toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.3 } })
       );
       pil.position.set(sx * 4.4, (h + 1.2) / 2, 4 + sz * 4.4);
       pil.castShadow = true;
+      pil.userData.arenaOwned = true;
       this.scene.add(pil);
     }
-    // Standables: surfaces the player can stand on (top-land) — the platform (with
-    // solid sides) plus the ascending stairs (auto-step). Exposed for Player collision.
     this.standables = [
-      { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true }, // platform
+      { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true },
     ];
-
-    // Stairs ascend from z=-5 (0.6 high) to z=-1 (3.0, meeting the platform edge).
     const steps = 5;
     for (let i = 0; i < steps; i++) {
       const sh = (steps - i) * (h / steps);
       const z = 4 - 5 - i * 1.0;
       const step = new THREE.Mesh(
         new THREE.BoxGeometry(3, sh, 1.0),
-        toon({ color: 0x7d7363, rim: { color: 0xcfe0c0, intensity: 0.3 } })
+        toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.3 } })
       );
       step.position.set(0, sh / 2, z);
       step.castShadow = true; step.receiveShadow = true;
+      step.userData.arenaOwned = true;
       this.scene.add(step);
       this.standables.push({ minX: -1.5, maxX: 1.5, minZ: z - 0.5, maxZ: z + 0.5, top: sh, solid: false });
     }
-    this.platform = top;
   }
 
-  // "Corrupted Spore Grove" — a colossal mushroom at the east end (LEVELS_SPEC §5.2).
-  // Built from the authored boss_mushroom.glb, scaled to a towering landmark and
-  // bathed in a violet bloom + point light so it reads as the corrupted source.
+  // Boss-end landmark — re-skinned per biome (LEVELS_SPEC §5.2):
+  //   mushroom (L1), burning tree (L2), magic portal (L3).
   _bossLandmark() {
+    const b = this.biome;
+    const lm = b.landmark;
+    const z = ARENA.LENGTH / 2 - 5;
+    if (lm.type === 'tree') this._burningTreeLandmark(lm, z);
+    else if (lm.type === 'portal') this._portalLandmark(lm, z);
+    else this._mushroomLandmark(lm, z);
+
+    // Biome glow light over the landmark.
+    const glow = new THREE.PointLight(lm.glow, lm.glowI, lm.glowRange, 2);
+    glow.position.set(0, 6, z);
+    glow.userData.arenaOwned = true;
+    this.scene.add(glow);
+
+    // Orbiting spore/ember/wisp motes.
+    const moteGeo = new THREE.SphereGeometry(0.16, 8, 8);
+    const moteMat = new THREE.MeshBasicMaterial({ color: lm.mote });
+    for (let i = 0; i < 14; i++) {
+      const mote = new THREE.Mesh(moteGeo, moteMat);
+      const a = randRange(0, Math.PI * 2), r = randRange(1.5, 4.5);
+      mote.position.set(Math.cos(a) * r, 3 + randRange(0, 4.5), z + Math.sin(a) * r * 0.5);
+      mote.layers.enable(BLOOM_LAYER);
+      mote.userData.arenaOwned = true;
+      this.scene.add(mote);
+    }
+  }
+
+  _mushroomLandmark(lm, z) {
     const boss = clone('bossShroom');
     const box = new THREE.Box3().setFromObject(boss);
     const size = new THREE.Vector3(); box.getSize(size);
@@ -223,37 +235,98 @@ export class Arena {
     const s = targetH / Math.max(0.001, size.y);
     boss.scale.setScalar(s);
     boss.position.y = -box.min.y * s;
-    boss.position.z = ARENA.LENGTH / 2 - 5;
-    // Put every mesh on the bloom layer so its emissive surfaces glow.
+    boss.position.z = z;
     boss.traverse((o) => {
       if (o.isMesh) {
         o.layers.enable(BLOOM_LAYER);
         if (o.material) {
-          o.material.emissive = new THREE.Color(0x6a1f9a);
+          o.material.emissive = new THREE.Color(lm.emissive);
           o.material.emissiveIntensity = Math.max(0.6, o.material.emissiveIntensity ?? 0);
         }
       }
     });
+    boss.userData.arenaOwned = true;
     this.scene.add(boss);
-    // Eerie violet glow light over the grove.
-    const glow = new THREE.PointLight(0xa060ff, 40, 34, 2);
-    glow.position.set(0, 6, ARENA.LENGTH / 2 - 5);
-    this.scene.add(glow);
-    // Orbiting spore motes for atmosphere (bloom accents).
-    const moteGeo = new THREE.SphereGeometry(0.16, 8, 8);
-    for (let i = 0; i < 14; i++) {
-      const mote = new THREE.Mesh(moteGeo, new THREE.MeshBasicMaterial({ color: 0xc89bff }));
-      const a = randRange(0, Math.PI * 2), r = randRange(1.5, 4.5);
-      mote.position.set(Math.cos(a) * r, 3 + randRange(0, 4.5), ARENA.LENGTH / 2 - 5 + Math.sin(a) * r * 0.5);
-      mote.layers.enable(BLOOM_LAYER);
-      this.scene.add(mote);
-    }
   }
 
-  // Scatter authored GLB props across the glades (LEVELS_SPEC §5.6 clustered
-  // foliage + §3 obstacles). Landmark ancient trees flank the platform; rocks,
-  // mossy stumps and ferns break up the ground. Colliders added for the big ones.
+  // L2: colossal burning tree (ancientTree scaled up, emissive magma + flicker).
+  _burningTreeLandmark(lm, z) {
+    const tree = clone('ancientTree');
+    const box = new THREE.Box3().setFromObject(tree);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const targetH = 9;
+    const s = targetH / Math.max(0.001, size.y);
+    tree.scale.setScalar(s);
+    tree.position.y = -box.min.y * s;
+    tree.position.z = z;
+    const flickerLights = [];
+    tree.traverse((o) => {
+      if (o.isMesh) {
+        o.layers.enable(BLOOM_LAYER);
+        if (o.material) {
+          o.material.emissive = new THREE.Color(lm.emissive);
+          o.material.emissiveIntensity = 1.2;
+        }
+      }
+    });
+    tree.userData.arenaOwned = true;
+    this.scene.add(tree);
+    // Flickering fire glow at the base.
+    const fireLight = new THREE.PointLight(lm.glow, 15, 18, 2);
+    fireLight.position.set(0, 1.5, z);
+    fireLight.userData.arenaOwned = true;
+    this.scene.add(fireLight);
+    flickerLights.push(fireLight);
+    this._landmarkUpdate = (dt, t) => {
+      const f = 0.7 + Math.sin(t * 13) * 0.15 + Math.sin(t * 7.3) * 0.15;
+      fireLight.intensity = 15 * f;
+    };
+  }
+
+  // L3: luminous magic portal — a glowing torus gateway with a swirling disc.
+  _portalLandmark(lm, z) {
+    const group = new THREE.Group();
+    const torusGeo = new THREE.TorusGeometry(3.0, 0.35, 16, 48);
+    const torusMat = new THREE.MeshToonMaterial({ color: lm.glow, emissive: lm.glow, emissiveIntensity: 2.0 });
+    const torus = new THREE.Mesh(torusGeo, torusMat);
+    torus.position.set(0, 4.5, z);
+    torus.layers.enable(BLOOM_LAYER);
+    group.add(torus);
+    // Swirling inner disc.
+    const discGeo = new THREE.CircleGeometry(2.8, 48);
+    const discMat = new THREE.MeshBasicMaterial({ color: lm.glow, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.position.set(0, 4.5, z);
+    disc.layers.enable(BLOOM_LAYER);
+    group.add(disc);
+    // Base plinth.
+    const baseGeo = new THREE.CylinderGeometry(2.0, 2.4, 0.6, 12);
+    const base = new THREE.Mesh(baseGeo, toon({ color: 0x4a4a6a, rim: { color: 0x8a9aaa, intensity: 0.4 } }));
+    base.position.set(0, 0.3, z);
+    base.castShadow = true; base.receiveShadow = true;
+    group.add(base);
+    // Runestones around the portal.
+    const stoneMat = toon({ color: 0x3a3a5a, rim: { color: lm.glow, intensity: 0.6 } });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const stone = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.8, 0.3), stoneMat);
+      stone.position.set(Math.cos(a) * 2.8, 0.9, z + Math.sin(a) * 2.8);
+      stone.rotation.y = -a;
+      stone.castShadow = true;
+      group.add(stone);
+    }
+    group.userData.arenaOwned = true;
+    this.scene.add(group);
+    this._landmarkUpdate = (dt, t) => {
+      torus.rotation.z += dt * 0.4;
+      disc.rotation.z -= dt * 0.8;
+      disc.material.opacity = 0.3 + Math.sin(t * 1.5) * 0.1;
+    };
+  }
+
   _scatterProps() {
+    const b = this.biome;
     const scene = this.scene;
     const place = (key, x, z, s, rot, colliderR = 0) => {
       const g = clone(key);
@@ -263,21 +336,17 @@ export class Arena {
       g.scale.setScalar(sc);
       g.position.set(x, -box.min.y * sc, z);
       g.rotation.y = rot;
+      g.userData.arenaOwned = true;
       scene.add(g);
       if (colliderR > 0) this.colliders.push({ type: 'cylinder', x, z, r: colliderR });
       return g;
     };
-
-    // Two towering ancient trees flanking the central platform (landmarks).
     place('ancientTree', -8, 4, 5.5, 0.6, 0.6);
     place('ancientTree', 8, 4, 5.5, -0.5, 0.6);
-    // A few pines near the player start for framing.
     place('pine', -4, -26, 4.0, 0.3, 0.4);
     place('pine', 5, -24, 4.6, -0.2, 0.4);
-
-    // Scatter smaller props (rocks, stumps, ferns) off the lane — no colliders.
     const propKeys = ['rock', 'mossStump', 'fern', 'fern', 'grass', 'rock', 'crystalRock'];
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 78; i++) { // [3x] denser scatter across the larger arena
       const side = Math.random() < 0.5 ? -1 : 1;
       const x = side * randRange(4.5, ARENA.WIDTH / 2 - 1);
       const z = randRange(-ARENA.LENGTH / 2 + 5, ARENA.LENGTH / 2 - 8);
@@ -289,18 +358,19 @@ export class Arena {
   _spawnRing(x, z) {
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(1.6, 0.12, 8, 32),
-      new THREE.MeshBasicMaterial({ color: 0x7fff9f, transparent: true, opacity: 0.8 })
+      new THREE.MeshBasicMaterial({ color: this.biome.ring, transparent: true, opacity: 0.8 })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(x, 0.05, z);
     ring.layers.enable(BLOOM_LAYER);
+    ring.userData.arenaOwned = true;
     this.scene.add(ring);
     this._rings.push({ ring, phase: Math.random() * Math.PI * 2 });
   }
 
-  // Drifting fireflies near the ground — small bloom-layer points (LEVELS_SPEC §2).
   _fireflies() {
-    const n = 70;
+    const b = this.biome;
+    const n = b.fireflyN;
     const pos = new Float32Array(n * 3);
     this._ffSeed = new Float32Array(n);
     for (let i = 0; i < n; i++) {
@@ -312,12 +382,13 @@ export class Arena {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({
-      color: 0xfff0a0, size: 0.16, transparent: true, opacity: 0.9,
+      color: b.firefly, size: 0.16, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     this.fireflies = new THREE.Points(geo, mat);
     this.fireflies.frustumCulled = false;
     this.fireflies.layers.enable(BLOOM_LAYER);
+    this.fireflies.userData.arenaOwned = true;
     this.scene.add(this.fireflies);
   }
 }

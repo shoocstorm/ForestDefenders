@@ -4,7 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { Player } from '../entities/Player.js';
-import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY } from '../config/Constants.js';
+import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
 import { GameManager } from '../systems/GameManager.js';
 import { EnemyManager } from '../systems/EnemyManager.js';
@@ -22,11 +22,16 @@ import { Achievements } from '../systems/Achievements.js';
 import { PlantManager } from '../systems/PlantManager.js';
 import { Toasts } from '../ui/Toasts.js';
 import { Shop } from '../ui/Shop.js';
+import { Gallery } from '../ui/Gallery.js';
+import { AudioSystem } from '../audio/AudioSystem.js';
+import { SFX } from '../audio/SFX.js';
+import { Music } from '../audio/Music.js';
+import { Ambient } from '../audio/Ambient.js';
 import { updateTime as updateWindTime } from '../materials/CelMaterial.js';
 
 // Top-level game: owns renderer, scene, the fixed-step update loop, and the
-// systems registry. Milestones add systems (WaveManager, enemies, HUD, etc.)
-// by pushing into this.systems and/or extending update().
+// systems registry. M6 adds the procedural audio engine, multi-biome campaign
+// (L1→L2→L3), and the weapon gallery.
 export class Game {
   constructor(container) {
     this.container = container;
@@ -44,17 +49,28 @@ export class Game {
     this.input = new Input(this.renderer.domElement);
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
 
-    this.arena = new Arena(this.scene);
+    // --- M6 procedural audio: 3-bus engine (SFX/Music/Ambient). Created now ---
+    // but the AudioContext resumes on the first user gesture (browser autoplay).
+    this.audio = new AudioSystem();
+    this.audio.setSFX(new SFX());
+    this.audio.setMusic(new Music());
+    this.audio.setAmbient(new Ambient());
 
-    // --- M5 meta-progression: load the save and wire achievements before the
-    // player is built, so weapon unlocks + derived stats apply from frame one. ---
+    // --- M5 meta-progression: load the save before the player is built. ---
     this.save = new SaveManager();
     this.juice = new Juice();
     this.gameManager = new GameManager();
     this.gameManager.loadSave(this.save.load());
+    this.audio.loadSettings(this.gameManager.toSave()); // restore volume settings
     this.toasts = new Toasts();
-    this.achievements = new Achievements((a) => this.toasts.achievement(a));
+    this.achievements = new Achievements((a) => { this.toasts.achievement(a); this.audio.achievement(); });
     this.gameManager.achievements = this.achievements;
+
+    // --- Campaign level: start from the saved progress (gm.level), clamped. ---
+    this.campaignLevel = Math.min(this.gameManager.level, CAMPAIGN.length - 1);
+
+    // --- Build the world for the current campaign level. ---
+    this.arena = new Arena(this.scene, CAMPAIGN[this.campaignLevel].biome);
 
     this.player = new Player(this.scene, this.cameraRig, this.gameManager.unlockedWeapons);
     this.gameManager.applyDerived(this.player, { fullHeal: true });
@@ -65,13 +81,17 @@ export class Game {
     this.projectiles = new ProjectilePool(this.scene);
     this.enemies = new EnemyManager(this.scene);
     this.hud = new HUD();
-    // Build the weapon slot strip once from the static roster.
     this.hud.initWeapons(this.player.weapons.weapons.map((w) => ({ name: w.name, element: w.element })));
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
     this.worldLabels = new WorldLabels(this.cameraRig.camera);
-    this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx);
+    this.loot = new Loot(this.scene, this.gameManager, this.hud, this.vfx, this.audio);
     this.animals = new AnimalManager(this.scene);
-    this.overlays = new Overlays(() => this.resetLevel(), () => this.shop.open());
+    this.gallery = new Gallery(this.player.weapons.weapons, this.gameManager);
+    this.overlays = new Overlays(
+      () => this.loadLevel(this.campaignLevel),     // retry / play-again → same level
+      () => this.shop.open(),                        // visit shop
+      () => this._advanceCampaign(),                 // continue → next level
+    );
     this.shop = new Shop({
       gameManager: this.gameManager, player: this.player, toasts: this.toasts,
       onPurchase: () => this._persist(),
@@ -93,8 +113,9 @@ export class Game {
       juice: this.juice,
       hud: this.hud,
       cameraRig: this.cameraRig,
+      audio: this.audio,
       onPlayerDeath: () => this._onDefeat(),
-      onEnemyDied: (e) => this.gameManager.registerEnemyDefeated(e),
+      onEnemyDied: (e) => { this.gameManager.registerEnemyDefeated(e); this.audio.death(e.element); },
       onMultiKill: (n) => this._onMultiKill(n),
       onAnimalRescued: (type) => this._onAnimalRescued(type),
     };
@@ -104,11 +125,25 @@ export class Game {
 
     this.state = 'playing'; // 'playing' | 'victory' | 'defeat'
     this.waves = new WaveManager(this.enemies, this.gameManager, {
-      onWaveStart: (n) => this.hud.showBanner(`WAVE ${n}`),
+      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); },
       onAllCleared: () => this._onVictory(),
+      waves: CAMPAIGN[this.campaignLevel].waves(),
+      level: this.campaignLevel,
     });
 
-    this._buildAmbientFall();
+    this._buildAmbientFall(CAMPAIGN[this.campaignLevel].biome);
+
+    // --- Resume audio on the first user gesture (browser autoplay policy). ---
+    this._audioStarted = false;
+    this._startAudio = () => {
+      if (this._audioStarted) return;
+      this._audioStarted = true;
+      this.audio.resume();
+      this.audio.startMusic(CAMPAIGN[this.campaignLevel].biome);
+      this.audio.startAmbient(CAMPAIGN[this.campaignLevel].biome);
+    };
+    window.addEventListener('pointerdown', this._startAudio, { once: true });
+    window.addEventListener('keydown', this._startAudio, { once: true });
 
     this.clock = new THREE.Clock();
     this.accum = 0;
@@ -122,8 +157,11 @@ export class Game {
     this._raf = this._raf.bind(this);
   }
 
-  // Ambient petal fall (LEVELS_SPEC set piece 7) — cheap Points cloud.
-  _buildAmbientFall() {
+  // Ambient particle fall (LEVELS_SPEC set piece 7) — biome-themed: petals (L1),
+  // glowing ash cinders (L2), glowing leaves (L3). Cheap Points cloud.
+  _buildAmbientFall(biomeKey) {
+    if (this.petals) { this.scene.remove(this.petals); this.petals.geometry.dispose(); this.petals.material.dispose(); }
+    const af = (BIOMES[biomeKey] || BIOMES.L1).ambientFall;
     const count = 400;
     const positions = new Float32Array(count * 3);
     this._fallY = new Float32Array(count);
@@ -136,13 +174,14 @@ export class Game {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ color: 0xffd9ec, size: 0.18, transparent: true, opacity: 0.85 });
+    const mat = new THREE.PointsMaterial({ color: af.color, size: af.size, transparent: true, opacity: af.opacity });
     this.petals = new THREE.Points(geo, mat);
     this.petals.frustumCulled = false;
     this.scene.add(this.petals);
   }
 
   _updateAmbientFall(dt) {
+    if (!this.petals) return;
     const pos = this.petals.geometry.attributes.position;
     const arr = pos.array;
     for (let i = 0; i < arr.length / 3; i++) {
@@ -165,27 +204,27 @@ export class Game {
 
   _raf() {
     requestAnimationFrame(this._raf);
-    const realDt = Math.min(this.clock.getDelta(), 0.1); // clamp big stalls
+    const realDt = Math.min(this.clock.getDelta(), 0.1);
 
-    // Juice time-scale (hit-stop / impact-freeze) advances on real time; the
-    // simulation delta is scaled by it so combat hangs briefly on impacts.
     this.juice.update(realDt);
     const simDt = realDt * this.juice.timeScale;
 
-    // Camera mode switching (edge-triggered).
+    // Camera mode switching.
     if (this.input.wasPressed('Digit1')) this.cameraRig.setMode(CAMERA.FP);
     if (this.input.wasPressed('Digit2')) this.cameraRig.setMode(CAMERA.TP);
     if (this.input.wasPressed('Digit3')) this.cameraRig.setMode(CAMERA.TOP);
 
-    // Shop hotkey (P) — opens "Old Owl's Outfitters" mid-run; freezes the sim.
+    // Shop hotkey (P) — opens mid-run; freezes the sim.
     if (this.input.wasPressed('KeyP')) this._toggleShop();
+    // Gallery hotkey (G) — weapon model viewer.
+    if (this.input.wasPressed('KeyG')) this._toggleGallery();
 
-    // Mouse-look (apply accumulated delta once per frame — never time-scaled).
+    // Mouse-look (never time-scaled).
     const md = this.input.consumeMouseDelta();
     if (md.x || md.y) this.cameraRig.applyMouse(md.x, md.y);
 
-    // Fixed-step simulation (scaled accumulator). Frozen while an overlay/shop is up.
-    if (this.state === 'playing' && !this.shop.isOpen) {
+    // Fixed-step simulation (frozen while an overlay/shop/gallery is up).
+    if (this.state === 'playing' && !this.shop.isOpen && !this.gallery.isOpen) {
       this.accum += simDt;
       let steps = 0;
       while (this.accum >= this.fixedDt && steps < 5) {
@@ -193,21 +232,20 @@ export class Game {
         this.accum -= this.fixedDt;
         steps++;
       }
-      // Per-frame (variable) combat VFX/UI — scaled so they freeze with the sim.
       this.vfx.update(simDt);
       this.loot.update(simDt, this.player.position);
       this.damageNumbers.update(simDt);
     }
 
-    // Camera + ambience + projected labels (run even when paused so UI tracks).
+    // Camera + ambience + audio (run even when paused so UI/music track).
     this.cameraRig.update(simDt, this.player.position);
     this.arena.update(realDt);
     this._updateAmbientFall(realDt);
     this.worldLabels.update(this.animals.animals, this.animals.nearestCaged);
-    // Advance the cel-shader wind uTime for all foliage/tree materials.
     updateWindTime(performance.now() * 0.001);
+    this.audio.update(realDt);
 
-    // Quality toggle (Slash) for the post stack.
+    // Quality toggle (Slash).
     if (this.input.wasPressed('Slash')) this.postfx.toggleQuality();
 
     this._updateHud();
@@ -217,10 +255,10 @@ export class Game {
   }
 
   _fixedUpdate(dt) {
-    this.gameManager.updateTimers(dt); // timed buffs (Tail Guard countdown)
+    this.gameManager.updateTimers(dt);
     this.waves.update(dt);
     this.player.update(dt, this.input, this.ctx);
-    this.animals.update(dt, this.ctx);   // before enemies so targeting is current
+    this.animals.update(dt, this.ctx);
     this.enemies.update(dt, this.ctx);
     this.projectiles.update(dt, this.ctx);
     this.plants.update(dt, this.ctx);
@@ -232,29 +270,54 @@ export class Game {
     document.exitPointerLock?.();
     const gm = this.gameManager;
     const saved = this.animals.savedCount;
-    gm.addGold(ECONOMY.LEVEL_CLEAR_GOLD);       // base clear reward
-    const r = gm.computeRank(saved);            // + rescue bonus gold
-    // Level-up if cleared flawlessly (all animals rescued + HP > 50%).
+    gm.addGold(ECONOMY.LEVEL_CLEAR_GOLD);
+    const r = gm.computeRank(saved);
     const allRescued = this.animals.freedCount >= this.animals.total;
     const leveledUp = gm.tryLevelUp(this.player, { allRescued });
-    if (leveledUp) this.toasts.levelUp(gm.playerLevel);
+    if (leveledUp) { this.toasts.levelUp(gm.playerLevel); this.audio.levelUp(); }
     gm.registerLevelCleared(gm.level);
     this._persist();
+
+    const isFinalLevel = this.campaignLevel >= CAMPAIGN.length - 1;
+    this.audio.duck(true);
+    this.audio.startMusic('victory');
     this.overlays.showVictory({
       rank: r.rank, stars: r.stars, bonus: r.bonus, saved, total: this.animals.total,
       kills: gm.kills, gold: gm.gold, leveledUp, playerLevel: gm.playerLevel,
+      levelNum: this.campaignLevel + 1,
+      isFinal: isFinalLevel,
+      onNext: () => this._advanceCampaign(),
     });
+    // Star chimes (AUDIO_SPEC §2) — timed with the star pop animations.
+    for (let i = 0; i < r.stars; i++) setTimeout(() => this.audio.starChime(i), 700 + i * 220);
   }
 
-  // Open/close the shop mid-run (P). Only during active play; releases the mouse.
+  // Advance to the next campaign level (L1→L2→L3) after a victory-continue.
+  _advanceCampaign() {
+    if (this.campaignLevel < CAMPAIGN.length - 1) {
+      this.campaignLevel += 1;
+      this.gameManager.level = this.campaignLevel; // enemy stat scaling + save position
+      this._persist();
+      this.loadLevel(this.campaignLevel);
+    }
+  }
+
   _toggleShop() {
     if (this.shop.isOpen) { this.shop.close(); return; }
     if (this.state !== 'playing') return;
     document.exitPointerLock?.();
     this.shop.open();
+    this.audio.ui('click');
   }
 
-  // 3+ kills in one shot → unlock the Scattergun (once) + Combo King progress.
+  _toggleGallery() {
+    if (this.gallery.isOpen) { this.gallery.close(); return; }
+    if (this.state !== 'playing') return;
+    document.exitPointerLock?.();
+    this.gallery.open();
+    this.audio.ui('click');
+  }
+
   _onMultiKill(n) {
     this.gameManager.registerMultiKill();
     if (this.gameManager.unlockWeapon('SHOTGUN')) {
@@ -263,23 +326,23 @@ export class Game {
     }
   }
 
-  // Rescue-driven weapon unlocks (ECONOMY_SHOP_SPEC §3) + rescue achievements.
   _onAnimalRescued(type) {
     const gm = this.gameManager;
     gm.registerAnimalRescued();
+    this.audio.rescue();
     const unlocked = [];
-    if (gm.unlockWeapon('MACHINE')) unlocked.push('Machine Gun');         // cage reward L1
+    if (gm.unlockWeapon('MACHINE')) unlocked.push('Machine Gun');
     if (type === 'BIRD' && gm.unlockWeapon('TOROID')) unlocked.push('Toroid Cannon');
     if (this.animals.freedCount >= this.animals.total && gm.unlockWeapon('FIRE_BULLET')) {
-      unlocked.push('Fire Bullet');                                       // all animals rescued
+      unlocked.push('Fire Bullet');
     }
     for (const name of unlocked) this.toasts.weapon(name);
     if (unlocked.length) this._persist();
   }
 
-  // Write meta-progression to the save (level win, purchase, unlock).
   _persist() {
     this.gameManager.currentWeapon = this.player.weapons.index;
+    this.gameManager.settings = { ...this.gameManager.settings, ...this.audio.settings };
     this.save.save(this.gameManager.toSave());
   }
 
@@ -287,24 +350,38 @@ export class Game {
     if (this.state !== 'playing') return;
     this.state = 'defeat';
     document.exitPointerLock?.();
+    this.audio.duck(true);
+    this.audio.startMusic('defeat');
     this.overlays.showDefeat({
       wave: this.waves.waveNumber, total: this.waves.total, kills: this.gameManager.kills,
     });
   }
 
-  // Rebuild the level in place (Retry / Play Again) — no full page reload.
-  // Meta-progression (gold, level, upgrades, unlocks, achievements) survives; only
-  // per-run state (HP, buffs, plants, double-jump) is wiped (ECONOMY_SHOP_SPEC §6.1).
-  resetLevel() {
+  // Full level (re)build — used by retry, play-again, and campaign advance.
+  // Disposes the old arena + world objects and rebuilds with the target biome.
+  loadLevel(campaignLevel) {
     if (this.shop.isOpen) this.shop.close();
+    if (this.gallery.isOpen) this.gallery.close();
+    this.campaignLevel = Math.max(0, Math.min(campaignLevel, CAMPAIGN.length - 1));
+
+    // Clear enemies.
     for (const e of this.enemies.enemies) this.scene.remove(e.group);
     this.enemies.enemies.length = 0;
+    // Clear animals.
     for (const a of this.animals.animals) a.dispose();
     this.animals = new AnimalManager(this.scene);
     this.ctx.animals = this.animals.animals;
+    // Clear plants.
     this.plants.dispose();
     this.plants = new PlantManager(this.scene);
 
+    // Rebuild arena with the new biome.
+    this.arena.dispose();
+    this.arena = new Arena(this.scene, CAMPAIGN[this.campaignLevel].biome);
+    this.ctx.colliders = this.arena.colliders;
+    this.ctx.standables = this.arena.standables;
+
+    // Reset run state + reposition the player.
     this.gameManager.resetRun();
     this.gameManager.applyDerived(this.player, { fullHeal: true });
     this.player.hasDoubleJump = false;
@@ -313,16 +390,26 @@ export class Game {
     this.player.position.copy(this.player._spawn);
     this.player.velocity.set(0, 0, 0);
 
+    // New waves for this biome.
     this.waves = new WaveManager(this.enemies, this.gameManager, {
-      onWaveStart: (n) => this.hud.showBanner(`WAVE ${n}`),
+      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); },
       onAllCleared: () => this._onVictory(),
+      waves: CAMPAIGN[this.campaignLevel].waves(),
+      level: this.campaignLevel,
     });
+
+    // Biome-themed ambient particles.
+    this._buildAmbientFall(CAMPAIGN[this.campaignLevel].biome);
+
+    // Cross-fade music + ambient to the new biome.
+    this.audio.duck(false);
+    this.audio.startMusic(CAMPAIGN[this.campaignLevel].biome);
+    this.audio.startAmbient(CAMPAIGN[this.campaignLevel].biome);
+
     this.accum = 0;
     this.state = 'playing';
   }
 
-  // Project the player's world-space aim point to screen so the reticle sits on the
-  // real aim (or the locked enemy), instead of pinned over the hero in third-person.
   _updateCrosshair() {
     const cam = this.cameraRig.camera;
     cam.updateMatrixWorld();
@@ -336,6 +423,7 @@ export class Game {
   _updateHud() {
     this._updateCrosshair();
     const p = this.player;
+    const biome = CAMPAIGN[this.campaignLevel];
     this.hud.update({
       hp: p.hp,
       maxHp: p.maxHp,
@@ -346,6 +434,8 @@ export class Game {
       enemies: this.enemies.aliveCount,
       wave: this.waves.waveNumber || 1,
       totalWaves: this.waves.total,
+      levelName: biome.name,
+      levelNum: this.campaignLevel + 1,
       weapon: p.weapon.name,
       element: p.weapon.element,
       ammo: p.weapon.ammoInfo(),
@@ -374,13 +464,15 @@ export class Game {
       this._fpsAccum = 0; this._fpsFrames = 0;
     }
     const p = this.player.position;
+    const c = this.cameraRig.camera.position;
     const modeName = { fp: 'First-Person', tp: 'Third-Person', top: 'Top-Down' }[this.cameraRig.mode];
     if (this.statsEl) {
       this.statsEl.textContent =
-        `FPS ${this.fps}\n` +
-        `CAM ${modeName}\n` +
+        `FPS ${this.fps} frames ${this._fpsFrames}\n` +
+        `CAM ${modeName} pos ${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}\n` +
         `POS ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
-        `HP  ${this.player.hp}/${this.player.maxHp}`;
+        `HP  ${this.player.hp}/${this.player.maxHp}\n` +
+        `DT ${dt.toFixed(4)} scene ${this.scene.children.length}`;
     }
   }
 

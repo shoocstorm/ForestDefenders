@@ -34,13 +34,15 @@ export const CAMERA = {
   PITCH_MAX: 1.3,
   TP_DISTANCE: 6.0,
   TP_HEIGHT: 2.4,
-  TOP_HEIGHT: 26.0,
+  TOP_HEIGHT: 52.0, // [2x] raised so the top-down camera frames the doubled arena
 };
 
-// Arena (LEVELS_SPEC §3): linear corridor ~70m × 30m
+// Arena (LEVELS_SPEC §3): linear corridor — doubled to ~140m × 60m for a vaster
+// battlefield. All world systems (ground, bounds, spawns, lanterns, vegetation,
+// scatter props, fireflies) read these, so changing them scales the whole scene.
 export const ARENA = {
-  LENGTH: 70, // along Z (player west/-Z start → enemies east/+Z)
-  WIDTH: 30, // along X
+  LENGTH: 140, // along Z (player west/-Z start → enemies east/+Z)
+  WIDTH: 60, // along X
   PLATFORM_HEIGHT: 3.0,
 };
 
@@ -132,7 +134,7 @@ export const WEAPON_ORDER = ['ACORN', 'GANON', 'MACHINE', 'BOOM', 'LASER', 'SHOT
 
 // Shared camera-recoil tuning (JUICE_SPEC §2); per-weapon `recoil` scales it.
 export const RECOIL = {
-  BACK: 0.16, UP: 0.07, PITCH: 0.14, YAW: 0.03, FOV: 2.0, RETURN: 13.0,
+  BACK: 0.02, UP: 0.01, PITCH: 0.001, YAW: 0.001, FOV: 0.1, RETURN: 18.0,
 };
 
 // Enemy stun (Toroid EMP, JUICE_SPEC): frozen, no AI/attacks, tinted.
@@ -155,6 +157,25 @@ export const ENEMY_DEFS = {
     type: 'EARTH_SHROOM', element: 'EARTH', role: 'boss',
     hp: 80, speed: 3.0, attackDamage: 25, attackRange: 3.2, attackCooldown: 4.0,
     detectionRange: 16, hitRadius: 1.15, accent: 0xe0a83a, scale: 1.7,
+  },
+  // Water Shroom (L2) — controller: water jet pushes the player/animals back.
+  WATER_SHROOM: {
+    type: 'WATER_SHROOM', element: 'WATER', role: 'ranged',
+    hp: 25, speed: 3.5, attackDamage: 8, attackRange: 9.0, attackCooldown: 2.5,
+    detectionRange: 13, hitRadius: 0.68, accent: 0x4ac8e8, projectileSpeed: 14,
+    knockback: 7,
+  },
+  // Ice Shroom (L2) — ranged icicle shot; FIRE-vulnerable, ICE-resistant.
+  ICE_SHROOM: {
+    type: 'ICE_SHROOM', element: 'ICE', role: 'ranged',
+    hp: 22, speed: 3.8, attackDamage: 12, attackRange: 10.0, attackCooldown: 3.0,
+    detectionRange: 14, hitRadius: 0.65, accent: 0x9fd8ff, projectileSpeed: 16,
+  },
+  // Metal Shroom (L3) — tank: resists PHYSICAL (0.5×), high HP, spike shot.
+  METAL_SHROOM: {
+    type: 'METAL_SHROOM', element: 'METAL', role: 'melee',
+    hp: 45, speed: 2.5, attackDamage: 14, attackRange: 2.8, attackCooldown: 1.8,
+    detectionRange: 11, hitRadius: 0.85, accent: 0xb0b8c0, scale: 1.15,
   },
 };
 
@@ -198,6 +219,28 @@ export const LEVEL1_WAVES = [
     enemies: [['WOOD_SHROOM', 3], ['FIRE_SHROOM', 3]] },
   { delay: 5, animal: 'RABBIT', spread: true,
     enemies: [['EARTH_SHROOM', 1], ['FIRE_SHROOM', 3], ['WOOD_SHROOM', 2]] },
+];
+
+// --- Level 2 wave script (Ember Hollow). More enemies, faster spawns, adds ---
+// Water + Ice shrooms. `delay` shrinks vs L1; stat scaling via campaign level 1.
+export const LEVEL2_WAVES = [
+  { delay: 2.5, animal: 'HEDGEHOG', spread: true,
+    enemies: [['FIRE_SHROOM', 4], ['WATER_SHROOM', 3], ['WOOD_SHROOM', 3]] },
+  { delay: 4, animal: 'BIRD', spread: true,
+    enemies: [['FIRE_SHROOM', 4], ['ICE_SHROOM', 3], ['METAL_SHROOM', 1]] },
+  { delay: 4, animal: 'RABBIT', spread: true,
+    enemies: [['EARTH_SHROOM', 1], ['ICE_SHROOM', 3], ['FIRE_SHROOM', 4], ['WATER_SHROOM', 2]] },
+];
+
+// --- Level 3 wave script (Ancient Grove). Climactic — heaviest mix, Metal ---
+// tanks, multiple boss-grade adds. Stat scaling via campaign level 2.
+export const LEVEL3_WAVES = [
+  { delay: 2, animal: 'HEDGEHOG', spread: true,
+    enemies: [['ICE_SHROOM', 4], ['METAL_SHROOM', 2], ['WATER_SHROOM', 3], ['FIRE_SHROOM', 2]] },
+  { delay: 3.5, animal: 'BIRD', spread: true,
+    enemies: [['METAL_SHROOM', 3], ['ICE_SHROOM', 3], ['FIRE_SHROOM', 3], ['EARTH_SHROOM', 1]] },
+  { delay: 3.5, animal: 'RABBIT', spread: true,
+    enemies: [['EARTH_SHROOM', 2], ['METAL_SHROOM', 3], ['ICE_SHROOM', 3], ['FIRE_SHROOM', 3], ['WATER_SHROOM', 2]] },
 ];
 
 // --- Animals (ANIMALS_SPEC §2). pos in world coords; buff granted on rescue. ---
@@ -344,3 +387,79 @@ export const POST = {
 export const BLOOM_LAYER = 1; // objects on this layer glow (boss, rings, lanterns, spores)
 
 export const VEGETATION = { SEED: 1337 }; // deterministic procedural variation
+
+// ===========================================================================
+// M6 — Biome palettes (LEVELS_SPEC §2 + SEASONS_SPEC), 3-level campaign. Each
+// biome drives the Arena re-skin: sky/fog/lights, ground/path/trees, water,
+// boss landmark, spawn rings, lanterns, platform, ambient particles.
+// ===========================================================================
+export const BIOMES = {
+  // L1 — Misty Forest: green/misty, soft daylight (SEASONS spring/summer mix).
+  L1: {
+    id: 'L1', name: 'Misty Forest',
+    music: 'L1', ambient: 'L1',
+    sky: 0xaed2dc, fog: 0xc2dbe0, fogNear: 30, fogFar: 200,
+    sun: { color: 0xfff2d6, intensity: 2.0, pos: [-25, 40, -10] },
+    hemi: { sky: 0xcfe8ff, ground: 0x3a4a2a, intensity: 0.9 },
+    fill: { color: 0xa0d8ff, intensity: 0.35 },
+    ground: 0x4f7a3a, groundRim: 0x8fcf6a, groundRimI: 0.3,
+    path: 0x8a9a7e, pathRim: 0xcfe0c0,
+    boundary: 0x2f5a2c, boundaryRim: 0x4f8a3c,
+    trees: { broadleaf: 0x46962f, broadleaf2: 0x3a7d28, pine: 0x2f7a3a, pine2: 0x276633, bark: 0x6e4a2a, barkRim: 0x88aa66 },
+    water: { color: 0x2f8fa6, emissive: 0x0e5566, rock: 0x8a8475, pos: [-9, -12], radius: 4.5 },
+    landmark: { type: 'mushroom', emissive: 0x6a1f9a, glow: 0xa060ff, glowI: 40, glowRange: 34, mote: 0xc89bff },
+    ring: 0x7fff9f,
+    lantern: { lit: 0xffd98a, litEmissive: 0xffb24a, unlit: 0x6a6a55, post: 0x4a5a3a, light: 0xffb86a, lightI: 3.0 },
+    platform: { top: 0x6b7d5a, topRim: 0xcfe0b0, cap: 0x5a8a3f, pillar: 0x8a8475, step: 0x7d7363, pillarRim: 0xcfe0c0 },
+    firefly: 0xfff0a0, fireflyN: 210,
+    ambientFall: { type: 'petals', color: 0xffd9ec, size: 0.18, opacity: 0.85 },
+  },
+  // L2 — Ember Hollow: hot orange/charred, volcanic haze (SEASONS autumn/decay).
+  L2: {
+    id: 'L2', name: 'Ember Hollow',
+    music: 'L2', ambient: 'L2',
+    sky: 0x4a2820, fog: 0x6a3018, fogNear: 26, fogFar: 175,
+    sun: { color: 0xff8a3a, intensity: 1.8, pos: [-18, 30, -8] },
+    hemi: { sky: 0xff6a2a, ground: 0x2a1410, intensity: 0.8 },
+    fill: { color: 0xff4a1a, intensity: 0.4 },
+    ground: 0x4a3020, groundRim: 0x8a5a3a, groundRimI: 0.35,
+    path: 0x6a4a30, pathRim: 0xa07050,
+    boundary: 0x3a2018, boundaryRim: 0x5a3a20,
+    trees: { broadleaf: 0xcc5500, broadleaf2: 0x990000, pine: 0x556b2f, pine2: 0x3a4a1f, bark: 0x232b2b, barkRim: 0x8a4a2a },
+    water: { color: 0xff4a10, emissive: 0xff2000, rock: 0x3a2018, pos: [9, -12], radius: 5.0 },
+    landmark: { type: 'tree', emissive: 0xff3a00, glow: 0xff6a20, glowI: 50, glowRange: 30, mote: 0xffaa30 },
+    ring: 0xff5a2a,
+    lantern: { lit: 0xff7a2a, litEmissive: 0xff4a00, unlit: 0x3a2a20, post: 0x2a1a14, light: 0xff5a1a, lightI: 4.0 },
+    platform: { top: 0x3a2a28, topRim: 0x8a4a30, cap: 0x5a3a20, pillar: 0x2a2a2a, step: 0x4a3a30, pillarRim: 0x8a5a3a },
+    firefly: 0xff8a3a, fireflyN: 270,
+    ambientFall: { type: 'ash', color: 0xff7a30, size: 0.13, opacity: 0.9 },
+  },
+  // L3 — Ancient Grove: cool blue/violet, ethereal moonlight (SEASONS winter).
+  L3: {
+    id: 'L3', name: 'Ancient Grove',
+    music: 'L3', ambient: 'L3',
+    sky: 0x1a1a3a, fog: 0x2a2a5a, fogNear: 28, fogFar: 185,
+    sun: { color: 0x8aa0ff, intensity: 1.4, pos: [-20, 45, -12] },
+    hemi: { sky: 0x6080ff, ground: 0x1a1a3a, intensity: 0.85 },
+    fill: { color: 0x6040ff, intensity: 0.45 },
+    ground: 0x2a3a4a, groundRim: 0x5a7aaa, groundRimI: 0.4,
+    path: 0x4a4a6a, pathRim: 0x7a8aaa,
+    boundary: 0x1a2a3a, boundaryRim: 0x3a5a7a,
+    trees: { broadleaf: 0x4a6b6c, broadleaf2: 0x3a5a6c, pine: 0x4a6b6c, pine2: 0x3a5a5c, bark: 0x232b2b, barkRim: 0x6080aa },
+    water: { color: 0x2a3a8a, emissive: 0x4060ff, rock: 0x4a4a6a, pos: [-9, -12], radius: 4.5 },
+    landmark: { type: 'portal', emissive: 0x4080ff, glow: 0x60a0ff, glowI: 45, glowRange: 32, mote: 0x80c0ff },
+    ring: 0x6ad0ff,
+    lantern: { lit: 0x6ad0ff, litEmissive: 0x4080ff, unlit: 0x2a2a4a, post: 0x2a2a3a, light: 0x4080ff, lightI: 3.5 },
+    platform: { top: 0x3a3a5a, topRim: 0x7a8aaa, cap: 0x4a5a8a, pillar: 0x4a4a6a, step: 0x5a5a7a, pillarRim: 0x8a9aaa },
+    firefly: 0x80c0ff, fireflyN: 240,
+    ambientFall: { type: 'leaves', color: 0x80a0e0, size: 0.16, opacity: 0.85 },
+  },
+};
+
+// --- Campaign definition (3 levels, each referencing its biome + wave config). ---
+// `level` = the campaign index used for enemy stat scaling (L1=0, L2=1, L3=2).
+export const CAMPAIGN = [
+  { biome: 'L1', waves: () => LEVEL1_WAVES, name: 'Misty Forest' },
+  { biome: 'L2', waves: () => LEVEL2_WAVES, name: 'Ember Hollow' },
+  { biome: 'L3', waves: () => LEVEL3_WAVES, name: 'Ancient Grove' },
+];

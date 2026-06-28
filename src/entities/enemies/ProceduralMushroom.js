@@ -30,6 +30,27 @@ const TYPE = {
     capEmissive: 0xffab3a, capEmInt: 0.32, gillEmissive: 0xd98a2a, gillEmInt: 0.3,
     arm: 'chunky', prop: 'rocks', accent: 0xe0a83a,
   },
+  WATER_SHROOM: {
+    height: 1.28,
+    legH: 0.20, stemH: 0.52, stemRtop: 0.30, stemRbot: 0.42, capR: 0.62, capSquashY: 0.76,
+    stemColor: 0x3a7898, capColor: 0x1a6ab0, spotColor: 0x8fdfff,
+    capEmissive: 0x2a8fd0, capEmInt: 0.45, gillEmissive: 0x4ac8e8, gillEmInt: 0.4,
+    arm: 'slim', prop: 'bubble', accent: 0x4ac8e8,
+  },
+  ICE_SHROOM: {
+    height: 1.32,
+    legH: 0.20, stemH: 0.54, stemRtop: 0.30, stemRbot: 0.42, capR: 0.64, capSquashY: 0.80,
+    stemColor: 0x9fc8e8, capColor: 0x6ac8ff, spotColor: 0xffffff,
+    capEmissive: 0x8fdfff, capEmInt: 0.5, gillEmissive: 0xbfe8ff, gillEmInt: 0.45,
+    arm: 'slim', prop: 'crystal', accent: 0x9fd8ff,
+  },
+  METAL_SHROOM: {
+    height: 1.42,
+    legH: 0.22, stemH: 0.56, stemRtop: 0.36, stemRbot: 0.50, capR: 0.74, capSquashY: 0.72,
+    stemColor: 0x6a7080, capColor: 0x909aa8, spotColor: 0xc8d0d8,
+    capEmissive: 0xb0b8c0, capEmInt: 0.28, gillEmissive: 0x8a9098, gillEmInt: 0.25,
+    arm: 'chunky', prop: 'spikes', accent: 0xb0b8c0,
+  },
 };
 
 export function buildProceduralMushroom(type) {
@@ -214,6 +235,44 @@ function buildProp(cfg, cap, part, emissives) {
       shard.rotation.set(0.5 * Math.cos(a), 0, 0.5 * Math.sin(a));
       cap.add(shard);
     }
+  } else if (cfg.prop === 'bubble') {
+    // Water Shroom: translucent bubble crown with inner glow.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const r = i === 0 ? 0 : 0.24;
+      const bubble = part(new THREE.SphereGeometry(i === 0 ? 0.18 : 0.12, 12, 10),
+        0x9fe8ff, { emissive: cfg.capEmissive, emissiveIntensity: 0.6, rim: { color: 0xffffff, intensity: 0.5 } });
+      bubble.userData.__outline = true;
+      bubble.position.set(Math.cos(a) * r, cfg.capR * cfg.capSquashY + (i === 0 ? 0.2 : 0.1), Math.sin(a) * r);
+      cap.add(bubble);
+    }
+  } else if (cfg.prop === 'crystal') {
+    // Ice Shroom: jagged ice crystal spires catching the light.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const r = i === 0 ? 0 : 0.22;
+      const h = i === 0 ? 0.5 : 0.3 + Math.random() * 0.14;
+      const crystal = part(new THREE.ConeGeometry(0.11, h, 6),
+        0xcfeeff, { emissive: cfg.capEmissive, emissiveIntensity: 0.7, rim: { color: 0xffffff, intensity: 0.6 } });
+      crystal.position.set(Math.cos(a) * r, cfg.capR * cfg.capSquashY + h * 0.4, Math.sin(a) * r);
+      crystal.rotation.set(0.1 * Math.cos(a), 0, 0.1 * Math.sin(a));
+      cap.add(crystal);
+    }
+  } else if (cfg.prop === 'spikes') {
+    // Metal Shroom: jagged metal spike crown + riveted plating read.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = 0.38;
+      const spike = part(new THREE.ConeGeometry(0.09, 0.4 + Math.random() * 0.1, 5),
+        0xa0a8b0, { emissive: cfg.capEmissive, emissiveIntensity: 0.2 });
+      spike.position.set(Math.cos(a) * r, cfg.capR * cfg.capSquashY + 0.06, Math.sin(a) * r);
+      spike.rotation.set(0.2 * Math.cos(a), 0, 0.2 * Math.sin(a));
+      cap.add(spike);
+    }
+    // Central hub bolt.
+    const bolt = part(new THREE.CylinderGeometry(0.12, 0.14, 0.1, 8), 0xc8d0d8);
+    bolt.position.y = cfg.capR * cfg.capSquashY + 0.2;
+    cap.add(bolt);
   }
 }
 
@@ -237,7 +296,8 @@ function vecTrack(node, prop, times, vecs) {
 // X+ rotation tips the top toward +Z (forward/at-target); X- rears it back.
 function buildClips(type, { hipY, capBaseY }) {
   const clips = [];
-  const isEarth = type === 'EARTH_SHROOM';
+  const isTank = type === 'EARTH_SHROOM' || type === 'METAL_SHROOM';
+  const walkSpeed = type === 'EARTH_SHROOM' ? 0.9 : (type === 'METAL_SHROOM' ? 0.8 : 0.65);
 
   // idle — breathing bob + gentle cap nod + (fire) flame flicker via cap scale.
   clips.push(new THREE.AnimationClip('idle', 2.4, [
@@ -250,7 +310,7 @@ function buildClips(type, { hipY, capBaseY }) {
   ]));
 
   // walk — alternating leg/arm swing + double bob + slight forward lean.
-  const W = isEarth ? 0.9 : 0.65; // earth lumbers slower
+  const W = walkSpeed;
   clips.push(new THREE.AnimationClip('walk', W, [
     quatTrack('LegL', [0, W / 2, W], [[0.6, 0, 0], [-0.6, 0, 0], [0.6, 0, 0]]),
     quatTrack('LegR', [0, W / 2, W], [[-0.6, 0, 0], [0.6, 0, 0], [-0.6, 0, 0]]),
@@ -274,8 +334,8 @@ function buildClips(type, { hipY, capBaseY }) {
     quatTrack('Hips', [0, 0.35, 0.6], [[0, 0, 0], [0.2, 0, 0.3], [-0.1, 0, 1.3]]),
   ]));
 
-  if (isEarth) {
-    // attack — telegraphed ground slam: rear back, raise arms, slam down, settle.
+  if (isTank) {
+    // attack — telegraphed ground slam (Earth boss + Metal tank): rear, raise, slam, settle.
     clips.push(new THREE.AnimationClip('attack', 0.9, [
       quatTrack('Hips', [0, 0.35, 0.55, 0.75, 0.9],
         [[0, 0, 0], [-0.4, 0, 0], [0.5, 0, 0], [0.15, 0, 0], [0, 0, 0]]),

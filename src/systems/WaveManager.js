@@ -1,27 +1,34 @@
 import * as THREE from 'three';
-import { LEVEL1_WAVES, ARENA } from '../config/Constants.js';
+import { ARENA, CAMPAIGN } from '../config/Constants.js';
 import { randRange } from '../util/MathUtils.js';
 import { WoodShroom } from '../entities/enemies/WoodShroom.js';
 import { FireShroom } from '../entities/enemies/FireShroom.js';
 import { EarthShroom } from '../entities/enemies/EarthShroom.js';
+import { WaterShroom } from '../entities/enemies/WaterShroom.js';
+import { IceShroom } from '../entities/enemies/IceShroom.js';
+import { MetalShroom } from '../entities/enemies/MetalShroom.js';
 
 const ENEMY_CLASSES = {
   WOOD_SHROOM: WoodShroom,
   FIRE_SHROOM: FireShroom,
   EARTH_SHROOM: EarthShroom,
+  WATER_SHROOM: WaterShroom,
+  ICE_SHROOM: IceShroom,
+  METAL_SHROOM: MetalShroom,
 };
 
-// Drives the 3-wave Level 1 script (LEVELS_SPEC §4). A wave's enemies spawn at the
-// east-end markers after a delay; the next wave only begins once every enemy of the
-// current wave is dead. Fires `onWaveStart` (HUD banner + endangered animal) and
-// `onAllCleared` (victory). Replaces the endless test spawn from M2.
+// Drives a 3-wave level script (LEVELS_SPEC §4). A wave's enemies spawn at the
+// east-end markers after a delay; the next wave only begins once every enemy of
+// the current wave is dead. Fires `onWaveStart` (HUD banner + endangered animal)
+// and `onAllCleared` (victory). Now biome-agnostic — any wave config array works.
 export class WaveManager {
-  constructor(enemyManager, gameManager, { onWaveStart, onAllCleared } = {}) {
+  constructor(enemyManager, gameManager, { onWaveStart, onAllCleared, waves, level = 0 } = {}) {
     this.enemies = enemyManager;
     this.gm = gameManager;
     this.onWaveStart = onWaveStart;
     this.onAllCleared = onAllCleared;
-    this.waves = LEVEL1_WAVES;
+    this.waves = waves || CAMPAIGN[level || 0].waves();
+    this.level = level || 0;
     this.index = -1;
     this.state = 'PREWAVE';
     this.timer = this.waves[0].delay;
@@ -57,7 +64,7 @@ export class WaveManager {
     let i = 0;
     for (const [type, count] of w.enemies) {
       for (let n = 0; n < count; n++, i++) {
-        const e = this.enemies.spawn(ENEMY_CLASSES[type], this._spawnPos(w.spread, type, i), this.gm.level);
+        const e = this.enemies.spawn(ENEMY_CLASSES[type], this._spawnPos(w.spread, type, i), this.level);
         this.waveEnemies.push(e);
       }
     }

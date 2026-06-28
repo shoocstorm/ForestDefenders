@@ -55,6 +55,7 @@ export class Weapon {
       this.justFired = true;
       ctx.cameraRig.addRecoil(this.def.recoil);
       ctx.vfx.muzzleFlash(ctx.origin, this.def.muzzleColor);
+      ctx.audio?.shoot(this.def.id, this.def.element);
     }
     this._wasFiring = firing;
   }
@@ -184,6 +185,7 @@ export class Weapon {
       this.justFired = true;
       ctx.cameraRig.addRecoil(d.recoil * (0.5 + t));
       ctx.vfx.muzzleFlash(ctx.origin, d.muzzleColor);
+      ctx.audio?.shoot(d.id, d.element);
     }
     if (!firing) this._charge = 0;
     this._wasFiring = firing;
@@ -203,6 +205,7 @@ export class Weapon {
       this._cd = d.cooldown;
       this.justFired = true;
       ctx.cameraRig.addRecoil(d.recoil);
+      ctx.audio?.shoot(d.id, d.element);
     }
     const end = this._end.copy(ctx.origin).addScaledVector(ctx.dir, hitDist);
     ctx.vfx.beam(ctx.origin, end, d.color); // persistent beam (no per-frame alloc)

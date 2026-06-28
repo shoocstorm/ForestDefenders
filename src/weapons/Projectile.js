@@ -80,9 +80,10 @@ export class ProjectilePool {
             const rr = p.radius + e.hitRadius;
             if (this._tmp.copy(e.position).setY(e.position.y + 0.6).distanceToSquared(p.pos) < rr * rr) {
               if (!aoe) { // AOE shots detonate below instead of single-target hit
-                e.takeDamage(p.damage, p.element, ctx);
+                const res = e.takeDamage(p.damage, p.element, ctx);
                 ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
                 ctx.gameManager?.registerAccurateShot?.(); // Sharpshooter achievement
+                ctx.audio?.hit(p.element, res?.mult >= 2 ? 'weak' : res?.mult <= 0.5 ? 'resist' : null);
               }
               dead = true;
               break;
@@ -147,5 +148,7 @@ export class ProjectilePool {
     ctx.vfx.explosion?.(p.pos, color, radius);
     ctx.cameraRig?.addShake?.(0.5);
     ctx.juice?.hitStop?.();
+    if (p.empRadius > 0) ctx.audio?.zap();
+    else ctx.audio?.explosion();
   }
 }

@@ -111,6 +111,7 @@ export class Player {
     ctx?.hud?.flashDamage();
     if (through <= 0) return; // fully shielded
     this.hp = Math.max(0, this.hp - through);
+    ctx?.audio?.hurt();
     if (this.hp <= 0) {
       this.dead = true;
       ctx?.onPlayerDeath?.();
@@ -190,10 +191,12 @@ export class Player {
         this.grounded = false;
         this.jumpsLeft = this.hasDoubleJump ? 1 : 0;
         this.model.playJump?.();
+        ctx?.audio?.jump();
       } else if (this.jumpsLeft > 0) {
         this.velocity.y = PLAYER.DOUBLE_JUMP_VELOCITY;
         this.jumpsLeft -= 1;
         this.model.playJump?.();
+        ctx?.audio?.jump();
       }
     }
 
@@ -323,6 +326,7 @@ export class Player {
     }
     ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(this._fwd, 1).setY(0.7), 0xfff0a0, PLAYER.KICK_RANGE);
     ctx.cameraRig?.addShake?.(0.25);
+    ctx?.audio?.melee('kick');
     if (hit) ctx.juice?.hitStop?.();
   }
 
@@ -344,6 +348,7 @@ export class Player {
     }
     ctx.vfx?.melee?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
     ctx.cameraRig?.addShake?.(0.6);
+    ctx?.audio?.melee('tail');
   }
 
   // Push the player out of the sides of solid standables (the platform block) when
