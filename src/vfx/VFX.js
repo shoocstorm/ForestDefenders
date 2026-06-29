@@ -48,18 +48,21 @@ export class VFX {
   _acquireBurst() {
     for (const e of this._burstPool) if (!e.active) return e;
     const positions = new Float32Array(MAX_BURST_PARTICLES * 3);
+    const colors = new Float32Array(MAX_BURST_PARTICLES * 3); // Add per-particle colors
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3)); // Vertex colors
     const mat = new THREE.PointsMaterial({
-      color: 0xffffff, size: 0.16, transparent: true, opacity: 1,
+      color: 0xffffff, size: 0.10, transparent: true, opacity: 1,
       blending: THREE.AdditiveBlending, depthWrite: false,
+      vertexColors: true, // Enable vertex colors for variety
     });
     const points = new THREE.Points(geo, mat);
     points.frustumCulled = false;
     points.visible = false;
     points.layers.enable(BLOOM_LAYER); // additive particles glow in the post pipeline
     this.scene.add(points);
-    const entry = { points, positions, vels: new Float32Array(MAX_BURST_PARTICLES * 3),
+    const entry = { points, positions, colors, vels: new Float32Array(MAX_BURST_PARTICLES * 3),
       count: 0, life: 0, maxLife: 0, gravity: 0, active: false };
     this._burstPool.push(entry);
     return entry;
@@ -87,24 +90,35 @@ export class VFX {
     return this._laser;
   }
 
-  _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2 }) {
+  _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2, colorVariety = 0.15 }) {
     count = Math.min(count, MAX_BURST_PARTICLES);
     const e = this._acquireBurst();
-    const positions = e.positions, vels = e.vels;
+    const positions = e.positions, vels = e.vels, colors = e.colors;
+    const baseColor = new THREE.Color(color);
+
     for (let i = 0; i < count; i++) {
       positions[i * 3] = pos.x;
       positions[i * 3 + 1] = pos.y;
       positions[i * 3 + 2] = pos.z;
+
+      // More varied spherical distribution
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const v = speed * (0.4 + Math.random() * 0.6);
+      const v = speed * (0.3 + Math.random() * 0.7); // More speed variation
       vels[i * 3] = Math.sin(phi) * Math.cos(theta) * v * spread;
       vels[i * 3 + 1] = Math.abs(Math.cos(phi)) * v * up + v * 0.3;
       vels[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * v * spread;
+
+      // Per-particle color variation for more colorful effects
+      const variedColor = baseColor.clone();
+      variedColor.offsetHSL(0, (Math.random() - 0.5) * colorVariety, (Math.random() - 0.5) * colorVariety * 0.5);
+      colors[i * 3] = variedColor.r;
+      colors[i * 3 + 1] = variedColor.g;
+      colors[i * 3 + 2] = variedColor.b;
     }
     e.points.geometry.setDrawRange(0, count);
     e.points.geometry.attributes.position.needsUpdate = true;
-    e.points.material.color.set(color);
+    e.points.geometry.attributes.color.needsUpdate = true;
     e.points.material.size = size;
     e.points.material.opacity = 1;
     e.points.visible = true;
@@ -160,7 +174,7 @@ export class VFX {
   }
 
   muzzleFlash(pos, color = 0xc7e08a) {
-    this._burst(pos, { count: 8, color, size: 0.11, speed: 4, spread: 0.45, life: 0.1 });
+    this._burst(pos, { count: 10, color, size: 0.08, speed: 5, spread: 0.5, life: 0.12, colorVariety: 0.2 });
     this._flash(pos, color, 6, 5);
   }
 
@@ -170,10 +184,15 @@ export class VFX {
     const k = radius / 3;
     this._flash(pos, 0xffffff, 28, 14 * k);
     this._flash(pos, color, 20, 11 * k);
-    this._burst(pos, { count: 120, color, size: 0.34 * k, speed: 10 * k, spread: 1, up: 0.5, life: 0.55 });
-    this._burst(pos, { count: 70, color: 0xffe6a0, size: 0.22 * k, speed: 13 * k, spread: 1, life: 0.35 });
-    this._burst(pos, { count: 50, color: 0x444444, size: 0.4 * k, speed: 4 * k, spread: 1, up: 0.8, life: 0.9, gravity: 0.5 });
-    this._debris(pos, color, 8, 0.14 * k, 8 * k);
+    // Main fireball - smaller, more colorful
+    this._burst(pos, { count: 140, color, size: 0.18 * k, speed: 11 * k, spread: 1.1, up: 0.6, life: 0.6, colorVariety: 0.25 });
+    // Bright core - very small, intense
+    this._burst(pos, { count: 80, color: 0xffe6a0, size: 0.10 * k, speed: 14 * k, spread: 1.2, life: 0.3, colorVariety: 0.15 });
+    // Smoke/debris - darker, slower
+    this._burst(pos, { count: 40, color: 0x333333, size: 0.22 * k, speed: 3 * k, spread: 0.8, up: 1.0, life: 1.0, gravity: 0.8, colorVariety: 0.1 });
+    // Sparks - very small, fast
+    this._burst(pos, { count: 60, color: 0xffaa00, size: 0.06 * k, speed: 16 * k, spread: 1.3, life: 0.25, gravity: 3, colorVariety: 0.3 });
+    this._debris(pos, color, 8, 0.12 * k, 9 * k);
     for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : color, radius * (1.4 + i * 0.4), 0.35 + i * 0.12);
   }
 
@@ -199,13 +218,13 @@ export class VFX {
   }
 
   hitSpark(pos, color = 0xffffff) {
-    this._burst(pos, { count: 12, color, size: 0.13, speed: 5, spread: 1, life: 0.25 });
+    this._burst(pos, { count: 16, color, size: 0.07, speed: 6, spread: 1.2, life: 0.3, colorVariety: 0.2 });
   }
 
   // Melee swoosh (kick / tail swing): an outward spark burst + a ground shockwave
   // sized to the attack reach (HERO_SPEC §6.3).
   melee(pos, color = 0xffffff, radius = 2.6) {
-    this._burst(pos, { count: 26, color, size: 0.18, speed: radius * 2.2, spread: 1, up: 0.3, life: 0.4 });
+    this._burst(pos, { count: 32, color, size: 0.10, speed: radius * 2.4, spread: 1.2, up: 0.4, life: 0.45, colorVariety: 0.15 });
     this._shockwave(pos, color, radius * 1.5, 0.4);
   }
 
@@ -213,24 +232,32 @@ export class VFX {
   // lights, ~520 additive particles (lime + magenta + white-hot core + accent),
   // 3 stacked shockwaves, and chunky debris. The signature kill moment.
   spore(pos, accentColor = 0xffffff) {
-    this._flash(pos, 0xffffff, 26, 15);
-    this._flash(pos, accentColor, 18, 11);
-    this._burst(pos, { count: 180, color: 0x9bff5a, size: 0.28, speed: 8, spread: 1, life: 0.65 });
-    this._burst(pos, { count: 150, color: 0xff5ad0, size: 0.24, speed: 7, spread: 1, life: 0.6 });
-    this._burst(pos, { count: 110, color: 0xffffff, size: 0.16, speed: 11, spread: 1, life: 0.4 });
-    this._burst(pos, { count: 80, color: accentColor, size: 0.2, speed: 6, spread: 1, life: 0.55 });
-    this._debris(pos, accentColor, 10, 0.14, 7);
-    for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : accentColor, 5.0 + i * 0.5, 0.4 + i * 0.12);
+    this._flash(pos, 0xffffff, 28, 16);
+    this._flash(pos, accentColor, 20, 12);
+    // Lime-green primary burst - smaller, more varied
+    this._burst(pos, { count: 200, color: 0x9bff5a, size: 0.14, speed: 9, spread: 1.1, up: 0.7, life: 0.7, colorVariety: 0.3 });
+    // Magenta secondary burst
+    this._burst(pos, { count: 170, color: 0xff5ad0, size: 0.12, speed: 8, spread: 1.0, life: 0.65, colorVariety: 0.25 });
+    // White-hot core - very small and bright
+    this._burst(pos, { count: 120, color: 0xffffff, size: 0.08, speed: 12, spread: 1.2, life: 0.35, colorVariety: 0.1 });
+    // Accent color burst
+    this._burst(pos, { count: 100, color: accentColor, size: 0.10, speed: 7, spread: 0.9, up: 0.6, life: 0.6, colorVariety: 0.2 });
+    // Magical sparkles - tiny, slow-falling
+    this._burst(pos, { count: 60, color: 0xffaaFF, size: 0.05, speed: 4, spread: 0.7, up: 0.3, life: 0.8, gravity: 1, colorVariety: 0.4 });
+    this._debris(pos, accentColor, 12, 0.10, 8);
+    for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : accentColor, 5.0 + i * 0.6, 0.45 + i * 0.1);
   }
 
   // Celebratory burst when an animal is freed (ANIMALS_SPEC §8) — gold + pink.
   rescueBurst(pos) {
-    this._flash(pos, 0xffd6f0, 14, 8);
-    this._burst(pos, { count: 30, color: 0xffd24a, size: 0.22, speed: 6, spread: 1, up: 0.7, life: 0.75 });
-    this._burst(pos, { count: 24, color: 0xff7ab0, size: 0.2, speed: 5, spread: 1, up: 0.6, life: 0.75 });
+    this._flash(pos, 0xffd6f0, 16, 9);
+    this._burst(pos, { count: 40, color: 0xffd24a, size: 0.12, speed: 7, spread: 1.1, up: 0.8, life: 0.8, colorVariety: 0.2 });
+    this._burst(pos, { count: 35, color: 0xff7ab0, size: 0.10, speed: 6, spread: 1.0, up: 0.7, life: 0.75, colorVariety: 0.25 });
+    this._burst(pos, { count: 20, color: 0xffffff, size: 0.06, speed: 8, spread: 1.2, up: 0.5, life: 0.5, colorVariety: 0.1 });
   }
 
   update(dt) {
+    const time = performance.now() * 0.001;
     for (let i = this.active.length - 1; i >= 0; i--) {
       const b = this.active[i];
       b.life -= dt;
@@ -241,16 +268,39 @@ export class VFX {
         continue;
       }
       const arr = b.points.geometry.attributes.position.array;
+      const cols = b.points.geometry.attributes.color?.array;
       const n = b.count * 3;
+      const lifeRatio = b.life / b.maxLife;
+
       for (let j = 0; j < n; j += 3) {
         b.vels[j + 1] -= b.gravity * dt;
-        arr[j] += b.vels[j] * dt;
+
+        // Add subtle spiral motion to particles
+        const idx = j / 3;
+        const spiral = Math.sin(time * 3 + idx * 0.1) * 0.3 * dt;
+
+        arr[j] += (b.vels[j] + spiral) * dt;
         arr[j + 1] += b.vels[j + 1] * dt;
-        arr[j + 2] += b.vels[j + 2] * dt;
+        arr[j + 2] += (b.vels[j + 2] + Math.cos(time * 2.5 + idx * 0.1) * 0.3 * dt) * dt;
+
         if (arr[j + 1] < 0) arr[j + 1] = 0;
       }
       b.points.geometry.attributes.position.needsUpdate = true;
-      b.points.material.opacity = b.life / b.maxLife;
+
+      // Shimmer effect - pulse opacity with high-frequency variation
+      const shimmer = 0.9 + Math.sin(time * 15 + i) * 0.1;
+      b.points.material.opacity = lifeRatio * shimmer;
+
+      // Size pulsing for more dynamic feel
+      const sizePulse = 0.85 + Math.sin(time * 8 + i * 0.5) * 0.15;
+      b.points.material.size = b._baseSize || b.points.material.size;
+      if (!b._baseSize) b._baseSize = b.points.material.size;
+      b.points.material.size = b._baseSize * sizePulse * (0.5 + lifeRatio * 0.5);
+
+      // Dynamic color shifting near end of life
+      if (cols && lifeRatio < 0.3) {
+        b.points.geometry.attributes.color.needsUpdate = true;
+      }
     }
 
     // Pooled flash lights: fade by dimming intensity, never remove from the scene

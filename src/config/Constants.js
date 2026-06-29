@@ -19,8 +19,8 @@ export const PLAYER = {
   HP_PER_LEVEL: 20,
   DAMAGE_PER_LEVEL: 0.15,
   // Melee
-  KICK_DAMAGE: 40, KICK_RANGE: 2.5, KICK_COOLDOWN: 0.7,
-  KICK_LUNGE_SPEED: 14, KICK_JUMP_VELOCITY: 7, KICK_KNOCKBACK: 28, // Jump kick: lunge forward, launch up, send enemies flying
+  KICK_DAMAGE: 40, KICK_RANGE: 3.0, KICK_COOLDOWN: 0.7,
+  KICK_LUNGE_SPEED: 16, KICK_JUMP_VELOCITY: 8, KICK_KNOCKBACK: 35, // Jump kick: lunge forward, launch up, send enemies flying
   TAIL_DAMAGE: 10, TAIL_RANGE: 2.8, TAIL_COOLDOWN: 0.8, TAIL_IFRAMES: 0.7, // Reduced from 28 to test knockback
 };
 
@@ -448,7 +448,7 @@ export const BIOMES = {
     lantern: { lit: 0xaeffc8, litEmissive: 0x39ff88, unlit: 0x2a2f38, post: 0x1b1f28, light: 0x7fff9f, lightI: 3.4 },
     platform: { top: 0x1f242e, topRim: 0x7fff9f, cap: 0x262c38, pillar: 0x161922, step: 0x232834, pillarRim: 0x39ff88 },
     firefly: 0x7fff9f, fireflyN: 210,
-    ambientFall: { type: 'petals', color: 0x7fff9f, size: 0.16, opacity: 0.8 },
+    ambientFall: { type: 'petals', color: 0x7fff9f, size: 0.10, opacity: 0.75 },
     skyDecor: { body: 'sun', bodyColor: 0xfff4d8, bodyGlow: 0xffe2a0, bodyPos: [-150, 200, 320], bodyR: 26,
       cloud: 0xeef3f7, cloudShadow: 0xb9c6d2, cloudN: 16, comets: 1, ships: 2, stars: 40 },
   },
@@ -471,7 +471,7 @@ export const BIOMES = {
     lantern: { lit: 0xffa05a, litEmissive: 0xff3a00, unlit: 0x2e221c, post: 0x1c1512, light: 0xff5a2a, lightI: 4.2 },
     platform: { top: 0x241a16, topRim: 0xff7a3a, cap: 0x2c211c, pillar: 0x1c1512, step: 0x2c211c, pillarRim: 0xff3a00 },
     firefly: 0xff7a3a, fireflyN: 270,
-    ambientFall: { type: 'ash', color: 0xff7a30, size: 0.13, opacity: 0.9 },
+    ambientFall: { type: 'ash', color: 0xff7a30, size: 0.08, opacity: 0.8 },
     skyDecor: { body: 'sun', bodyColor: 0xff5a1a, bodyGlow: 0xff3000, bodyPos: [130, 110, 330], bodyR: 34,
       cloud: 0x5a2c20, cloudShadow: 0x331812, cloudN: 18, comets: 3, ships: 3, stars: 0 },
   },
@@ -494,7 +494,7 @@ export const BIOMES = {
     lantern: { lit: 0x9ae0ff, litEmissive: 0x4080ff, unlit: 0x222a48, post: 0x14172a, light: 0x6ad0ff, lightI: 3.8 },
     platform: { top: 0x1a1f38, topRim: 0x6ad0ff, cap: 0x1e2440, pillar: 0x14172a, step: 0x1e2440, pillarRim: 0x4080ff },
     firefly: 0x6ad0ff, fireflyN: 240,
-    ambientFall: { type: 'leaves', color: 0x80c0ff, size: 0.16, opacity: 0.85 },
+    ambientFall: { type: 'leaves', color: 0x80c0ff, size: 0.09, opacity: 0.78 },
     skyDecor: { body: 'moon', bodyColor: 0xdfe8ff, bodyGlow: 0x8ab0ff, bodyPos: [160, 210, 300], bodyR: 24,
       cloud: 0x3a4a78, cloudShadow: 0x222d52, cloudN: 12, comets: 2, ships: 4, stars: 260 },
   },

@@ -114,8 +114,8 @@ export function forceFieldMaterial(accentColor) {
       // Overall low-frequency flicker.
       float flick = 0.85 + 0.15 * sin(uTime * 7.0 + vUv.x * 3.0);
 
-      float base = 0.10 + edge * 0.35;
-      float a = (base + scan * 0.18 + weave * 0.06) * flick;
+      float base = 0.02 + edge * 0.10;
+      float a = (base + scan * 0.05 + weave * 0.02) * flick;
       a = clamp(a, 0.0, 0.85);
       gl_FragColor = vec4(uAccent * (1.0 + scan * 0.6), a);
     }

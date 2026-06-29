@@ -286,9 +286,10 @@ export class Player {
     if (this._kickCd > 0 || !ctx?.enemies) return;
     this._kickCd = PLAYER.KICK_COOLDOWN;
 
-    // Lunge forward and upward (jump kick)
-    this.velocity.x += this._fwd.x * PLAYER.KICK_LUNGE_SPEED;
-    this.velocity.z += this._fwd.z * PLAYER.KICK_LUNGE_SPEED;
+    // Lunge forward and upward (jump kick) - use the player's facing direction
+    const kickDir = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
+    this.velocity.x += kickDir.x * PLAYER.KICK_LUNGE_SPEED;
+    this.velocity.z += kickDir.z * PLAYER.KICK_LUNGE_SPEED;
     this.velocity.y = PLAYER.KICK_JUMP_VELOCITY;
     this.grounded = false;
 
@@ -300,13 +301,15 @@ export class Player {
       const dist = this._toEnemy.length();
       if (dist > PLAYER.KICK_RANGE + e.hitRadius || dist < 1e-3) continue;
       this._toEnemy.multiplyScalar(1 / dist);
-      if (this._toEnemy.dot(this._fwd) < 0.25) continue; // forward cone only (slightly wider)
+      // Wider cone for easier hits
+      if (this._toEnemy.dot(kickDir) < 0.1) continue;
       e.takeDamage(PLAYER.KICK_DAMAGE, 'PHYSICAL', ctx);
+      // Knockback enemies AWAY from player (same direction as kick)
       e.applyKnockback?.(this._toEnemy, PLAYER.KICK_KNOCKBACK);
       hit = true;
     }
-    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(this._fwd, 1.5).setY(1.2), 0xfff0a0, PLAYER.KICK_RANGE);
-    ctx.cameraRig?.addShake?.(0.4);
+    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(kickDir, 1.5).setY(1.2), 0xfff0a0, PLAYER.KICK_RANGE);
+    ctx.cameraRig?.addShake?.(0.5);
     ctx?.audio?.melee('kick');
     if (hit) ctx.juice?.hitStop?.();
   }

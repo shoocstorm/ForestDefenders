@@ -61,10 +61,20 @@ export class Arena {
       const arr = this.fireflies.geometry.attributes.position.array;
       for (let i = 0; i < this._ffSeed.length; i++) {
         const s = this._ffSeed[i];
-        arr[i * 3 + 1] += Math.sin(this._t * 1.3 + s) * dt * 0.4;
-        arr[i * 3] += Math.cos(this._t * 0.7 + s) * dt * 0.3;
+        const speed = this._ffSpeed[i];
+
+        // More organic figure-8 motion
+        arr[i * 3] += Math.cos(this._t * 0.8 + s) * dt * speed * 0.5;
+        arr[i * 3 + 1] = this._ffBaseY[i] + Math.sin(this._t * 1.5 + s) * 0.5 + Math.sin(this._t * 0.7 + s * 2) * 0.3;
+        arr[i * 3 + 2] += Math.sin(this._t * 0.6 + s) * dt * speed * 0.4;
+
+        // Gentle bobbing
+        arr[i * 3 + 1] += Math.sin(this._t * 2 + s) * dt * 0.2;
       }
       this.fireflies.geometry.attributes.position.needsUpdate = true;
+
+      // Pulse opacity for twinkling effect
+      this.fireflies.material.opacity = 0.7 + Math.sin(this._t * 3) * 0.15;
     }
     if (this._landmarkUpdate) this._landmarkUpdate(dt, this._t);
   }
@@ -193,7 +203,7 @@ export class Arena {
     const t = this.tech;
     const hx = ARENA.WIDTH / 2, hz = ARENA.LENGTH / 2;
     const railMat = toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.5 } });
-    const postMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.9 });
+    const postMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.12 });
     const fieldH = 3.6; // force-field height
 
     // Shared field geometry per axis (different spans for X vs Z walls).
@@ -220,7 +230,6 @@ export class Arena {
       if (axis === 'z') fieldGeo.rotateY(Math.PI / 2);
       const field = new THREE.Mesh(fieldGeo, ffMatTemplate());
       field.position.set(cx, fieldH / 2 + 0.2, cz);
-      field.layers.enable(BLOOM_LAYER);
       field.userData.arenaOwned = true;
       this.scene.add(field);
 
@@ -234,13 +243,11 @@ export class Arena {
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, fieldH + 0.6, 8), postMat);
         post.position.set(px, (fieldH + 0.6) / 2, pz);
         post.castShadow = true;
-        post.layers.enable(BLOOM_LAYER);
         post.userData.arenaOwned = true;
         this.scene.add(post);
         // Glowing cap.
         const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), postMat);
         cap.position.set(px, fieldH + 0.9, pz);
-        cap.layers.enable(BLOOM_LAYER);
         cap.userData.arenaOwned = true;
         this.scene.add(cap);
       }
@@ -635,18 +642,38 @@ export class Arena {
     const b = this.biome;
     const n = b.fireflyN;
     const pos = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3); // Add per-firefly colors
     this._ffSeed = new Float32Array(n);
+    this._ffPhase = new Float32Array(n); // Individual blink phase
+    this._ffSpeed = new Float32Array(n); // Individual movement speed
+    this._ffBaseY = new Float32Array(n); // Base height for bobbing
+
+    const baseColor = new THREE.Color(b.firefly);
+
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (Math.random() - 0.5) * (ARENA.WIDTH - 4);
-      pos[i * 3 + 1] = 0.4 + Math.random() * 2.4;
+      pos[i * 3 + 1] = 0.3 + Math.random() * 3.0;
       pos[i * 3 + 2] = (Math.random() - 0.5) * (ARENA.LENGTH - 8);
       this._ffSeed[i] = Math.random() * 100;
+      this._ffPhase[i] = Math.random() * Math.PI * 2;
+      this._ffSpeed[i] = 0.3 + Math.random() * 0.7;
+      this._ffBaseY[i] = pos[i * 3 + 1];
+
+      // Varied colors per firefly - more colorful
+      const variedColor = baseColor.clone();
+      variedColor.offsetHSL(0, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3);
+      colors[i * 3] = variedColor.r;
+      colors[i * 3 + 1] = variedColor.g;
+      colors[i * 3 + 2] = variedColor.b;
     }
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const mat = new THREE.PointsMaterial({
-      color: b.firefly, size: 0.16, transparent: true, opacity: 0.9,
+      color: 0xffffff, size: 0.08, transparent: true, opacity: 0.85,
       blending: THREE.AdditiveBlending, depthWrite: false,
+      vertexColors: true,
     });
     this.fireflies = new THREE.Points(geo, mat);
     this.fireflies.frustumCulled = false;

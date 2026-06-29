@@ -221,19 +221,48 @@ export class Game {
   _buildAmbientFall(biomeKey) {
     if (this.petals) { this.scene.remove(this.petals); this.petals.geometry.dispose(); this.petals.material.dispose(); }
     const af = (BIOMES[biomeKey] || BIOMES.L1).ambientFall;
-    const count = 400;
+    const count = 500; // More particles for better coverage
     const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3); // Per-particle colors
     this._fallY = new Float32Array(count);
     this._fallSpeed = new Float32Array(count);
+    this._fallDrift = new Float32Array(count); // Horizontal drift
+    this._fallPhase = new Float32Array(count); // For oscillation
+    this._fallSize = new Float32Array(count); // Individual sizes
+
+    const baseColor = new THREE.Color(af.color);
+
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 30;
-      positions[i * 3 + 1] = Math.random() * 18;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 70;
-      this._fallSpeed[i] = 0.4 + Math.random() * 0.8;
+      positions[i * 3] = (Math.random() - 0.5) * 35;
+      positions[i * 3 + 1] = Math.random() * 20;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 75;
+      this._fallSpeed[i] = 0.5 + Math.random() * 0.7;
+      this._fallDrift[i] = (Math.random() - 0.5) * 2;
+      this._fallPhase[i] = Math.random() * Math.PI * 2;
+      this._fallSize[i] = 0.6 + Math.random() * 0.8; // Size multiplier
+
+      // Varied colors per particle
+      const variedColor = baseColor.clone();
+      const hueShift = (Math.random() - 0.5) * 0.15;
+      const satShift = (Math.random() - 0.5) * 0.2;
+      variedColor.offsetHSL(hueShift, satShift, (Math.random() - 0.5) * 0.2);
+      colors[i * 3] = variedColor.r;
+      colors[i * 3 + 1] = variedColor.g;
+      colors[i * 3 + 2] = variedColor.b;
     }
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ color: af.color, size: af.size, transparent: true, opacity: af.opacity });
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: af.size * 0.6, // Smaller base size
+      transparent: true,
+      opacity: af.opacity,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
     this.petals = new THREE.Points(geo, mat);
     this.petals.frustumCulled = false;
     this.scene.add(this.petals);
@@ -243,16 +272,31 @@ export class Game {
     if (!this.petals) return;
     const pos = this.petals.geometry.attributes.position;
     const arr = pos.array;
+    const time = performance.now() * 0.001;
+
     for (let i = 0; i < arr.length / 3; i++) {
+      // Falling with drift
       arr[i * 3 + 1] -= this._fallSpeed[i] * dt;
-      arr[i * 3] += Math.sin(performance.now() * 0.0005 + i) * dt * 0.3;
+
+      // Gentle horizontal drift with figure-8 pattern
+      const phase = this._fallPhase[i];
+      arr[i * 3] += (Math.sin(time * 0.5 + phase) * 0.5 + this._fallDrift[i]) * dt;
+      arr[i * 3 + 2] += Math.cos(time * 0.4 + phase * 0.7) * dt * 0.4;
+
+      // Swaying motion
+      arr[i * 3] += Math.sin(time * 2 + phase) * dt * 0.2;
+
+      // Reset when below ground
       if (arr[i * 3 + 1] < 0) {
-        arr[i * 3 + 1] = 18;
-        arr[i * 3] = (Math.random() - 0.5) * 30;
-        arr[i * 3 + 2] = (Math.random() - 0.5) * 70;
+        arr[i * 3 + 1] = 20;
+        arr[i * 3] = (Math.random() - 0.5) * 35;
+        arr[i * 3 + 2] = (Math.random() - 0.5) * 75;
       }
     }
     pos.needsUpdate = true;
+
+    // Subtle pulsing of opacity
+    this.petals.material.opacity = 0.7 + Math.sin(time * 0.8) * 0.1;
   }
 
   start() {

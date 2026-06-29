@@ -423,23 +423,22 @@ export class HeroModel {
     // as a mid-air lunge to the enemy's head.
     if (this._kickT > 0) {
       const kt = 1 - this._kickT / KICK_DUR; // 0→1 over the clip
-      const kp = Math.sin(kt * Math.PI);     // 0→1→0 ease
       // Wind-up phase (early): crouch and coil
       const windup = kt < 0.25 ? (0.25 - kt) / 0.25 : 0;
       // Kick extension (main): full flying pose
       const extend = kt >= 0.25 ? Math.sin((kt - 0.25) / 0.75 * Math.PI) : 0;
-      // Left leg: plants then tucks back
-      this.rig.legL.rotation.x = windup * 0.8 - extend * 1.8;
-      // Right leg (kicking leg): winds back then extends full forward
-      this.rig.legR.rotation.x = windup * 0.5 - extend * 2.2;
-      // Body: leans way forward into the kick, horizontal at peak
-      this.rig.body.rotation.x += extend * 1.3;
-      this.rig.body.rotation.z -= extend * 0.4; // slight tilt into the kick
-      // Head: looks forward along the kick line
-      this.rig.head.rotation.x = -extend * 0.8;
+      // Left leg: plants back for balance
+      this.rig.legL.rotation.x = -windup * 0.8 + extend * 1.5;
+      // Right leg (kicking leg): winds back then kicks FULL forward
+      this.rig.legR.rotation.x = -windup * 0.4 + extend * 2.4;
+      // Body: leans way forward into the kick, nearly horizontal at peak
+      this.rig.body.rotation.x -= extend * 1.4;
+      this.rig.body.rotation.z += extend * 0.3; // tilt into the kick
+      // Head: looks down along the kick line
+      this.rig.head.rotation.x = extend * 0.6;
       // Arms: flail back for balance/momentum
-      this.rig.armL.rotation.x = extend * 1.1;
-      this.rig.armR.rotation.x = extend * 0.8;
+      this.rig.armL.rotation.x = -extend * 1.0;
+      this.rig.armR.rotation.x = -extend * 0.7;
     }
 
     // Solve the arm IK last so the paws lock onto the (now-posed) gun grips.

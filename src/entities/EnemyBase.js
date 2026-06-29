@@ -322,8 +322,8 @@ export class EnemyBase {
   _updatePreDeath(dt, ctx) {
     this._preDeathT += dt;
 
-    // Longer delay so knockback is clearly visible
-    const PRE_DEATH_DURATION = 0.6;
+    // Short delay so knockback is visible but snappy
+    const PRE_DEATH_DURATION = 0.35;
 
     // Continue knockback slide - enemy flies away from hit
     this._applyKnock(dt);
@@ -367,7 +367,7 @@ export class EnemyBase {
       if (!this.removeMe) {
         ctx.loot.spawnGold(this.position, randInt(COMBAT.GOLD_MIN ?? 1, COMBAT.GOLD_MAX ?? 5));
       }
-    }, 400); // Gold spawns 400ms after particles
+    }, 200); // Gold spawns 200ms after particles
 
     // Bosses get dramatic slow-mo; regular kills get a light impact freeze.
     if (this.role === 'boss') ctx.juice.slowMo();
@@ -385,12 +385,12 @@ export class EnemyBase {
     const set = (x, y, z) => this.root?.scale.set(x, y, z);
     // Fade the glow out as it collapses.
     for (let i = 0; i < this._emissives.length; i++) {
-      this._emissives[i].emissiveIntensity = this._baseEmissive[i] * clamp(1 - t / 0.4, 0, 1);
+      this._emissives[i].emissiveIntensity = this._baseEmissive[i] * clamp(1 - t / 0.25, 0, 1);
     }
-    if (t < 0.14) set(1 + (0.6) * (t / 0.14), 1 - 0.6 * (t / 0.14), 1 + 0.6 * (t / 0.14));
-    else if (t < 0.30) { const k = (t - 0.14) / 0.16; set(1.6 - 1.1 * k, 0.4 + 1.4 * k, 1.6 - 1.1 * k); }
-    else if (t < 0.42) { const k = (t - 0.30) / 0.12; set(0.5 + 0.85 * k, 1.8 - 1.1 * k, 0.5 + 0.85 * k); }
-    else if (t < 0.54) { const k = (t - 0.42) / 0.12; set(1.35 + 0.15 * k, 0.7 + 0.8 * k, 1.35 + 0.15 * k); }
+    if (t < 0.08) set(1 + (0.6) * (t / 0.08), 1 - 0.6 * (t / 0.08), 1 + 0.6 * (t / 0.08));
+    else if (t < 0.18) { const k = (t - 0.08) / 0.10; set(1.6 - 1.1 * k, 0.4 + 1.4 * k, 1.6 - 1.1 * k); }
+    else if (t < 0.25) { const k = (t - 0.18) / 0.07; set(0.5 + 0.85 * k, 1.8 - 1.1 * k, 0.5 + 0.85 * k); }
+    else if (t < 0.32) { const k = (t - 0.25) / 0.07; set(1.35 + 0.15 * k, 0.7 + 0.8 * k, 1.35 + 0.15 * k); }
     else { this.dispose(); }
   }
 
