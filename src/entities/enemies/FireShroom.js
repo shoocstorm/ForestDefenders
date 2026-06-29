@@ -28,6 +28,7 @@ export class FireShroom extends EnemyBase {
       color: 0xff6a2a,
       radius: 0.22,
       lifetime: 4,
+      bullet: 'fire',
     });
     ctx.vfx.muzzleFlash(_spawn, 0xff7a30);
     if (this.capPivot) this.capPivot.rotation.x = -0.4;

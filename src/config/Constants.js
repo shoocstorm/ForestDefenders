@@ -79,26 +79,26 @@ export const WEAPONS = {
   ACORN: {
     id: 'ACORN', name: 'Acorn Gun', element: 'NATURE', mode: 'single',
     damage: 10, cooldown: 0.3, recoil: 0.35, automatic: true,
-    projectileSpeed: 20, projectileRadius: 0.16,
+    projectileSpeed: 34, projectileRadius: 0.16, bullet: 'acorn',
     color: 0x9a6a35, muzzleColor: 0xc7e08a, ammo: { type: 'infinite' },
   },
   GANON: {
     id: 'GANON', name: 'Ganon Rifle', element: 'ENERGY', mode: 'charge',
     damage: 25, cooldown: 0.5, recoil: 0.7, automatic: false,
-    projectileSpeed: 34, projectileRadius: 0.2, chargeTime: 0.7, minMult: 0.5, maxMult: 1.6,
+    projectileSpeed: 52, projectileRadius: 0.2, chargeTime: 0.7, minMult: 0.5, maxMult: 1.6, bullet: 'shard',
     color: 0x49e8ff, muzzleColor: 0x49e8ff, ammo: { type: 'magazine', mag: 5, max: 15 },
   },
   MACHINE: {
     id: 'MACHINE', name: 'Machine Gun', element: 'PHYSICAL', mode: 'rapid',
     damage: 5, cooldown: 0.08, recoil: 0.16, automatic: true,
-    projectileSpeed: 30, projectileRadius: 0.12, spread: 0.05,
+    projectileSpeed: 48, projectileRadius: 0.12, spread: 0.05, bullet: 'tracer',
     color: 0xffe07a, muzzleColor: 0xffb13a,
     ammo: { type: 'overheat', perShot: 5, cool: 38, lockout: 2 },
   },
   BOOM: {
     id: 'BOOM', name: 'Boomstick', element: 'FIRE', mode: 'explosive',
     damage: 40, cooldown: 1.2, recoil: 0.6, automatic: false,
-    projectileSpeed: 22, projectileRadius: 0.26, explodeRadius: 3.0, knockback: 9,
+    projectileSpeed: 36, projectileRadius: 0.26, explodeRadius: 3.0, knockback: 9, bullet: 'fire',
     color: 0xff8a2a, muzzleColor: 0xff6a1a, ammo: { type: 'magazine', mag: 10, max: 30 },
   },
   LASER: {
@@ -110,25 +110,25 @@ export const WEAPONS = {
   SHOTGUN: {
     id: 'SHOTGUN', name: 'Scattergun', element: 'PHYSICAL', mode: 'spread',
     damage: 8, cooldown: 0.7, recoil: 0.6, automatic: false,
-    projectileSpeed: 26, projectileRadius: 0.13, pellets: 6, spreadAngle: 0.18,
+    projectileSpeed: 42, projectileRadius: 0.13, pellets: 6, spreadAngle: 0.18, bullet: 'pellet',
     color: 0xffd27a, muzzleColor: 0xffe24a, ammo: { type: 'infinite' },
   },
   FIRE_BULLET: {
     id: 'FIRE_BULLET', name: 'Fire Bullet', element: 'FIRE', mode: 'explosive',
     damage: 35, cooldown: 0.9, recoil: 0.5, automatic: false,
-    projectileSpeed: 28, projectileRadius: 0.2, explodeRadius: 2.4, knockback: 6,
+    projectileSpeed: 44, projectileRadius: 0.2, explodeRadius: 2.4, knockback: 6, bullet: 'fire',
     color: 0xff5a2a, muzzleColor: 0xff7a2a, ammo: { type: 'magazine', mag: 20, max: 40 },
   },
   BOW: {
     id: 'BOW', name: 'Forest Bow', element: 'ENERGY', mode: 'charge',
     damage: 30, cooldown: 0.6, recoil: 0.25, automatic: false,
-    projectileSpeed: 40, projectileRadius: 0.16, chargeTime: 0.8, minMult: 0.4, maxMult: 1.8, arc: 4,
+    projectileSpeed: 60, projectileRadius: 0.16, chargeTime: 0.8, minMult: 0.4, maxMult: 1.8, arc: 4, bullet: 'arrow',
     color: 0x9bff6a, muzzleColor: 0x9bff6a, ammo: { type: 'infinite' },
   },
   TOROID: {
     id: 'TOROID', name: 'Toroid Cannon', element: 'ENERGY', mode: 'ring',
     damage: 50, cooldown: 1.5, recoil: 0.5, automatic: false,
-    projectileSpeed: 18, projectileRadius: 0.45, empRadius: 3.5, empDuration: 3.5, knockback: 4,
+    projectileSpeed: 30, projectileRadius: 0.45, empRadius: 3.5, empDuration: 3.5, knockback: 4, bullet: 'ring',
     color: 0x6ad0ff, muzzleColor: 0x6ad0ff, ammo: { type: 'energy', max: 100, perShot: 25, regen: 6 },
   },
 };

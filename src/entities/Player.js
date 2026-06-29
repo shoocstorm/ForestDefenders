@@ -129,11 +129,11 @@ export class Player {
 
     // --- Weapon switch (number keys 1-9 / Q cycles) + melee (V kick, R tail) ---
     for (let i = 0; i < this.weapons.weapons.length; i++) {
-      if (input.wasPressed(`Digit${i + 1}`)) this._setWeapon(this.weapons.select(i));
+      if (input.wasPressedSim(`Digit${i + 1}`)) this._setWeapon(this.weapons.select(i));
     }
-    if (input.wasPressed('KeyQ')) this._setWeapon(this.weapons.next());
-    if (input.wasPressed('KeyV')) this._kick(ctx);
-    if (input.wasPressed('KeyR')) this._tailSwing(ctx);
+    if (input.wasPressedSim('KeyQ')) this._setWeapon(this.weapons.next());
+    if (input.wasPressedSim('KeyV')) this._kick(ctx);
+    if (input.wasPressedSim('KeyR')) this._tailSwing(ctx);
 
     // Tail Guard Fruit buff: auto-swing the tail when an enemy enters range
     // (respects the normal tail cooldown), clearing crowders off the player.
@@ -157,7 +157,7 @@ export class Player {
     this.velocity.z = this._wish.z * speed;
 
     // --- Jump / double-jump ---
-    if (input.wasPressed('Space')) {
+    if (input.wasPressedSim('Space')) {
       if (this.grounded) {
         this.velocity.y = PLAYER.JUMP_VELOCITY;
         this.grounded = false;

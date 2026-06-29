@@ -35,7 +35,7 @@ export class AnimalManager {
       if (d < bestD) { bestD = d; this.nearestCaged = a; }
     }
     if (this.nearestCaged && ctx.input &&
-        (ctx.input.wasPressed('KeyE') || ctx.input.wasPressed('KeyF'))) {
+        (ctx.input.wasPressedSim('KeyE') || ctx.input.wasPressedSim('KeyF'))) {
       // Count it before freeing so the rescue hook (weapon unlocks) sees the
       // updated freedCount (e.g. "all animals rescued" → Fire Bullet).
       const animal = this.nearestCaged;

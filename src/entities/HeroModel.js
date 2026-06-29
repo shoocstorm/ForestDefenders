@@ -25,16 +25,22 @@ const SWITCH_DUR = 0.4;      // weapon-swap dip
 const KICK_DUR = 0.5;        // kick one-shot
 const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
-// Palette (squirrel-red fur + cream belly, dark gunmetal rifle).
-const FUR      = 0xc06a2e;
-const FUR_DARK = 0x8a4720;
-const CREAM    = 0xf3e3c2;
-const PINK     = 0xe79bb0;
-const DARK     = 0x161310;
+// Palette — "Frost Ranger": cool slate-blue fur, frost-white belly, teal mids,
+// glowing cyan accents + warm amber eyes for contrast, dark gunmetal rifle.
+const FUR      = 0x4a6c8f;   // slate blue
+const FUR_DARK = 0x2f4a66;   // deep navy (shadow fur / boots / forearms)
+const CREAM    = 0xe7f1f7;   // frost-white belly
+const PINK     = 0x9fd8e6;   // icy ear inner
+const DARK     = 0x10161d;   // near-black detailing
 const METAL    = 0x3a3d44;
 const WOOD     = 0x6e4a26;
+const GLOW     = 0x5fe6ff;   // cyan energy glow (eyes, gem, tail tip)
+const AMBER    = 0xffb347;   // warm amber iris (pops against the cool fur)
 
 const T = (c, o = {}) => toon({ color: c, ...o });
+// Self-lit glow material (emissive cel) for energy accents.
+const GLOWMAT = (c = GLOW, i = 1.6) =>
+  toon({ color: c, emissive: c, emissiveIntensity: i, rim: { color: c, intensity: 0.9 } });
 
 // Per-weapon gun silhouettes (keyed by WEAPONS id). The hero rebuilds its held
 // gun from these so the selected weapon is visible in the hand, without authoring
@@ -128,27 +134,47 @@ export class HeroModel {
     const belly = mesh(new THREE.SphereGeometry(0.17, 14, 12), T(CREAM), body, [0, 0.13, -0.07]);
     belly.scale.set(0.9, 1.2, 0.7);
 
+    // Ranger scarf — a dark navy collar ring that breaks the neck silhouette,
+    // with a glowing energy gem set at the throat (the hero's "core").
+    const scarf = mesh(new THREE.TorusGeometry(0.13, 0.045, 8, 16), T(FUR_DARK), body, [0, 0.34, -0.02], [Math.PI / 2, 0, 0]);
+    scarf.scale.set(1, 1, 0.8);
+    const gem = mesh(new THREE.OctahedronGeometry(0.05, 0), GLOWMAT(GLOW, 1.8), body, [0, 0.30, -0.16]);
+    gem.scale.set(1, 1.4, 0.7);
+    gem.userData.__outline = true; // keep the gem reading as pure light
+    this.rig.gem = gem;
+
     // --- Head pivot. ---
     const head = new THREE.Group();
     head.position.set(0, 0.44, -0.02);
     body.add(head);
     this.rig.head = head;
     mesh(new THREE.SphereGeometry(0.18, 16, 14), T(FUR), head, [0, 0, 0]);
-    // Muzzle/snout + cheeks (cream), forward -Z.
-    const snout = mesh(new THREE.SphereGeometry(0.10, 12, 10), T(CREAM), head, [0, -0.03, -0.13]);
-    snout.scale.set(1.0, 0.85, 1.1);
-    mesh(new THREE.SphereGeometry(0.035, 8, 8), T(DARK), head, [0, 0.0, -0.235]); // nose
+    // Chubby cream cheeks — the chipmunk/squirrel "stuffed" look, framing a short
+    // rounded muzzle with a small dark nose. Kept simple: no mask band, no brows.
     for (const sx of [-1, 1]) {
-      // Eyes.
-      mesh(new THREE.SphereGeometry(0.045, 10, 10), T(DARK), head, [sx * 0.08, 0.06, -0.145]);
-      mesh(new THREE.SphereGeometry(0.016, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xffffff }), head, [sx * 0.085, 0.085, -0.175]);
-      // Ears — tall tufted squirrel ears.
+      const cheek = mesh(new THREE.SphereGeometry(0.075, 10, 8), T(CREAM), head, [sx * 0.075, -0.05, -0.10]);
+      cheek.scale.set(1.0, 0.9, 1.0);
+    }
+    const snout = mesh(new THREE.SphereGeometry(0.085, 12, 10), T(CREAM), head, [0, -0.04, -0.13]);
+    snout.scale.set(1.05, 0.9, 1.05);
+    const nose = mesh(new THREE.SphereGeometry(0.028, 8, 8), T(0x3a2a2e), head, [0, -0.02, -0.205]); // small nose
+    nose.scale.set(1.1, 0.85, 1);
+    for (const sx of [-1, 1]) {
+      // Simple beady eyes: a round dark sphere with one bright catchlight. Friendly,
+      // not heroic — the typical squirrel read.
+      const eye = mesh(new THREE.SphereGeometry(0.042, 12, 12), T(DARK), head, [sx * 0.078, 0.055, -0.15]);
+      eye.scale.set(1, 1.05, 1);
+      mesh(new THREE.SphereGeometry(0.014, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }), head, [sx * 0.088, 0.075, -0.182]);
+      // Ears — tall tufted squirrel ears with icy inner + glow tip.
       const ear = mesh(new THREE.ConeGeometry(0.05, 0.16, 7), T(FUR), head, [sx * 0.10, 0.20, 0.02], [0.1, 0, sx * 0.2]);
       mesh(new THREE.ConeGeometry(0.026, 0.10, 7), T(PINK), ear, [0, -0.01, 0.012]);
+      mesh(new THREE.SphereGeometry(0.018, 6, 6), GLOWMAT(GLOW, 1.2), ear, [0, 0.085, 0]); // glowing ear tuft
     }
-    // Buck teeth.
-    mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), T(0xfffef2), head, [0, -0.10, -0.20]);
+    // Prominent buck teeth — the squirrel signature, two front incisors.
+    for (const sx of [-1, 1]) {
+      mesh(new THREE.BoxGeometry(0.026, 0.05, 0.018), T(0xfffef2), head, [sx * 0.016, -0.10, -0.205]);
+    }
 
     // --- Arms: real two-bone chains (shoulder → elbow → paw). Built straight,
     // hanging down -Y; update() solves IK each frame so the paws land on the
@@ -225,6 +251,8 @@ export class HeroModel {
       { p: [0, 0.58, -0.02], r: 0.16, c: CREAM },
     ];
     for (const s of segs) mesh(new THREE.SphereGeometry(s.r, 12, 10), T(s.c), tail, s.p);
+    // Frost-glow tip caps the tail with a cool energy accent.
+    mesh(new THREE.SphereGeometry(0.07, 10, 8), GLOWMAT(GLOW, 0.9), tail, [0, 0.64, -0.05]);
 
     addOutlines(root, { thickness: 0.014 });
 
@@ -402,6 +430,12 @@ export class HeroModel {
 
     // Head: subtle counter-bob + look-into-run.
     this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m;
+
+    // Energy gem: gentle breathing pulse, brighter while moving/firing.
+    if (this.rig.gem) {
+      this.rig.gem.material.emissiveIntensity =
+        1.4 + Math.sin(this._t * 3.2) * 0.3 + recoil * 1.2 + m * 0.4;
+    }
 
     // Tail: lazy idle sway, streams up/out at speed, flares on jump.
     const tailSway = Math.sin(this._t * 2.2 + ph) * lerp(0.12, 0.28, m);

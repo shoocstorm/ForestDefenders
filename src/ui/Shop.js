@@ -38,10 +38,11 @@ export class Shop {
         #shop-title small{display:block;font-size:12px;letter-spacing:3px;color:#9fdca0;font-weight:700;opacity:.8;}
         #shop-gold{display:flex;align-items:center;gap:9px;font-size:26px;font-weight:800;color:#ffd24a;
           text-shadow:0 2px 0 #0008,0 0 16px #ffb31a55;}
-        #shop-gold .coin{width:24px;height:24px;border-radius:50%;
-          background:radial-gradient(circle at 35% 30%,#ffe89a,#e8a81f 70%,#a8740c);
-          box-shadow:0 0 10px #ffbf3a88, inset 0 -2px 3px #0006;display:flex;align-items:center;
-          justify-content:center;font-size:13px;color:#7a4d05;}
+        #shop-gold .coin{width:28px;height:28px;border-radius:50%;
+          background:radial-gradient(circle at 33% 28%,#ffeda6,#e8a81f 55%,#b87f10);
+          box-shadow:0 0 14px #ffbf3a99, inset 0 -3px 4px #0006;display:flex;align-items:center;
+          justify-content:center;font-size:20px;font-weight:900;color:#6a3f00;
+          border:2px solid #f5c542;text-shadow:0 1px 0 #ffdd7fcc;}
         #shop-gold.pulse{animation:shoppulse .35s ease;}
         @keyframes shoppulse{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
         #shop-tabs{display:flex;gap:8px;padding:12px 26px 0;}
@@ -51,13 +52,13 @@ export class Shop {
         .shop-tab.active{background:#13261a;color:#fff;box-shadow:0 -2px 14px -4px #a8e06388;}
         #shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;
           padding:18px 26px;overflow-y:auto;}
-        .shop-card{position:relative;pointer-events:auto;cursor:pointer;text-align:left;
+        .shop-card{position:relative;pointer-events:auto;cursor:pointer;text-align:center;
           background:linear-gradient(160deg,#11201688,#0a130d99);border:1px solid #ffffff1e;border-radius:14px;
           padding:13px 14px;transition:transform .12s,box-shadow .12s,border-color .15s;}
         .shop-card:hover{transform:translateY(-3px);border-color:#a8e06366;box-shadow:0 10px 26px -8px #000a,0 0 18px -6px #a8e06366;}
         .shop-card.disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4);}
         .shop-card.disabled:hover{transform:none;box-shadow:none;border-color:#ffffff1e;}
-        .shop-card .ic{font-size:28px;}
+        .shop-card .ic{font-size:88px;}
         .shop-card .nm{font-size:15px;font-weight:800;color:#fff;margin-top:4px;}
         .shop-card .ds{font-size:12px;opacity:.8;min-height:30px;margin-top:2px;}
         .shop-card .prev{font-size:11px;color:#9fe8ff;font-weight:700;margin-top:4px;min-height:14px;}

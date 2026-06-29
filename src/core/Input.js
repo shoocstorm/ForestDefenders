@@ -5,7 +5,15 @@ export class Input {
   constructor(domElement) {
     this.dom = domElement;
     this.held = new Set();        // currently-down key codes
-    this.pressed = new Set();     // went down since last endFrame()
+    this.pressed = new Set();     // went down since last endFrame() (realtime edge)
+    // Sim edge: like `pressed`, but consumed on read by the fixed sim step
+    // (wasPressedSim deletes the code) instead of being cleared every frame.
+    // The render loop can outrun the 60Hz fixed step on high-refresh displays —
+    // on frames where no fixed step runs, the press stays queued instead of
+    // being dropped, so the next step reads it. Clearing on a per-frame heuristic
+    // (did *any* step run) raced the press and ate it: that's why weapon
+    // switching / tail swing sometimes needed a second key press.
+    this.simPressed = new Set();
     this.released = new Set();    // went up since last endFrame()
     this.mouseDelta = { x: 0, y: 0 };
     this.mouseButtons = new Set();
@@ -25,6 +33,7 @@ export class Input {
       if (e.repeat) return;
       this.held.add(e.code);
       this.pressed.add(e.code);
+      this.simPressed.add(e.code);
       // Stop the page from scrolling on space/arrows during play.
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     };
@@ -73,6 +82,14 @@ export class Input {
 
   isDown(code) { return this.held.has(code) || this.virtualHeld.has(code); }
   wasPressed(code) { return this.pressed.has(code) || this.virtualPressed.has(code); }
+  // Sim-side edge: read from the fixed-step loop. Consumed on read so a press
+  // fires exactly once — it survives render frames where no fixed step ran (so
+  // presses are never dropped on high-refresh displays), then is removed once a
+  // step actually reads it so later steps in the same frame don't re-trigger.
+  wasPressedSim(code) {
+    if (this.simPressed.delete(code)) return true;
+    return this.virtualPressed.has(code);
+  }
   wasReleased(code) { return this.released.has(code); }
   mouseDown(btn = 0) { return this.mouseButtons.has(btn) || this.virtualMouse.has(btn); }
   mouseWasPressed(btn = 0) { return this.mousePressed.has(btn); }
@@ -107,14 +124,23 @@ export class Input {
   // can't double-fire across multiple fixed sim steps in one frame.
   consumeWheel() { const w = this.wheel; this.wheel = 0; return w; }
 
-  // Call at the end of each frame to clear edge-triggered state.
-  endFrame() {
+  // Call at the end of each frame to clear edge-triggered state. Realtime edges
+  // (read in the render loop) clear every frame. Sim edges (read in the fixed-step
+  // loop) are consumed on read, so while the sim is active we leave any still-queued
+  // press alone — it just means no fixed step ran this frame, and next frame's step
+  // will read it. When the sim is inactive (paused/overlay) nothing consumes them,
+  // so drop them here to avoid a stale press firing on resume. `simStepped` gates
+  // the one-frame lifetime of virtual (touch) taps.
+  endFrame(simActive = true, simStepped = true) {
     this.pressed.clear();
     this.released.clear();
     this.mousePressed.clear();
     this.wheel = 0;
-    // Virtual taps last exactly one frame (movement uses touchAxis, not held keys).
-    for (const code of this.virtualPressed) this.virtualHeld.delete(code);
-    this.virtualPressed.clear();
+    if (!simActive) this.simPressed.clear();
+    if (simStepped) {
+      // Virtual taps last exactly one frame (movement uses touchAxis, not held keys).
+      for (const code of this.virtualPressed) this.virtualHeld.delete(code);
+      this.virtualPressed.clear();
+    }
   }
 }

@@ -61,3 +61,19 @@ function showLevelSelect() {
     setHint('Error: ' + (err.message || err));
   }
 })();
+
+// --- HMR cleanup (Bun dev server hot reload) ---
+// Before the module is re-evaluated, dispose the old Game instance to release the
+// WebGL context and remove the stale canvas from the DOM. Without this, each HMR
+// cycle creates a new WebGLRenderer + WebGL context, accumulating GPU resources
+// and eventually causing high CPU / Chrome GPU process bloat.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (window.__game) {
+      console.log('[HMR] dispose() called — tearing down old Game instance');
+      window.__game.dispose();
+      window.__game = null;
+      console.log('[HMR] old Game disposed, module will re-evaluate');
+    }
+  });
+}

@@ -152,7 +152,7 @@ export class Weapon {
     const color = ctx.elementOverride === 'FIRE' ? 0xff6a2a : d.color;
     ctx.projectiles.spawn(ctx.origin, dir, {
       team: 'player', speed: d.projectileSpeed, damage: d.damage * mult,
-      element, color, radius: d.projectileRadius, ...extra,
+      element, color, radius: d.projectileRadius, bullet: d.bullet, ...extra,
     });
   }
 

@@ -28,6 +28,7 @@ export class IceShroom extends EnemyBase {
       color: 0x9fd8ff,
       radius: 0.18,
       lifetime: 4,
+      bullet: 'shard',
     });
     ctx.vfx.muzzleFlash(_spawn, 0xbfe8ff);
     if (this.capPivot) this.capPivot.rotation.x = -0.4;

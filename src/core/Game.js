@@ -210,8 +210,10 @@ export class Game {
     this._fpsFrames = 0;
     this.statsEl = document.getElementById('stats');
 
-    window.addEventListener('resize', () => this._onResize());
+    this._onResizeRef = () => this._onResize();
+    window.addEventListener('resize', this._onResizeRef);
     this._raf = this._raf.bind(this);
+    this._rafHandle = 0;
   }
 
   // Ambient particle fall (LEVELS_SPEC set piece 7) — biome-themed: petals (L1),
@@ -256,11 +258,11 @@ export class Game {
   start() {
     document.getElementById('boot')?.classList.add('hidden');
     this.clock.start();
-    requestAnimationFrame(this._raf);
+    this._rafHandle = requestAnimationFrame(this._raf);
   }
 
   _raf() {
-    requestAnimationFrame(this._raf);
+    this._rafHandle = requestAnimationFrame(this._raf);
     const realDt = Math.min(this.clock.getDelta(), 0.1);
 
     this.juice.update(realDt);
@@ -287,13 +289,17 @@ export class Game {
     if (md.x || md.y) this.cameraRig.applyMouse(md.x, md.y);
 
     // Fixed-step simulation (frozen while an overlay/shop/gallery/pause/settings/achievements/backpack is up).
-    if (this.state === 'playing' &&
+    const simActive = this.state === 'playing' &&
         !this.shop.isOpen &&
         !this.gallery.isOpen &&
         !this.pauseMenu.isOpen &&
         !this.settings.isOpen &&
         !this.achievementViewer.isOpen &&
-        !this.backpack.isOpen) {
+        !this.backpack.isOpen;
+    // Did a fixed step consume sim-edge input this frame? When the sim is paused,
+    // treat edges as consumed so carried-over presses don't fire on resume.
+    let simStepped = !simActive;
+    if (simActive) {
       this.accum += simDt;
       let steps = 0;
       while (this.accum >= this.fixedDt && steps < 5) {
@@ -301,10 +307,12 @@ export class Game {
         this.accum -= this.fixedDt;
         steps++;
       }
+      simStepped = steps > 0;
       this.vfx.update(simDt);
       this.loot.update(simDt, this.player.position);
       this.damageNumbers.update(simDt);
     }
+    this._simStepped = simStepped;
 
     // Camera + ambience + audio (run even when paused so UI/music track).
     this.cameraRig.update(simDt, this.player.position);
@@ -319,7 +327,7 @@ export class Game {
 
     this._updateHud();
     this._renderFrame(realDt);
-    this.input.endFrame();
+    this.input.endFrame(simActive, this._simStepped);
     this._updateStats(realDt);
   }
 
@@ -545,6 +553,35 @@ export class Game {
     this.overlays.showDefeat({
       wave: this.waves.waveNumber, total: this.waves.total, kills: this.gameManager.kills,
     });
+  }
+
+  // Tear down everything for a clean hot-reload (Bun HMR / import.meta.hot.dispose).
+  // Stops the render loop, releases the WebGL context, and removes the canvas so a new
+  // Game instance can be created without leaking GPU resources or spawning duplicate
+  // Chrome GPU processes (see AGENTS.md for the HMR vs. WebGL-context accumulation).
+  dispose() {
+    console.log('[Game] dispose() — releasing WebGL context and cleaning up scene');
+    cancelAnimationFrame(this._rafHandle);
+    document.exitPointerLock?.();
+    window.removeEventListener('resize', this._onResizeRef);
+    window.removeEventListener('pointerdown', this._startAudio);
+    window.removeEventListener('keydown', this._startAudio);
+
+    // Release the WebGL context and GPU memory.
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+
+    // Clean up all subsystems that hold dynamic scene objects.
+    for (const e of this.enemies.enemies) this.scene.remove(e.group);
+    this.enemies.enemies.length = 0;
+    for (const a of this.animals.animals) a.dispose();
+    this.projectiles.clear();
+    this.vfx.clear();
+    this.loot.clear();
+    this.damageNumbers.clear();
+    this.plants.dispose();
+    this.arena.dispose();
+    if (this.petals) { this.scene.remove(this.petals); this.petals.geometry.dispose(); this.petals.material.dispose(); }
   }
 
   // Full level (re)build — used by retry, play-again, and campaign advance.

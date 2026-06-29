@@ -10,6 +10,46 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
+## Weapon switching (1-9) & tail swing (R) feel sluggish / need a double-press
+
+**Date:** 2026-06-29 · **Files:** `src/core/Input.js`, `src/core/Game.js`,
+`src/entities/Player.js`, `src/systems/AnimalManager.js`
+
+**Symptom:** Number-key weapon switching, `Q` cycle, tail swing (`R`), kick (`V`),
+jump (`Space`), and animal rescue (`E`/`F`) feel laggy — presses are frequently
+dropped and you have to hit the same key twice to trigger the action. Camera/UI
+hotkeys (`C`, `Esc`, `P`, `G`, …) always felt fine.
+
+**Root cause:** A fixed-timestep vs. render-rate mismatch. Those gameplay actions
+are edge-triggered reads (`input.wasPressed(...)`) consumed **only inside
+`_fixedUpdate`**, which runs in the `while (accum >= 1/60)` loop (`Game.js`). But
+`input.endFrame()` cleared the `pressed` edge set on **every render frame**. On a
+display faster than 60 Hz the render loop outruns the sim, so most frames run
+**zero** fixed steps — and the keypress edge was wiped by `endFrame()` before any
+fixed step could ever see it. The hotkeys were immune because they're polled
+directly in `_raf` every frame (not in the fixed loop).
+
+**Fix:** Gave the simulation its own edge set that's cleared only once a fixed step
+has actually consumed it (or when the sim is paused, so a carried-over press can't
+fire on resume) — otherwise the press is held for the next frame's fixed step
+instead of being dropped.
+- `Input.js`: added `simPressed` (populated alongside `pressed` on keydown), a
+  `wasPressedSim(code)` getter, and `endFrame(simConsumed)` which only clears the
+  sim edges (`simPressed` + virtual taps) when `simConsumed` is true.
+- `Game.js`: `_raf` tracks whether a fixed step ran this frame (`_simStepped`,
+  also true when the sim is paused) and passes it to `endFrame(this._simStepped)`.
+- `Player.js` / `AnimalManager.js`: sim-side reads switched from `wasPressed` →
+  `wasPressedSim` (weapon `Digit1-9`/`Q`, melee `V`/`R`, `Space`, rescue `E`/`F`).
+  Realtime hotkeys in `Game._raf` stay on `wasPressed` (cleared every frame).
+
+**Gotcha to remember:** Edge-triggered input (`wasPressed`-style "pressed this
+frame") consumed inside a **fixed-step** loop must not be cleared on the **render**
+frame cadence. If the render loop can outrun the sim (high-refresh monitors,
+variable rAF), presses land on frames with zero fixed steps and vanish. Either
+latch edges until a step consumes them (this fix) or accumulate input separately
+for the fixed loop. Realtime reads (polled every render frame) and sim reads need
+**separate** edge buffers.
+
 ## Progressive FPS degradation over play sessions, especially after death/retry
 
 **Date:** 2026-06-28 · **Files:** `src/core/Game.js`, `src/weapons/Projectile.js`,

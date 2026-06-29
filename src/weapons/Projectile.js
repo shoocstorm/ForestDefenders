@@ -14,20 +14,57 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 // via the bloom layer — they just don't cast dynamic light.
 const LIGHT_BUDGET = 6;
 
+// Per-weapon bullet looks. Each shot is a single pooled mesh; `geo` selects the
+// cached geometry (built unit-sized, then scaled by the shot radius * `scale`),
+// `orient` aligns local +Z to the flight direction (so streaks/arrows/rings point
+// where they travel and the bow arrow tips down as its arc falls), `spin` rolls it
+// about the travel axis (rad/s) and `flicker` pulses the scale for a fiery shimmer.
+// `orb` is the default fallback used by enemy shots and anything without a style.
+const BULLET_STYLES = {
+  orb:    { geo: 'sphere',  scale: [1, 1, 1] },
+  acorn:  { geo: 'sphere',  scale: [0.8, 0.8, 1.35], orient: true },        // little nut, long axis forward
+  shard:  { geo: 'octa',    scale: [0.7, 0.7, 1.6], orient: true, spin: 9 }, // spinning energy crystal
+  tracer: { geo: 'capsule', scale: [0.45, 0.45, 2.6], orient: true },        // thin high-speed streak
+  pellet: { geo: 'sphere',  scale: [0.85, 0.85, 0.85] },                     // small buckshot
+  fire:   { geo: 'sphere',  scale: [1.15, 1.15, 1.15], flicker: true },      // throbbing fireball
+  arrow:  { geo: 'cone',    scale: [0.5, 0.5, 1.7], orient: true, spin: 3 }, // dart pointing forward
+  ring:   { geo: 'torus',   scale: [1, 1, 1], orient: true, spin: 13 },      // spinning EMP halo
+};
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
 export class ProjectilePool {
   constructor(scene) {
     this.scene = scene;
     this.items = [];
     this._litActive = 0;
-    this._geo = new THREE.SphereGeometry(1, 10, 8);
+    this._geos = new Map(); // geo key -> shared BufferGeometry (built on demand)
     this._up = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
+    this._dir = new THREE.Vector3();
+    this._q = new THREE.Quaternion();
+    this._spin = new THREE.Quaternion();
+  }
+
+  // Lazily build & cache the unit geometry for a style. Elongated shapes are baked
+  // to point along +Z so a single quaternion aligns them to the flight direction.
+  _geoFor(key) {
+    let g = this._geos.get(key);
+    if (g) return g;
+    switch (key) {
+      case 'octa':    g = new THREE.OctahedronGeometry(1, 0); break;
+      case 'capsule': g = new THREE.CapsuleGeometry(0.5, 1.1, 4, 8); g.rotateX(Math.PI / 2); break;
+      case 'cone':    g = new THREE.ConeGeometry(0.6, 2, 12); g.rotateX(Math.PI / 2); g.translate(0, 0, -0.4); break;
+      case 'torus':   g = new THREE.TorusGeometry(0.7, 0.28, 8, 18); break;
+      default:        g = new THREE.SphereGeometry(1, 10, 8); break; // 'sphere'
+    }
+    this._geos.set(key, g);
+    return g;
   }
 
   _acquire() {
     for (const p of this.items) if (!p.active) return p;
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const mesh = new THREE.Mesh(this._geo, mat);
+    const mesh = new THREE.Mesh(this._geoFor('sphere'), mat);
     mesh.castShadow = false;
     mesh.layers.enable(BLOOM_LAYER); // projectiles glow in the post pipeline
     const light = new THREE.PointLight(0xffffff, 0, 6, 2);
@@ -37,6 +74,8 @@ export class ProjectilePool {
       pos: new THREE.Vector3(), vel: new THREE.Vector3(),
       damage: 0, element: 'PHYSICAL', team: 'player',
       radius: 0.16, life: 0, gravity: 0,
+      styleKey: 'sphere', style: BULLET_STYLES.orb, spinPhase: 0,
+      sx: 1, sy: 1, sz: 1, // resolved per-axis scale (radius * style.scale)
     };
     this.scene.add(mesh);
     this.items.push(p);
@@ -66,10 +105,32 @@ export class ProjectilePool {
     p.lit = this._litActive < LIGHT_BUDGET;
     p.light.intensity = p.lit ? 5 : 0;
     if (p.lit) this._litActive++;
+
+    // Resolve the bullet look: swap geometry only when the style's shape changes
+    // (keeps the pool allocation-free on repeat fire), then bake the per-axis scale.
+    const style = BULLET_STYLES[opts.bullet] || BULLET_STYLES.orb;
+    p.style = style;
+    if (style.geo !== p.styleKey) { p.mesh.geometry = this._geoFor(style.geo); p.styleKey = style.geo; }
+    p.spinPhase = Math.random() * Math.PI * 2; // desync spin/flicker across shots
+    p.sx = p.radius * style.scale[0];
+    p.sy = p.radius * style.scale[1];
+    p.sz = p.radius * style.scale[2];
+
     p.mesh.position.copy(origin);
-    p.mesh.scale.setScalar(p.radius);
+    p.mesh.scale.set(p.sx, p.sy, p.sz);
+    if (style.orient) this._orient(p); // face flight direction on spawn frame
+    else p.mesh.quaternion.identity();
     p.mesh.visible = true;
     return p;
+  }
+
+  // Aim the mesh's +Z down the velocity, then roll it by the accumulated spin phase.
+  _orient(p) {
+    this._dir.copy(p.vel);
+    if (this._dir.lengthSq() < 1e-6) { p.mesh.quaternion.identity(); return; }
+    this._dir.normalize();
+    p.mesh.quaternion.setFromUnitVectors(Z_AXIS, this._dir);
+    if (p.style.spin) p.mesh.quaternion.multiply(this._spin.setFromAxisAngle(Z_AXIS, p.spinPhase));
   }
 
   update(dt, ctx) {
@@ -131,6 +192,13 @@ export class ProjectilePool {
         if (p.lit) { p.lit = false; this._litActive--; } // free a light-budget slot
       } else {
         p.mesh.position.copy(p.pos);
+        const s = p.style;
+        if (s.spin) p.spinPhase += s.spin * dt;
+        if (s.orient) this._orient(p); // re-aim (arrows tip with their arc) + roll
+        if (s.flicker) {
+          const f = 1 + 0.22 * Math.sin(p.spinPhase + p.life * 26);
+          p.mesh.scale.set(p.sx * f, p.sy * f, p.sz * f);
+        }
       }
     }
   }
