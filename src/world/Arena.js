@@ -6,6 +6,8 @@ import { clone } from '../core/Assets.js';
 import { Vegetation } from './Vegetation.js';
 import { Water } from './Water.js';
 import { Lanterns } from './Lanterns.js';
+import { SkyDecor } from './SkyDecor.js'; 
+import { gridMaterial, forceFieldMaterial } from './TechFX.js';
 
 // Biome-driven arena (LEVELS_SPEC). M1–M5 hard-coded L1 Misty Forest; M6 adds L2
 // Ember Hollow + L3 Ancient Grove by re-skinning all 7 set pieces from a BIOMES
@@ -28,11 +30,31 @@ export class Arena {
     this.vegetation?.update(dt);
     this.water?.update(dt);
     this.lanterns?.update(dt);
+    this.sky?.update(dt);
+    // Advance every tech shader (grid + force-field panels).
+    if (this._techMats) for (const m of this._techMats) {
+      if (m.userData.__uTime) m.userData.__uTime.value = this._t;
+    }
+    // Floating antigrav props bob + slow-spin; holo cores rotate.
+    if (this._floaters) for (const f of this._floaters) {
+      f.obj.position.y = f.baseY + Math.sin(this._t * f.bobSpeed + f.phase) * f.bobAmp;
+      f.obj.rotation.y += dt * f.spin;
+    }
+    if (this._holoCores) for (const c of this._holoCores) {
+      c.rotation.y += dt * 0.6;
+      c.material.opacity = 0.25 + Math.sin(this._t * 2.0 + c.position.x) * 0.1;
+    }
     if (this._rings) {
       for (const r of this._rings) {
-        const s = 1 + Math.sin(this._t * 2 + r.phase) * 0.08;
-        r.ring.scale.set(s, s, 1);
-        r.ring.material.opacity = 0.55 + Math.sin(this._t * 2 + r.phase) * 0.25;
+        const p = Math.sin(this._t * 2 + r.phase);
+        const s = 1 + p * 0.08;
+        r.outer.scale.set(s, s, 1);
+        r.outer.material.opacity = 0.55 + p * 0.25;
+        // Inner ring counter-pulses + slowly spins for a holographic read.
+        const si = 1 + Math.sin(this._t * 2.6 + r.phase) * 0.12;
+        r.inner.scale.set(si, si, 1);
+        r.inner.rotation.z += dt * 0.8;
+        r.inner.material.opacity = 0.4 + Math.cos(this._t * 2.6 + r.phase) * 0.25;
       }
     }
     if (this.fireflies) {
@@ -58,13 +80,19 @@ export class Arena {
     this.colliders.length = 0;
     this._rings = null;
     this.fireflies = null;
+    if (this._techMats) for (const m of this._techMats) m.dispose();
+    this._techMats = null;
+    this._floaters = null;
+    this._holoCores = null;
     // Dispose child systems that add their own objects to the scene
     this.vegetation?.dispose();
     this.water?.dispose();
     this.lanterns?.dispose();
+    this.sky?.dispose();
     this.vegetation = null;
     this.water = null;
     this.lanterns = null;
+    this.sky = null;
   }
 
   // Tag objects so dispose() can find and remove them on a biome switch.
@@ -76,6 +104,10 @@ export class Arena {
 
   _build() {
     const b = this.biome;
+    this.tech = b.tech || { accent: b.ring, accentEmissive: b.ring, metal: 0x161922, metalRim: b.ring, panel: 0x232834 };
+    this._techMats = [];   // shader materials needing per-frame uTime
+    this._floaters = [];   // antigrav props that bob/spin
+    this._holoCores = [];  // additive holo discs that rotate/pulse
 
     // --- Sky + fog ---
     this.scene.background = new THREE.Color(b.sky);
@@ -115,20 +147,35 @@ export class Arena {
     ground.userData.arenaOwned = true;
     this.scene.add(ground);
 
-    // Stone path.
+    // Central tech runway (replaces the stone path) — emissive accent strip.
     const pathGeo = new THREE.PlaneGeometry(4.2, ARENA.LENGTH - 6);
     pathGeo.rotateX(-Math.PI / 2);
-    const path = new THREE.Mesh(pathGeo, toon({ color: b.path, rim: { color: b.pathRim, intensity: 0.35 } }));
-    path.position.y = 0.01;
+    const path = new THREE.Mesh(pathGeo, toon({
+      color: b.path, emissive: this.tech.accentEmissive, emissiveIntensity: 0.15,
+      rim: { color: b.pathRim, intensity: 0.6 },
+    }));
+    path.position.y = 0.012;
     path.receiveShadow = true;
     path.userData.arenaOwned = true;
     this.scene.add(path);
+
+    // --- Holographic grid floor overlay (additive shader plane over ground) ---
+    const gridGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH, 1, 1);
+    gridGeo.rotateX(-Math.PI / 2);
+    const gridMat = gridMaterial(this.tech.accent, { cell: 4.0, sizeX: ARENA.WIDTH, sizeZ: ARENA.LENGTH });
+    const grid = new THREE.Mesh(gridGeo, gridMat);
+    grid.position.y = 0.03;
+    grid.layers.enable(BLOOM_LAYER);
+    grid.userData.arenaOwned = true;
+    this._techMats.push(gridMat);
+    this.scene.add(grid);
 
     this._boundary();
     this.vegetation = new Vegetation(this.scene, b.trees);
     for (const c of this.vegetation.colliders) this.colliders.push(c);
     this.water = new Water(this.scene, ...b.water.pos, b.water.radius, b.water);
     this.lanterns = new Lanterns(this.scene, b.lantern);
+    this.sky = new SkyDecor(this.scene, b);
     this._platform();
     this._scatterProps();
     this._bossLandmark();
@@ -140,21 +187,65 @@ export class Arena {
     this._fireflies();
   }
 
+  // Energy containment perimeter: a low dark-metal rail, emissive accent posts
+  // at intervals, and scrolling force-field panels spanning between them.
   _boundary() {
-    const b = this.biome;
-    const mat = toon({ color: b.boundary, rim: { color: b.boundaryRim, intensity: 0.3 } });
+    const t = this.tech;
     const hx = ARENA.WIDTH / 2, hz = ARENA.LENGTH / 2;
-    const make = (w, d, x, z) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), mat);
-      m.position.set(x, 0.6, z);
-      m.castShadow = true; m.receiveShadow = true;
-      m.userData.arenaOwned = true;
-      this.scene.add(m);
+    const railMat = toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.5 } });
+    const postMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.9 });
+    const fieldH = 3.6; // force-field height
+
+    // Shared field geometry per axis (different spans for X vs Z walls).
+    const ffMatTemplate = () => { const m = forceFieldMaterial(t.accent); this._techMats.push(m); return m; };
+
+    // Build one wall along a side. `axis` = 'x' (wall runs along X) or 'z'.
+    const wall = (axis, sign) => {
+      const len = axis === 'x' ? ARENA.WIDTH : ARENA.LENGTH;
+      const cx = axis === 'x' ? 0 : sign * hx;
+      const cz = axis === 'x' ? sign * hz : 0;
+
+      // Dark metal floor rail (also a visual kick-plate).
+      const railGeo = axis === 'x'
+        ? new THREE.BoxGeometry(len, 0.7, 0.7)
+        : new THREE.BoxGeometry(0.7, 0.7, len);
+      const rail = new THREE.Mesh(railGeo, railMat);
+      rail.position.set(cx, 0.35, cz);
+      rail.castShadow = true; rail.receiveShadow = true;
+      rail.userData.arenaOwned = true;
+      this.scene.add(rail);
+
+      // Force-field panel spanning the whole wall.
+      const fieldGeo = new THREE.PlaneGeometry(len, fieldH);
+      if (axis === 'z') fieldGeo.rotateY(Math.PI / 2);
+      const field = new THREE.Mesh(fieldGeo, ffMatTemplate());
+      field.position.set(cx, fieldH / 2 + 0.2, cz);
+      field.layers.enable(BLOOM_LAYER);
+      field.userData.arenaOwned = true;
+      this.scene.add(field);
+
+      // Emissive posts at intervals along the wall.
+      const step = 8;
+      const n = Math.floor(len / step);
+      for (let i = 0; i <= n; i++) {
+        const o = -len / 2 + (i * len) / n;
+        const px = axis === 'x' ? o : cx;
+        const pz = axis === 'x' ? cz : o;
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, fieldH + 0.6, 8), postMat);
+        post.position.set(px, (fieldH + 0.6) / 2, pz);
+        post.castShadow = true;
+        post.layers.enable(BLOOM_LAYER);
+        post.userData.arenaOwned = true;
+        this.scene.add(post);
+        // Glowing cap.
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), postMat);
+        cap.position.set(px, fieldH + 0.9, pz);
+        cap.layers.enable(BLOOM_LAYER);
+        cap.userData.arenaOwned = true;
+        this.scene.add(cap);
+      }
     };
-    make(ARENA.WIDTH, 0.6, 0, -hz);
-    make(ARENA.WIDTH, 0.6, 0, hz);
-    make(0.6, ARENA.LENGTH, -hx, 0);
-    make(0.6, ARENA.LENGTH, hx, 0);
+    wall('x', -1); wall('x', 1); wall('z', -1); wall('z', 1);
   }
 
   _platform() {
@@ -168,36 +259,65 @@ export class Arena {
       this.scene.add(mesh);
       return mesh;
     };
-    const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.35 } });
-    const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.3 } });
-    const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.3 } });
+    const t = this.tech;
+    const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.45 } });
+    const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
+    const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
+    const trimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.85 });
 
-    // Tiered stone base — two overhanging plinth courses ground the column.
+    // Glowing accent edge-trim band (a flat emissive ring hugging a course edge).
+    const addTrim = (w, y, thick = 0.12) => {
+      const trim = add(new THREE.Mesh(new THREE.BoxGeometry(w, thick, w), trimMat), 0, y, cz, false);
+      trim.layers.enable(BLOOM_LAYER);
+      return trim;
+    };
+
+    // Stacked dark-metal dais courses with emissive seams between them.
     add(new THREE.Mesh(new THREE.BoxGeometry(11.2, 0.6, 11.2), stepMat), 0, 0.3, cz);
+    addTrim(11.3, 0.62);
     add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), topMat), 0, 0.825, cz);
 
-    // Main column, slightly inset so the base and cornice read as overhangs.
+    // Main column, inset so base + cornice overhang.
     add(new THREE.Mesh(new THREE.BoxGeometry(9.4, h, 9.4), topMat), 0, h / 2, cz);
+    addTrim(9.5, h * 0.55, 0.1);
 
-    // Cornice lip just beneath the deck.
+    // Cornice lip beneath the deck + bright seam.
     add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), stepMat), 0, h - 0.225, cz);
+    addTrim(10.5, h + 0.01, 0.14);
 
-    // Deck cap (the standing surface, top at h + 0.2).
+    // Deck cap (the standing surface, top at h + 0.2) with an emissive grid inlay.
     add(new THREE.Mesh(
       new THREE.BoxGeometry(10.2, 0.2, 10.2),
-      toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.4 }, wind: { base: 0.0, freq: 2.4, amp: 0.02 } })
+      toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.5 } })
     ), 0, h + 0.1, cz, false);
+    const deckGrid = add(new THREE.Mesh(
+      new THREE.PlaneGeometry(9.6, 9.6),
+      gridMaterial(t.accent, { cell: 1.2, sizeX: 9.6, sizeZ: 9.6 })
+    ), 0, h + 0.21, cz, false);
+    deckGrid.rotation.x = -Math.PI / 2;
+    deckGrid.layers.enable(BLOOM_LAYER);
+    this._techMats.push(deckGrid.material);
 
-    // Corner posts with carved collars + glowing finials framing the deck.
-    const finialMat = new THREE.MeshToonMaterial({ color: b.platform.topRim, emissive: b.platform.topRim, emissiveIntensity: 0.6 });
+    // Slow-rotating holographic projector core hovering over the deck.
+    const core = add(new THREE.Mesh(
+      new THREE.ConeGeometry(1.6, 2.4, 6, 1, true),
+      new THREE.MeshBasicMaterial({ color: t.accent, transparent: true, opacity: 0.28,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+    ), 0, h + 1.6, cz, false);
+    core.layers.enable(BLOOM_LAYER);
+    this._holoCores.push(core);
+
+    // Corner light pylons: metal post + stacked emissive accent rings + beacon orb.
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const px = sx * 4.5, pz = cz + sz * 4.5;
-      add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, h + 1.2, 10), pillarMat), px, (h + 1.2) / 2, pz);
-      // Collar ring + flared cap where the post clears the deck.
-      const collar = add(new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.07, 8, 14), stepMat), px, h + 0.25, pz);
-      collar.rotation.x = Math.PI / 2;
-      add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.22, 10), stepMat), px, h + 1.2, pz);
-      add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), finialMat), px, h + 1.45, pz, false);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, h + 1.2, 8), pillarMat), px, (h + 1.2) / 2, pz);
+      for (let r = 0; r < 3; r++) {
+        const ring = add(new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.05, 6, 16), trimMat), px, h * 0.4 + r * 0.55, pz);
+        ring.rotation.x = Math.PI / 2;
+        ring.layers.enable(BLOOM_LAYER);
+      }
+      const orb = add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), trimMat), px, h + 1.45, pz, false);
+      orb.layers.enable(BLOOM_LAYER);
     }
     this.standables = [
       { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true },
@@ -214,6 +334,12 @@ export class Arena {
       step.castShadow = true; step.receiveShadow = true;
       step.userData.arenaOwned = true;
       this.scene.add(step);
+      // Glowing nosing strip along the front edge of each tread.
+      const nosing = new THREE.Mesh(new THREE.BoxGeometry(3, 0.06, 0.08), trimMat);
+      nosing.position.set(0, sh + 0.03, z - 0.46);
+      nosing.layers.enable(BLOOM_LAYER);
+      nosing.userData.arenaOwned = true;
+      this.scene.add(nosing);
       this.standables.push({ minX: -1.5, maxX: 1.5, minZ: z - 0.5, maxZ: z + 0.5, top: sh, solid: false });
     }
   }
@@ -227,6 +353,8 @@ export class Arena {
     if (lm.type === 'tree') this._burningTreeLandmark(lm, z);
     else if (lm.type === 'portal') this._portalLandmark(lm, z);
     else this._mushroomLandmark(lm, z);
+
+    this._containmentFrame(z);
 
     // Biome glow light over the landmark.
     const glow = new THREE.PointLight(lm.glow, lm.glowI, lm.glowRange, 2);
@@ -244,6 +372,55 @@ export class Arena {
       mote.layers.enable(BLOOM_LAYER);
       mote.userData.arenaOwned = true;
       this.scene.add(mote);
+    }
+  }
+
+  // Tech containment frame wrapping the boss-end landmark: a holo base disc, a
+  // ring of short emissive pylons, and vertical energy-tether beams — reads as a
+  // "contained specimen / reactor" regardless of the landmark inside.
+  _containmentFrame(z) {
+    const t = this.tech;
+    const R = 5.5;
+    const pylonMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.9 });
+    const beamMat = new THREE.MeshBasicMaterial({ color: t.accent, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+
+    // Holographic base disc.
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(R + 0.5, 48),
+      gridMaterial(t.accent, { cell: 0.9, sizeX: (R + 0.5) * 2, sizeZ: (R + 0.5) * 2 })
+    );
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(0, 0.06, z);
+    disc.layers.enable(BLOOM_LAYER);
+    disc.userData.arenaOwned = true;
+    this._techMats.push(disc.material);
+    this.scene.add(disc);
+
+    // Dark metal base ring.
+    const baseRing = new THREE.Mesh(new THREE.TorusGeometry(R, 0.18, 8, 40),
+      toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.6 } }));
+    baseRing.rotation.x = Math.PI / 2;
+    baseRing.position.set(0, 0.12, z);
+    baseRing.userData.arenaOwned = true;
+    this.scene.add(baseRing);
+
+    const beamH = 7.0;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const px = Math.cos(a) * R, pz = z + Math.sin(a) * R;
+      const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.6, 8), pylonMat);
+      pylon.position.set(px, 0.8, pz);
+      pylon.castShadow = true;
+      pylon.layers.enable(BLOOM_LAYER);
+      pylon.userData.arenaOwned = true;
+      this.scene.add(pylon);
+      // Vertical energy tether rising from each pylon.
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, beamH, 6), beamMat);
+      beam.position.set(px, 1.6 + beamH / 2, pz);
+      beam.layers.enable(BLOOM_LAYER);
+      beam.userData.arenaOwned = true;
+      this.scene.add(beam);
     }
   }
 
@@ -361,31 +538,97 @@ export class Arena {
       if (colliderR > 0) this.colliders.push({ type: 'cylinder', x, z, r: colliderR });
       return g;
     };
+    // A few overgrown "contained flora" specimens remain for silhouette variety.
     place('ancientTree', -8, 4, 5.5, 0.6, 0.6);
     place('ancientTree', 8, 4, 5.5, -0.5, 0.6);
-    place('pine', -4, -26, 4.0, 0.3, 0.4);
-    place('pine', 5, -24, 4.6, -0.2, 0.4);
-    const propKeys = ['rock', 'mossStump', 'fern', 'fern', 'grass', 'rock', 'crystalRock'];
-    for (let i = 0; i < 78; i++) { // [3x] denser scatter across the larger arena
+
+    // Sci-fi scatter: procedural tech debris + a few crystal/crate clones that
+    // already read industrial. Big props push cylinder colliders like before.
+    const cloneKeys = ['crystalRock', 'crystalRock', 'supplyCrate'];
+    for (let i = 0; i < 84; i++) {
       const side = Math.random() < 0.5 ? -1 : 1;
       const x = side * randRange(4.5, ARENA.WIDTH / 2 - 1);
       const z = randRange(-ARENA.LENGTH / 2 + 5, ARENA.LENGTH / 2 - 8);
-      const key = propKeys[Math.floor(Math.random() * propKeys.length)];
-      place(key, x, z, randRange(0.6, 1.2), Math.random() * Math.PI * 2);
+      const roll = Math.random();
+      if (roll < 0.3) {
+        place(cloneKeys[Math.floor(Math.random() * cloneKeys.length)], x, z,
+          randRange(0.7, 1.3), Math.random() * Math.PI * 2);
+      } else {
+        const kinds = ['shard', 'pylon', 'server'];
+        this._techProp(kinds[Math.floor(Math.random() * kinds.length)], x, z);
+      }
     }
   }
 
+  // Build a small procedural sci-fi prop. 'shard' floats + bobs/spins, 'pylon' is
+  // a sensor relay, 'server' is a stacked equipment block. Emissive accent trim
+  // joins BLOOM_LAYER. Larger props register a cylinder collider.
+  _techProp(kind, x, z) {
+    const t = this.tech;
+    const g = new THREE.Group();
+    const metalMat = toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.5 } });
+    const panelMat = toon({ color: t.panel, rim: { color: t.metalRim, intensity: 0.4 } });
+    const glowMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 1.0 });
+
+    if (kind === 'shard') {
+      const s = randRange(0.6, 1.2);
+      const body = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), panelMat);
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(s * 0.45, 0), glowMat);
+      core.layers.enable(BLOOM_LAYER);
+      g.add(body, core);
+      const baseY = randRange(1.2, 2.8);
+      g.position.set(x, baseY, z);
+      this._floaters.push({ obj: g, baseY, bobAmp: randRange(0.2, 0.5),
+        bobSpeed: randRange(0.6, 1.2), phase: Math.random() * Math.PI * 2, spin: randRange(0.2, 0.6) });
+    } else if (kind === 'pylon') {
+      const h = randRange(1.6, 3.0);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, h, 6), metalMat);
+      post.position.y = h / 2; post.castShadow = true;
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), glowMat);
+      head.position.y = h + 0.2; head.layers.enable(BLOOM_LAYER);
+      g.add(post, head);
+      g.position.set(x, 0, z);
+      this.colliders.push({ type: 'cylinder', x, z, r: 0.3 });
+    } else { // server stack
+      const w = randRange(0.8, 1.4), h = randRange(1.0, 1.8);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), metalMat);
+      body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true;
+      g.add(body);
+      const rows = Math.max(2, Math.round(h / 0.4));
+      for (let r = 0; r < rows; r++) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.04, 0.02), glowMat);
+        strip.position.set(0, 0.25 + r * (h - 0.4) / rows, w * 0.41);
+        strip.layers.enable(BLOOM_LAYER);
+        g.add(strip);
+      }
+      g.position.set(x, 0, z);
+      g.rotation.y = Math.random() * Math.PI * 2;
+      this.colliders.push({ type: 'cylinder', x, z, r: w * 0.5 });
+    }
+    g.userData.arenaOwned = true;
+    this.scene.add(g);
+    return g;
+  }
+
   _spawnRing(x, z) {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.6, 0.12, 8, 32),
-      new THREE.MeshBasicMaterial({ color: this.biome.ring, transparent: true, opacity: 0.8 })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(x, 0.05, z);
-    ring.layers.enable(BLOOM_LAYER);
-    ring.userData.arenaOwned = true;
-    this.scene.add(ring);
-    this._rings.push({ ring, phase: Math.random() * Math.PI * 2 });
+    const col = this.tech.accent;
+    const mk = (r, tube, seg) => {
+      const m = new THREE.Mesh(
+        new THREE.TorusGeometry(r, tube, 8, seg),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8,
+          blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.05, z);
+      m.layers.enable(BLOOM_LAYER);
+      m.userData.arenaOwned = true;
+      this.scene.add(m);
+      return m;
+    };
+    const outer = mk(1.6, 0.1, 48);
+    // Inner ring is a dashed-look hexagon for a targeting-reticle read.
+    const inner = mk(1.0, 0.07, 6);
+    this._rings.push({ outer, inner, phase: Math.random() * Math.PI * 2 });
   }
 
   _fireflies() {

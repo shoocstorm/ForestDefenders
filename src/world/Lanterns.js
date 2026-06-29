@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 
-// Fairy lanterns alternating along the stone path (LEVELS_SPEC §5.4). Each is a
-// little caged storybook lamp: a footed mossy post, a decorative collar, a warm
-// glowing orb framed by four ribs, a faceted roof hat and a glowing gold finial.
-// Every lantern is lit (emissive orb + point light + bloom layer) and pulses
-// gently — the orbs and finials are the path's main bloom accents.
+// Light pylons alternating along the central runway (sci-fi reskin of the old
+// fairy lanterns). Each is a sleek beacon: a metal base, a slim post, a few
+// stacked emissive accent rings, and a glowing beacon orb on top. Every pylon is
+// lit (emissive orb + point light + bloom layer) and pulses gently — the orbs
+// and rings are the runway's main bloom accents.
 export class Lanterns {
   constructor(scene, pal) {
     this.scene = scene;
@@ -16,32 +16,23 @@ export class Lanterns {
     this.sharedMat = [];     // materials shared across all lanterns
     const p = pal || {};
 
-    // --- Shared materials (built once, reused by every lantern) ---
-    const postMat = new THREE.MeshToonMaterial({ color: p.post ?? 0x4a5a3a });
-    const metalMat = new THREE.MeshToonMaterial({ color: p.cap ?? 0x6b4a2e }); // bronze fittings
-    const roofMat = new THREE.MeshToonMaterial({ color: p.roof ?? 0x8a4a3a });  // warm clay roof
-    const finialMat = new THREE.MeshStandardMaterial({
-      color: 0xffe6a0, emissive: 0xffc24a, emissiveIntensity: 1.2,
-    });
-    this.sharedMat.push(postMat, metalMat, roofMat, finialMat);
+    // --- Shared materials (built once, reused by every pylon) ---
+    const litColor = p.lit ?? 0xaeffc8;
+    const litEmissive = p.litEmissive ?? 0x39ff88;
+    const lightColor = p.light ?? 0x7fff9f;
+    const lightI = p.lightI ?? 3.4;
+    const postMat = new THREE.MeshToonMaterial({ color: p.post ?? 0x1b1f28 }); // dark metal shaft
+    const baseMat = new THREE.MeshToonMaterial({ color: p.unlit ?? 0x2a2f38 }); // base block
+    const ringMat = new THREE.MeshToonMaterial({ color: litColor, emissive: litEmissive, emissiveIntensity: 1.0 });
+    this.sharedMat.push(postMat, baseMat, ringMat);
 
     // --- Shared geometries ---
-    const footGeo = new THREE.CylinderGeometry(0.16, 0.22, 0.12, 8);   // splayed base
-    const postGeo = new THREE.CylinderGeometry(0.055, 0.085, 1.45, 6); // tapered shaft
-    const collarGeo = new THREE.TorusGeometry(0.085, 0.025, 6, 10);    // ring under lamp
-    const holderGeo = new THREE.ConeGeometry(0.16, 0.16, 6);           // cup the orb sits in
-    const orbGeo = new THREE.IcosahedronGeometry(0.17, 1);
-    const ribGeo = new THREE.CylinderGeometry(0.013, 0.013, 0.36, 4);  // cage bar
-    const roofGeo = new THREE.ConeGeometry(0.27, 0.24, 6);             // faceted hat
-    const brimGeo = new THREE.TorusGeometry(0.2, 0.022, 5, 6);         // little roof brim
-    const finialGeo = new THREE.IcosahedronGeometry(0.05, 0);          // glowing knob on top
-    this.sharedGeo.push(footGeo, postGeo, collarGeo, holderGeo, orbGeo,
-      ribGeo, roofGeo, brimGeo, finialGeo);
-
-    const litColor = p.lit ?? 0xffd98a;
-    const litEmissive = p.litEmissive ?? 0xffb24a;
-    const lightColor = p.light ?? 0xffb86a;
-    const lightI = p.lightI ?? 3.0;
+    const baseGeo = new THREE.CylinderGeometry(0.26, 0.34, 0.3, 8);    // footing block
+    const postGeo = new THREE.CylinderGeometry(0.07, 0.09, 2.0, 6);    // slim shaft
+    const ringGeo = new THREE.TorusGeometry(0.18, 0.04, 6, 16);        // glowing accent ring
+    const orbGeo = new THREE.IcosahedronGeometry(0.18, 1);             // beacon orb
+    const finGeo = new THREE.CylinderGeometry(0.0, 0.12, 0.3, 4);      // top spike
+    this.sharedGeo.push(baseGeo, postGeo, ringGeo, orbGeo, finGeo);
 
     let idx = 0;
     for (let z = -ARENA.LENGTH / 2 + 8; z <= ARENA.LENGTH / 2 - 8; z += 6, idx++) {
@@ -51,45 +42,34 @@ export class Lanterns {
       g.position.set(x, 0, z);
       g.rotation.y = Math.random() * Math.PI * 2; // break up the repetition
 
-      const foot = new THREE.Mesh(footGeo, postMat); foot.position.y = 0.06;
-      foot.castShadow = true; g.add(foot);
+      const base = new THREE.Mesh(baseGeo, baseMat); base.position.y = 0.15;
+      base.castShadow = true; base.receiveShadow = true; g.add(base);
 
-      const post = new THREE.Mesh(postGeo, postMat); post.position.y = 0.845;
+      const post = new THREE.Mesh(postGeo, postMat); post.position.y = 1.3;
       post.castShadow = true; g.add(post);
 
-      const collar = new THREE.Mesh(collarGeo, metalMat); collar.position.y = 1.56;
-      g.add(collar);
+      // Stacked emissive accent rings up the shaft.
+      for (let r = 0; r < 3; r++) {
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = 0.7 + r * 0.5;
+        ring.rotation.x = Math.PI / 2;
+        ring.layers.enable(BLOOM_LAYER);
+        g.add(ring);
+      }
 
-      const holder = new THREE.Mesh(holderGeo, metalMat); holder.position.y = 1.62;
-      g.add(holder);
-
-      // Glowing orb — its own material so each can pulse independently.
+      // Beacon orb — its own material so each can pulse independently.
       const orb = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({
         color: litColor, emissive: litEmissive, emissiveIntensity: 1.6,
       }));
-      orb.position.y = 1.78;
+      orb.position.y = 2.35;
       orb.layers.enable(BLOOM_LAYER);
       g.add(orb);
 
-      // Four cage ribs framing the orb.
-      for (let r = 0; r < 4; r++) {
-        const a = (r / 4) * Math.PI * 2 + Math.PI / 4;
-        const rib = new THREE.Mesh(ribGeo, metalMat);
-        rib.position.set(Math.cos(a) * 0.16, 1.78, Math.sin(a) * 0.16);
-        g.add(rib);
-      }
+      const fin = new THREE.Mesh(finGeo, ringMat); fin.position.y = 2.65;
+      fin.layers.enable(BLOOM_LAYER); g.add(fin);
 
-      const roof = new THREE.Mesh(roofGeo, roofMat); roof.position.y = 2.06;
-      roof.castShadow = true; g.add(roof);
-      const brim = new THREE.Mesh(brimGeo, roofMat); brim.position.y = 1.95;
-      brim.rotation.x = Math.PI / 2; g.add(brim);
-
-      const finial = new THREE.Mesh(finialGeo, finialMat); finial.position.y = 2.24;
-      finial.layers.enable(BLOOM_LAYER);
-      g.add(finial);
-
-      const light = new THREE.PointLight(lightColor, lightI, 7, 2);
-      light.position.y = 1.78;
+      const light = new THREE.PointLight(lightColor, lightI, 8, 2);
+      light.position.y = 2.35;
       g.add(light);
 
       scene.add(g);

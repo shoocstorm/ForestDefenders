@@ -22,7 +22,7 @@ const HIP_Y = 0.40;          // hip pivot height (legs hang below to the ground)
 const SHOT_DUR = 0.26;       // recoil one-shot length (s)
 const JUMP_POP = 0.18;       // takeoff knee-pop decay window (s)
 const SWITCH_DUR = 0.4;      // weapon-swap dip
-const KICK_DUR = 0.5;        // kick one-shot
+const KICK_DUR = 0.6;        // kick one-shot (extended for jump kick)
 const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
 // Palette — "Frost Ranger": cool slate-blue fur, frost-white belly, teal mids,
@@ -418,11 +418,28 @@ export class HeroModel {
     this.rig.gun.rotation.x = -recoil * 0.32 + sw * 0.6;
     this.rig.bolt.position.z = this._boltRestZ + recoil * 0.06; // bolt slides back
 
-    // Kick (Q): plant on the left leg, drive the right thigh forward + up.
+    // Jump kick (V): flying kick pose — body horizontal, both legs extended,
+    // leading leg kicks forward, trailing leg extends back. The whole pose reads
+    // as a mid-air lunge to the enemy's head.
     if (this._kickT > 0) {
-      const kp = Math.sin((1 - this._kickT / KICK_DUR) * Math.PI); // 0→1→0 over the clip
-      this.rig.legR.rotation.x = -1.6 * kp;
-      this.rig.body.rotation.x += 0.2 * kp;
+      const kt = 1 - this._kickT / KICK_DUR; // 0→1 over the clip
+      const kp = Math.sin(kt * Math.PI);     // 0→1→0 ease
+      // Wind-up phase (early): crouch and coil
+      const windup = kt < 0.25 ? (0.25 - kt) / 0.25 : 0;
+      // Kick extension (main): full flying pose
+      const extend = kt >= 0.25 ? Math.sin((kt - 0.25) / 0.75 * Math.PI) : 0;
+      // Left leg: plants then tucks back
+      this.rig.legL.rotation.x = windup * 0.8 - extend * 1.8;
+      // Right leg (kicking leg): winds back then extends full forward
+      this.rig.legR.rotation.x = windup * 0.5 - extend * 2.2;
+      // Body: leans way forward into the kick, horizontal at peak
+      this.rig.body.rotation.x += extend * 1.3;
+      this.rig.body.rotation.z -= extend * 0.4; // slight tilt into the kick
+      // Head: looks forward along the kick line
+      this.rig.head.rotation.x = -extend * 0.8;
+      // Arms: flail back for balance/momentum
+      this.rig.armL.rotation.x = extend * 1.1;
+      this.rig.armR.rotation.x = extend * 0.8;
     }
 
     // Solve the arm IK last so the paws lock onto the (now-posed) gun grips.

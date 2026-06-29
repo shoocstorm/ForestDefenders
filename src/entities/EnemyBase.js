@@ -51,11 +51,12 @@ export class EnemyBase {
     this._hitFlash = 0;
     this._squash = 0;
     this._deathT = -1;
+    this._preDeathT = -1;                   // pre-death shake delay before full death effects
     this._stun = 0;                          // EMP / knockback freeze timer (Toroid)
     this._knock = new THREE.Vector3();       // decaying knockback impulse (melee / AOE)
     this._animTime = randRange(0, 10);
 
-    this.health = new HealthComponent(this.maxHp, { onDeath: () => this._onDied() });
+    this.health = new HealthComponent(this.maxHp, {}); // Death handled in takeDamage for staged effects
     this.group = new THREE.Group();
     this.group.position.copy(this.position);
     scene.add(this.group);
@@ -89,7 +90,7 @@ export class EnemyBase {
     const final = baseDamage * mult;
     this.health.takeDamage(final);
     this._hitFlash = 1;
-    if (this._deathT < 0) {
+    if (this._deathT < 0 && this._preDeathT < 0) {
       this._squash = 1;
       this._playClip('hit', 0.05);
     }
@@ -105,7 +106,21 @@ export class EnemyBase {
       _center.y += 0.32;
       ctx.damageNumbers.spawn(_center, label, color);
     }
+
+    // Start pre-death sequence instead of immediate death for better juice
+    if (!this.health.isAlive() && this._preDeathT < 0 && this._deathT < 0) {
+      this._startPreDeath(ctx);
+    }
+
     return { final, mult };
+  }
+
+  // Begin the pre-death shake/break phase - full death effects happen after delay
+  _startPreDeath(ctx) {
+    this._preDeathT = 0;
+    this.dead = true; // Mark as dead so they don't keep acting
+    ctx.gameManager.addKill(); // Count the kill immediately
+    // Keep the enemy visible but shaking - full effects (particles, gold, freeze) happen later
   }
 
   // Knockback impulse (melee / explosive AOE). `dir` is a horizontal unit vector.
@@ -124,12 +139,18 @@ export class EnemyBase {
   _applyKnock(dt) {
     if (this._knock.lengthSq() < 1e-5) { this._knock.set(0, 0, 0); return; }
     this.position.addScaledVector(this._knock, dt);
-    this._knock.multiplyScalar(Math.exp(-6 * dt));
+    this._knock.multiplyScalar(Math.exp(-4 * dt)); // Moderate decay
   }
 
   update(dt, ctx) {
     this._ctx = ctx;
     this._animTime += dt;
+
+    // Handle pre-death shake phase before full death effects
+    if (this._preDeathT >= 0) {
+      this._updatePreDeath(dt, ctx);
+      return;
+    }
 
     if (this._deathT >= 0) { this._updateDeath(dt); return; }
 
@@ -274,8 +295,8 @@ export class EnemyBase {
         this._emissives[i].emissiveIntensity = this._baseEmissive[i] + this._hitFlash * 2.2;
       }
     }
-    // Hit squash spring (skip while the death sequence owns root scale).
-    if (this._deathT < 0) {
+    // Hit squash spring (skip while pre-death or death sequence owns root scale).
+    if (this._deathT < 0 && this._preDeathT < 0) {
       if (this._squash > 0) this._squash = Math.max(0, this._squash - dt * 7);
       const sq = this._squash;
       this.root?.scale.set(1 + 0.3 * sq, 1 - 0.35 * sq, 1 + 0.3 * sq);
@@ -285,7 +306,7 @@ export class EnemyBase {
       this.mixer.update(dt);
       // Don't let locomotion cut a playing attack/hit one-shot short.
       const oneShotBusy = this._curIsOneShot && this._curClip?.isRunning();
-      if (this._deathT < 0 && !oneShotBusy && this.actions.walk && this.actions.idle) {
+      if (this._deathT < 0 && this._preDeathT < 0 && !oneShotBusy && this.actions.walk && this.actions.idle) {
         const moving = this.state === STATE.PURSUE && this.velocity.lengthSq() > 0.5;
         this._playClip(moving ? 'walk' : 'idle', 0.2);
       }
@@ -297,15 +318,57 @@ export class EnemyBase {
     }
   }
 
+  // --- Pre-death phase: enemy gets knocked back, then death effects trigger ---
+  _updatePreDeath(dt, ctx) {
+    this._preDeathT += dt;
+
+    // Longer delay so knockback is clearly visible
+    const PRE_DEATH_DURATION = 0.6;
+
+    // Continue knockback slide - enemy flies away from hit
+    this._applyKnock(dt);
+
+    // IMPORTANT: Update group position so knockback is visible!
+    this.group.position.copy(this.position);
+
+    // Shrink and fade as they fly - dramatic wind-down before pop
+    const t = this._preDeathT / PRE_DEATH_DURATION;
+    const scale = 1 - t * 0.4; // Shrink to 60% size
+    this.root?.scale.setScalar(scale);
+
+    // Glow intensifies then fades
+    const glow = Math.sin(t * Math.PI) * 3;
+    for (let i = 0; i < this._emissives.length; i++) {
+      this._emissives[i].emissiveIntensity = this._baseEmissive[i] + glow;
+    }
+
+    // Transition to full death after delay
+    if (this._preDeathT >= PRE_DEATH_DURATION) {
+      this._onDied();
+    }
+  }
+
   // --- Death sequence (ENEMIES_SPEC §7, JUICE_SPEC §9). ---
   _onDied() {
-    if (this.dead) return;
-    this.dead = true;
+    if (this._deathT >= 0) return; // Already in death sequence
+    this._preDeathT = -1; // Clear pre-death state
     const ctx = this._ctx;
-    ctx.gameManager.addKill();
-    _center.copy(this.position).setY(this.position.y + 0.6);
-    ctx.loot.spawnGold(this.position, randInt(COMBAT.GOLD_MIN ?? 1, COMBAT.GOLD_MAX ?? 5));
+    // Reset root position (we were shaking it in pre-death)
+    this.root.position.set(0, 0, 0);
+    this.root.rotation.x = 0;
+    this.root.rotation.z = 0;
+
+    // Spawn spore at ground level so it NEVER blocks FP camera
+    _center.copy(this.position).setY(0.05);
     ctx.vfx.spore(_center, this.def.accent ?? 0xffffff);
+
+    // Delay gold spawn so it doesn't clutter with particles
+    setTimeout(() => {
+      if (!this.removeMe) {
+        ctx.loot.spawnGold(this.position, randInt(COMBAT.GOLD_MIN ?? 1, COMBAT.GOLD_MAX ?? 5));
+      }
+    }, 400); // Gold spawns 400ms after particles
+
     // Bosses get dramatic slow-mo; regular kills get a light impact freeze.
     if (this.role === 'boss') ctx.juice.slowMo();
     else ctx.juice.impactFreeze();

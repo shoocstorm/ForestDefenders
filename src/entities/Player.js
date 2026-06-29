@@ -280,10 +280,18 @@ export class Player {
     this.model.setWeapon?.(changed.def);
   }
 
-  // Kick (V): forward cone melee — damage + knockback to enemies ahead (HERO_SPEC §6.3).
+  // Kick (V): jump kick — player lunges forward with a flying kick to the head.
+  // Launches the player into the air, deals heavy damage + massive knockback to enemies ahead.
   _kick(ctx) {
     if (this._kickCd > 0 || !ctx?.enemies) return;
     this._kickCd = PLAYER.KICK_COOLDOWN;
+
+    // Lunge forward and upward (jump kick)
+    this.velocity.x += this._fwd.x * PLAYER.KICK_LUNGE_SPEED;
+    this.velocity.z += this._fwd.z * PLAYER.KICK_LUNGE_SPEED;
+    this.velocity.y = PLAYER.KICK_JUMP_VELOCITY;
+    this.grounded = false;
+
     this.model.playKick?.();
     let hit = false;
     for (const e of ctx.enemies) {
@@ -292,13 +300,13 @@ export class Player {
       const dist = this._toEnemy.length();
       if (dist > PLAYER.KICK_RANGE + e.hitRadius || dist < 1e-3) continue;
       this._toEnemy.multiplyScalar(1 / dist);
-      if (this._toEnemy.dot(this._fwd) < 0.35) continue; // forward cone only
+      if (this._toEnemy.dot(this._fwd) < 0.25) continue; // forward cone only (slightly wider)
       e.takeDamage(PLAYER.KICK_DAMAGE, 'PHYSICAL', ctx);
-      e.applyKnockback?.(this._toEnemy, 9);
+      e.applyKnockback?.(this._toEnemy, PLAYER.KICK_KNOCKBACK);
       hit = true;
     }
-    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(this._fwd, 1).setY(0.7), 0xfff0a0, PLAYER.KICK_RANGE);
-    ctx.cameraRig?.addShake?.(0.25);
+    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(this._fwd, 1.5).setY(1.2), 0xfff0a0, PLAYER.KICK_RANGE);
+    ctx.cameraRig?.addShake?.(0.4);
     ctx?.audio?.melee('kick');
     if (hit) ctx.juice?.hitStop?.();
   }
@@ -316,8 +324,9 @@ export class Player {
       const dist = this._toEnemy.length();
       if (dist > PLAYER.TAIL_RANGE + e.hitRadius || dist < 1e-3) continue;
       this._toEnemy.multiplyScalar(1 / dist);
+      // Apply knockback FIRST, before damage (which sets dead=true and blocks knockback)
+      e.applyKnockback?.(this._toEnemy, lerp(25, 18, clamp(dist / PLAYER.TAIL_RANGE, 0, 1))); // Moderate knockback
       e.takeDamage(PLAYER.TAIL_DAMAGE, 'PHYSICAL', ctx);
-      e.applyKnockback?.(this._toEnemy, lerp(24, 15, clamp(dist / PLAYER.TAIL_RANGE, 0, 1)));
     }
     ctx.vfx?.melee?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
     ctx.cameraRig?.addShake?.(0.6);

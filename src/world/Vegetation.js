@@ -87,7 +87,7 @@ export class Vegetation {
     for (let i = 0; i < spec.segs; i++) {
       const r0 = THREE.MathUtils.lerp(spec.baseR, spec.topR, i / spec.segs) * scale;
       const r1 = THREE.MathUtils.lerp(spec.baseR, spec.topR, (i + 1) / spec.segs) * scale;
-      const g = new THREE.CylinderGeometry(r1, r0, segH, 7, 1);
+      const g = new THREE.CylinderGeometry(r0, r1, segH, 7, 1);
       g.translate(0, segH / 2, 0);
       q.setFromUnitVectors(up, d);
       g.applyQuaternion(q);
@@ -257,7 +257,7 @@ export class Vegetation {
 
   _build() {
     const lane = 3.5;
-    const count = 110; // [~4x] tree density matched to the doubled arena area
+    const count = 60; // Reduced tree density for clearer arena visibility
     const p = this.palette;
     // Weighted species roll — a varied low-poly forest, not species drift.
     const table = [
