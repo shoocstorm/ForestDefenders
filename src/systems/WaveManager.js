@@ -22,10 +22,12 @@ const ENEMY_CLASSES = {
 // the current wave is dead. Fires `onWaveStart` (HUD banner + endangered animal)
 // and `onAllCleared` (victory). Now biome-agnostic — any wave config array works.
 export class WaveManager {
-  constructor(enemyManager, gameManager, { onWaveStart, onAllCleared, waves, level = 0 } = {}) {
+  constructor(enemyManager, gameManager, { onWaveStart, onWaveCleared, onAllCleared, waves, level = 0, director } = {}) {
     this.enemies = enemyManager;
     this.gm = gameManager;
+    this.director = director || null;
     this.onWaveStart = onWaveStart;
+    this.onWaveCleared = onWaveCleared;
     this.onAllCleared = onAllCleared;
     this.waves = waves || CAMPAIGN[level || 0].waves();
     this.level = level || 0;
@@ -46,9 +48,11 @@ export class WaveManager {
       if (this.timer <= 0) this._startNextWave();
     } else if (this.state === 'ACTIVE') {
       if (!this.waveEnemies.some((e) => !e.dead)) {
+        this.onWaveCleared?.(this.waveNumber);
         if (this.index + 1 < this.waves.length) {
           this.state = 'PREWAVE';
-          this.timer = this.waves[this.index + 1].delay;
+          // Director stretches the breather when the player is struggling.
+          this.timer = this.waves[this.index + 1].delay * (this.director?.spawnDelayMult ?? 1);
         } else {
           this.done = true;
           this.onAllCleared?.();
@@ -62,8 +66,12 @@ export class WaveManager {
     const w = this.waves[this.index];
     this.waveEnemies = [];
     let i = 0;
+    const mult = this.director?.spawnCountMult ?? 1;
     for (const [type, count] of w.enemies) {
-      for (let n = 0; n < count; n++, i++) {
+      // Director scales the crowd, but never trivializes a wave: floor at count-1
+      // (and always at least 1), cap at the rounded scaled value.
+      const scaled = Math.max(1, count - 1, Math.round(count * mult));
+      for (let n = 0; n < scaled; n++, i++) {
         const e = this.enemies.spawn(ENEMY_CLASSES[type], this._spawnPos(w.spread, type, i), this.level);
         this.waveEnemies.push(e);
       }

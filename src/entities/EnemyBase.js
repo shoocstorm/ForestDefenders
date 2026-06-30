@@ -47,6 +47,13 @@ export class EnemyBase {
     this._attackTimer = randRange(0.3, this.attackCooldown); // stagger first attacks
     this._stuckTimer = 0;
     this._veerSign = Math.random() < 0.5 ? 1 : -1;
+    // Tactical steering (SWARM / FLANK / REGROUP) — re-evaluated on a timer so the
+    // choice is cheap and stable instead of thrashing every frame.
+    this.tactic = 'swarm';
+    this._tacticTimer = randRange(0, 0.5);
+    this._allyNear = 0;          // allies inside the tight "pressing crowd" radius
+    this._hasPack = false;       // any allies inside the wider regroup radius
+    this._allyCx = 0; this._allyCz = 0; // centroid of that wider pack
     this._lastPos = this.position.clone();
     this._hitFlash = 0;
     this._squash = 0;
@@ -173,6 +180,10 @@ export class EnemyBase {
     const dist = _to.length();
     this.state = dist <= this.attackRange ? STATE.ATTACK : STATE.PURSUE;
 
+    // Re-pick the steering tactic periodically (cheap; stable between ticks).
+    this._tacticTimer -= dt;
+    if (this._tacticTimer <= 0) { this._tacticTimer = 0.5; this._chooseTactic(ctx); }
+
     this._move(dt, _to, dist, ctx);
 
     // Integrate + resolve against arena bounds and tree trunks (+ knockback slide).
@@ -197,7 +208,8 @@ export class EnemyBase {
     this._attackTimer -= dt;
     if (this.state === STATE.ATTACK && this._attackTimer <= 0) {
       this.performAttack(ctx, target, _to, dist);
-      this._attackTimer = this.attackCooldown;
+      // Director aggression tightens/loosens the next attack (narrow, bounded band).
+      this._attackTimer = this.attackCooldown / (ctx.director?.aggression ?? 1);
       this._playClip('attack');
     }
 
@@ -216,14 +228,27 @@ export class EnemyBase {
     if (dist > 1e-4) _dir.divideScalar(dist);
     _desired.set(0, 0, 0);
 
-    if (dist > this.preferredRange + 0.4) {
-      _desired.addScaledVector(_dir, 0.95);          // close distance
-    } else if (this.role === 'ranged' && dist < this.preferredRange - 1.0) {
-      _desired.addScaledVector(_dir, -0.9);          // back off to preferred range
+    const aggro = ctx.director?.aggression ?? 1;
+
+    if (this.tactic === 'regroup' && this._hasPack) {
+      // Fall back toward the pack centroid instead of pressing the target. Ranged
+      // also keep some distance discipline so they don't drift into melee range.
+      _strafe.set(this._allyCx - this.position.x, 0, this._allyCz - this.position.z);
+      if (_strafe.lengthSq() > 1e-4) _strafe.normalize();
+      _desired.addScaledVector(_strafe, 0.8);
+      if (this.role === 'ranged' && dist < this.preferredRange) _desired.addScaledVector(_dir, -0.4);
+    } else {
+      if (dist > this.preferredRange + 0.4) {
+        _desired.addScaledVector(_dir, 0.95 * aggro);  // close distance (aggression-scaled)
+      } else if (this.role === 'ranged' && dist < this.preferredRange - 1.0) {
+        _desired.addScaledVector(_dir, -0.9);          // back off to preferred range
+      }
+      // Strafe commitment — flankers arc in hard (off-axis approach), stuck enemies
+      // veer wider to escape loops, everyone else keeps a light weave.
+      _strafe.set(_dir.z, 0, -_dir.x);
+      const strafeW = this.tactic === 'flank' ? 0.7 : (this._stuckTimer > 0 ? 0.6 : 0.12);
+      _desired.addScaledVector(_strafe, strafeW * this._veerSign);
     }
-    // Strafe commitment (bigger while stuck to escape loops).
-    _strafe.set(_dir.z, 0, -_dir.x);
-    _desired.addScaledVector(_strafe, (this._stuckTimer > 0 ? 0.6 : 0.12) * this._veerSign);
 
     // Boids separation from nearby enemies.
     this._separation(ctx.enemies, _sep);
@@ -232,6 +257,32 @@ export class EnemyBase {
     if (_desired.lengthSq() > 1e-4) _desired.normalize();
     this.velocity.x = _desired.x * this.speed;
     this.velocity.z = _desired.z * this.speed;
+  }
+
+  // Utility pick between SWARM (charge head-on), FLANK (arc in off-axis when a crowd
+  // is already pressing), and REGROUP (fall back to the pack when isolated or a
+  // low-HP ranged unit). One pass counts allies in a tight + wide radius and the
+  // wide-pack centroid; chosen tactic feeds _move's steering blend.
+  _chooseTactic(ctx) {
+    const TIGHT2 = 5 * 5, WIDE2 = 18 * 18;
+    let near = 0, far = 0, cx = 0, cz = 0;
+    for (const e of ctx.enemies) {
+      if (e === this || e.dead) continue;
+      const dx = e.position.x - this.position.x;
+      const dz = e.position.z - this.position.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < WIDE2) { far++; cx += e.position.x; cz += e.position.z; }
+      if (d2 < TIGHT2) near++;
+    }
+    this._allyNear = near;
+    this._hasPack = far > 0;
+    if (far > 0) { this._allyCx = cx / far; this._allyCz = cz / far; }
+
+    const hp = this.health.percent;
+    if (this.role === 'ranged' && hp < 0.4 && this._hasPack) { this.tactic = 'regroup'; return; }
+    if (near === 0 && far >= 2) { this.tactic = 'regroup'; return; }      // cut off from the pack
+    if (this.role === 'melee' && near >= 2) { this.tactic = 'flank'; return; } // crowd already pressing
+    this.tactic = 'swarm';
   }
 
   // Pick whom to hunt: nearest attackable animal, but switch to the player when

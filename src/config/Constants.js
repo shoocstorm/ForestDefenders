@@ -193,6 +193,25 @@ export const COMBAT = {
   GOLD_MIN: 1, GOLD_MAX: 5,
 };
 
+// --- Adaptive difficulty Director (subtle, assistive). Reads live player
+// performance and nudges a single `intensity` scalar (centered on 1.0 =
+// current balance), which feeds wave size, spawn pacing, and enemy aggression.
+// Tuned to relieve quickly and ramp gently so the hand on the dial stays unseen.
+export const DIRECTOR = {
+  INTENSITY_MIN: 0.7, INTENSITY_MAX: 1.3,   // clamp bounds for the smoothed scalar
+  EASE_LAMBDA: 2.2,   // fast damp toward a LOWER target (relief after a near-death)
+  RAMP_LAMBDA: 0.45,  // slow damp toward a HIGHER target (gentle ramp when dominating)
+  NEAR_DEATH_HP: 0.25,    // HP fraction below which we ease off hard
+  COMFORT_HP: 0.85,       // HP fraction above which (with momentum) we ramp up
+  FAST_CLEAR_SEC: 12,     // clearing a wave faster than this counts as dominating
+  SLOW_CLEAR_SEC: 30,     // taking longer than this nudges intensity down
+  DAMAGE_EASE: 0.18,      // per-point-of-HP-lost downward pull on the target (scaled)
+  // Output mappings from intensity → system multipliers (all bounded).
+  SPAWN_COUNT_MIN: 0.7, SPAWN_COUNT_MAX: 1.3,   // per-type count scale (floored separately)
+  SPAWN_DELAY_MIN: 0.85, SPAWN_DELAY_MAX: 1.4,  // prewave delay scale (more rest when low)
+  AGGRO_MIN: 0.85, AGGRO_MAX: 1.15,             // enemy attack cadence + approach commitment
+};
+
 // Aim assist (soft lock-on): each step the view is gently rotated so the crosshair
 // settles onto the enemy nearest screen-center (within a forward cone + range), and
 // the shot is fired from the muzzle straight at that enemy so it connects. The pull

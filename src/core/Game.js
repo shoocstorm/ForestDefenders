@@ -17,6 +17,7 @@ import { HUD } from '../ui/HUD.js';
 import { WorldLabels } from '../ui/WorldLabels.js';
 import { Overlays } from '../ui/Overlays.js';
 import { WaveManager } from '../systems/WaveManager.js';
+import { Director } from '../systems/Director.js';
 import { AnimalManager } from '../systems/AnimalManager.js';
 import { SaveManager } from '../systems/SaveManager.js';
 import { Achievements } from '../systems/Achievements.js';
@@ -87,6 +88,7 @@ export class Game {
     this.vfx = new VFX(this.scene);
     this.projectiles = new ProjectilePool(this.scene);
     this.enemies = new EnemyManager(this.scene);
+    this.director = new Director();
     this.hud = new HUD();
     this.hud.initWeapons(this.player.weapons.weapons.map((w) => ({ name: w.name, element: w.element })));
     // On-screen controls for phones/tablets (null on non-touch devices).
@@ -163,6 +165,7 @@ export class Game {
       loot: this.loot,
       damageNumbers: this.damageNumbers,
       gameManager: this.gameManager,
+      director: this.director,
       juice: this.juice,
       hud: this.hud,
       cameraRig: this.cameraRig,
@@ -183,7 +186,9 @@ export class Game {
 
     this.state = 'playing'; // 'playing' | 'victory' | 'defeat'
     this.waves = new WaveManager(this.enemies, this.gameManager, {
-      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); },
+      director: this.director,
+      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); this.director.noteWaveStart(); },
+      onWaveCleared: () => this.director.noteWaveCleared(),
       onAllCleared: () => this._onVictory(),
       waves: CAMPAIGN[this.campaignLevel].waves(),
       level: this.campaignLevel,
@@ -396,6 +401,7 @@ export class Game {
 
   _fixedUpdate(dt) {
     this.gameManager.updateTimers(dt);
+    this.director.update(dt, this.ctx);
     this.waves.update(dt);
     this.player.update(dt, this.input, this.ctx);
     this.animals.update(dt, this.ctx);
@@ -676,9 +682,13 @@ export class Game {
     this.player.position.copy(this.player._spawn);
     this.player.velocity.set(0, 0, 0);
 
-    // New waves for this biome.
+    // New waves for this biome — start the Director at neutral for the fresh level
+    // (mutate in place so ctx.director keeps its reference).
+    this.director.reset();
     this.waves = new WaveManager(this.enemies, this.gameManager, {
-      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); },
+      director: this.director,
+      onWaveStart: (n) => { this.hud.showBanner(`WAVE ${n}`); this.audio.ui('click'); this.director.noteWaveStart(); },
+      onWaveCleared: () => this.director.noteWaveCleared(),
       onAllCleared: () => this._onVictory(),
       waves: CAMPAIGN[this.campaignLevel].waves(),
       level: this.campaignLevel,
