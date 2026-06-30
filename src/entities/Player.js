@@ -331,8 +331,8 @@ export class Player {
       e.applyKnockback?.(this._toEnemy, lerp(25, 18, clamp(dist / PLAYER.TAIL_RANGE, 0, 1))); // Moderate knockback
       e.takeDamage(PLAYER.TAIL_DAMAGE, 'PHYSICAL', ctx);
     }
-    ctx.vfx?.melee?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
-    ctx.cameraRig?.addShake?.(0.6);
+    ctx.vfx?.tailSwing?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
+    ctx.cameraRig?.addShake?.(0.95);
     ctx?.audio?.melee('tail');
   }
 

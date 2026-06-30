@@ -214,7 +214,7 @@ export class Overlays {
 
   // Rain a burst of confetti from the top of the screen.
   _confettiBurst(n = 90) {
-    const colors = ['#a8e063', '#49e8ff', '#ffd24a', '#ff7a9a', '#b48aff', '#76d35a'];
+    const colors = ['#4fe3ff', '#7defff', '#ffd24a', '#9fd8ff', '#b48aff', '#ffffff'];
     for (let i = 0; i < n; i++) {
       const c = document.createElement('div');
       c.className = 'ov-confetti';
@@ -232,7 +232,7 @@ export class Overlays {
   showVictory(s) {
     const isFinal = s.isFinal;
     this.title.textContent = isFinal ? '🏆 CAMPAIGN COMPLETE!' : `LEVEL ${s.levelNum} CLEAR!`;
-    this.title.style.color = isFinal ? '#ffd24a' : '#a8e063';
+    this.title.style.color = isFinal ? '#ffd24a' : '#4fe3ff';
     this._renderStars(s.stars);
     this.body.innerHTML =
       `<div class="ov-stat">Animals saved <b>${s.saved}/${s.total}</b></div>` +

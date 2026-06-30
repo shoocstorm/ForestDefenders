@@ -21,7 +21,7 @@ export const PLAYER = {
   // Melee
   KICK_DAMAGE: 40, KICK_RANGE: 3.0, KICK_COOLDOWN: 0.7,
   KICK_LUNGE_SPEED: 16, KICK_JUMP_VELOCITY: 8, KICK_KNOCKBACK: 35, // Jump kick: lunge forward, launch up, send enemies flying
-  TAIL_DAMAGE: 10, TAIL_RANGE: 2.8, TAIL_COOLDOWN: 0.8, TAIL_IFRAMES: 0.7, // Reduced from 28 to test knockback
+  TAIL_DAMAGE: 14, TAIL_RANGE: 4.0, TAIL_COOLDOWN: 0.8, TAIL_IFRAMES: 0.7, // Wider 360° sweep — clears crowders
 };
 
 export const CAMERA = {

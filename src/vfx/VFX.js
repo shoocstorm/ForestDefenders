@@ -244,11 +244,39 @@ export class VFX {
     this._burst(pos, { count: 16, color, size: 0.07, speed: 6, spread: 1.2, life: 0.3, colorVariety: 0.2 });
   }
 
-  // Melee swoosh (kick / tail swing): an outward spark burst + a ground shockwave
+  // Melee swoosh (kick): an outward spark burst + a ground shockwave
   // sized to the attack reach (HERO_SPEC §6.3).
   melee(pos, color = 0xffffff, radius = 2.6) {
     this._burst(pos, { count: 32, color, size: 0.10, speed: radius * 2.4, spread: 1.2, up: 0.4, life: 0.45, colorVariety: 0.15 });
     this._shockwave(pos, color, radius * 1.5, 0.4);
+  }
+
+  // Tail swing (R): a big, juicy 360° melee. A flat fan of low ground sparks
+  // sells the sweep arc, twin stacked shockwave rings ripple out at the exact
+  // damage radius, a white-hot core pops at the pivot, and a halo of debris +
+  // up-kicked dust gives it weight (HERO_SPEC §6.3, JUICE_SPEC §12).
+  tailSwing(pos, color = 0xc7e08a, radius = 4.0) {
+    // Pivot flash + hot core — the wind-up "pop" right on the hero.
+    this._flash(pos, 0xffffff, 22, radius * 3);
+    this._flash(pos, color, 16, radius * 2.4);
+    this._blastCore(pos, 0xffffff, radius * 0.55, 0.16);
+    this._blastCore(pos, color, radius * 0.85, 0.28);
+
+    // Low, fast, flat sweep of sparks hugging the ground — reads as the arc.
+    this._burst(pos, { count: 90, color, size: 0.13, speed: radius * 3.2, spread: 1.5, up: 0.06, life: 0.34, gravity: 1.2, drag: 5, colorVariety: 0.22 });
+    // White-hot leading edge thrown out hard then snapped by drag.
+    this._burst(pos, { count: 60, color: 0xffffff, size: 0.08, speed: radius * 4.2, spread: 1.4, up: 0.04, life: 0.24, gravity: 1, drag: 7, colorVariety: 0.1 });
+
+    // Twin shockwave rings at the strike radius, the 2nd a beat later for ripple.
+    this._shockwave(pos, 0xffffff, radius * 1.0, 0.32);
+    this._shockwave(pos, color, radius * 1.25, 0.45);
+    this._delay(0.06, () => this._shockwave(pos, color, radius * 1.55, 0.5));
+
+    // Chunky debris + up-kicked dust for follow-through weight.
+    this._debris(pos, color, 10, 0.09, radius * 2.2);
+    this._delay(0.04, () => {
+      this._burst(pos, { count: 40, color: 0x9aa86a, size: 0.20, speed: 2.4, spread: 1.0, up: 0.9, life: 0.9, gravity: -0.5, drag: 1.8, fadeIn: 0.1, colorVariety: 0.08 });
+    });
   }
 
   // Universal spore explosion (VFX_SPEC §2 + ENEMIES_SPEC §7): twin flash

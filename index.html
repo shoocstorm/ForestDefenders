@@ -5,28 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Forest Defender: Mushroom Mayhem</title>
     <style>
-      :root { color-scheme: dark; }
+      :root {
+        color-scheme: dark;
+        --fd-cyan: #4fe3ff;
+        --fd-ink: #d6ecff;
+        --fd-ink-dim: #86a8c6;
+        --fd-bg-1: #0a1726;
+        --fd-bg-0: #02060c;
+        --fd-grid: #4fe3ff14;
+      }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1410;
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #02060c;
         touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
       #app { position: fixed; inset: 0; }
       canvas { display: block; }
+
+      /* Shared animated holographic grid backdrop for fullscreen menus. */
+      @keyframes fd-grid-pan { to { background-position: 0 44px, 44px 0; } }
+      @keyframes fd-flicker { 0%,100%{opacity:1;} 50%{opacity:.78;} }
+      .fd-holo::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+        background:
+          linear-gradient(var(--fd-grid) 1px, transparent 1px) 0 0 / 44px 44px,
+          linear-gradient(90deg, var(--fd-grid) 1px, transparent 1px) 0 0 / 44px 44px;
+        -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 0, transparent 72%);
+        mask-image: radial-gradient(circle at 50% 40%, #000 0, transparent 72%);
+        animation: fd-grid-pan 9s linear infinite;
+      }
 
       /* --- Boot / loading overlay --- */
       #boot {
         position: fixed; inset: 0; display: flex; flex-direction: column;
         align-items: center; justify-content: center; gap: 18px;
-        background: radial-gradient(circle at 50% 35%, #1a3326, #0b1410 70%);
-        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6;
+        background: radial-gradient(circle at 50% 36%, #0a1726, #02060c 72%);
+        font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif; color: var(--fd-ink);
         z-index: 50; transition: opacity 0.6s ease;
       }
       #boot.hidden { opacity: 0; pointer-events: none; }
-      #boot h1 { font-size: 34px; letter-spacing: 1px; text-shadow: 0 2px 12px #000a; }
-      #boot .sub { font-size: 14px; opacity: 0.7; }
-      #boot .hint { font-size: 13px; opacity: 0.55; margin-top: 8px; }
+      #boot > * { position: relative; z-index: 1; }
+      #boot h1 { font-size: 36px; letter-spacing: 3px; text-transform: uppercase; font-weight: 800;
+        color: var(--fd-cyan); text-shadow: 0 2px 12px #000a, 0 0 24px #4fe3ff66; }
+      #boot .sub { font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--fd-ink-dim); }
+      #boot .hint { font-size: 13px; color: var(--fd-ink-dim); opacity: 0.7; margin-top: 8px; }
       #boot .spinner {
-        width: 42px; height: 42px; border: 4px solid #2e5d3e; border-top-color: #a8e063;
+        width: 42px; height: 42px; border: 3px solid #123047; border-top-color: var(--fd-cyan);
         border-radius: 50%; animation: spin 0.9s linear infinite;
+        box-shadow: 0 0 18px -4px #4fe3ff88;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -34,16 +58,17 @@
       #stats {
         position: fixed; top: 8px; left: 8px; z-index: 20;
         font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
-        color: #a8e063; text-shadow: 0 1px 3px #000c; pointer-events: none;
+        color: #4fe3ff; text-shadow: 0 0 6px #4fe3ff55, 0 1px 3px #000c; pointer-events: none;
         line-height: 1.5; white-space: pre;
       }
       /* --- Controls help --- */
       #help {
         position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-        z-index: 20; font-family: "Trebuchet MS", system-ui, sans-serif;
-        font-size: 12.5px; color: #d7f0c2; text-shadow: 0 1px 3px #000c;
-        background: #0b141066; padding: 6px 14px; border-radius: 20px;
-        border: 1px solid #ffffff1a; pointer-events: none; text-align: center;
+        z-index: 20; font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif;
+        font-size: 12.5px; letter-spacing: 0.3px; color: #c2e6f0; text-shadow: 0 1px 3px #000c;
+        background: linear-gradient(180deg, #0a1726aa, #061019aa); padding: 6px 16px; border-radius: 4px;
+        border: 1px solid #4fe3ff33; box-shadow: 0 0 16px -6px #4fe3ff66, inset 0 1px 0 #8fe6ff22;
+        pointer-events: none; text-align: center;
       }
 
       /* --- Touch devices: hide desktop key hints, lock the canvas to no-scroll --- */
@@ -55,13 +80,16 @@
       #rotate {
         position: fixed; inset: 0; z-index: 60; display: none;
         flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-        background: radial-gradient(circle at 50% 40%, #1a3326, #0b1410 75%);
-        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6; text-align: center;
+        background: radial-gradient(circle at 50% 40%, #0a1726, #02060c 78%);
+        font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif; color: var(--fd-ink); text-align: center;
         padding: 24px;
       }
-      #rotate .glyph { font-size: 56px; animation: rot 1.8s ease-in-out infinite; }
-      #rotate h2 { font-size: 22px; letter-spacing: 1px; }
-      #rotate p { font-size: 14px; opacity: 0.7; }
+      #rotate > * { position: relative; z-index: 1; }
+      #rotate .glyph { font-size: 56px; animation: rot 1.8s ease-in-out infinite;
+        filter: drop-shadow(0 0 14px #4fe3ff88); }
+      #rotate h2 { font-size: 22px; letter-spacing: 2px; text-transform: uppercase; color: var(--fd-cyan);
+        text-shadow: 0 0 18px #4fe3ff66; }
+      #rotate p { font-size: 14px; color: var(--fd-ink-dim); }
       @keyframes rot { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(78deg); } }
       @media (orientation: portrait) and (pointer: coarse) {
         #rotate { display: flex; }
@@ -71,27 +99,46 @@
       #landing {
         position: fixed; inset: 0; z-index: 55; display: none;
         flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-        background: radial-gradient(circle at 50% 30%, #1a3326, #0b1410 72%);
-        font-family: "Trebuchet MS", system-ui, sans-serif; color: #cdebb6;
+        background: radial-gradient(circle at 50% 30%, #0b1a2c, #02060c 74%);
+        font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif; color: var(--fd-ink);
         padding: 24px; text-align: center;
       }
       #landing.show { display: flex; }
-      #landing h1 { font-size: 40px; letter-spacing: 1px; text-shadow: 0 2px 14px #000a; }
-      #landing .sub { font-size: 15px; opacity: 0.7; margin-bottom: 22px; }
+      #landing > * { position: relative; z-index: 1; }
+      #landing h1 { font-size: 44px; letter-spacing: 4px; font-weight: 800; text-transform: uppercase;
+        color: var(--fd-cyan); text-shadow: 0 2px 14px #000a, 0 0 30px #4fe3ff55;
+        animation: fd-flicker 6s steps(1) infinite; }
+      #landing .sub { font-size: 13px; letter-spacing: 4px; text-transform: uppercase;
+        color: var(--fd-ink-dim); margin-bottom: 26px; }
       #landing .levels {
         display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; max-width: 720px;
       }
       #landing .level {
-        cursor: pointer; width: 200px; padding: 20px 18px; border-radius: 14px;
-        background: #ffffff10; border: 1px solid #ffffff22; color: #e8ffd4;
-        transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        position: relative; cursor: pointer; width: 210px; padding: 22px 18px;
+        border-radius: 4px; color: var(--fd-ink);
+        background: linear-gradient(158deg, #0f1d2cf2, #070e18f8);
+        border: 1px solid #4fe3ff33;
+        box-shadow: 0 12px 30px -10px #000c, inset 0 1px 0 #8fe6ff22;
+        clip-path: polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      /* cyan corner brackets */
+      #landing .level::before {
+        content: ""; position: absolute; inset: 7px; pointer-events: none; opacity: 0.8;
+        background:
+          linear-gradient(#4fe3ff,#4fe3ff) left top / 14px 2px no-repeat,
+          linear-gradient(#4fe3ff,#4fe3ff) left top / 2px 14px no-repeat,
+          linear-gradient(#4fe3ff,#4fe3ff) right bottom / 14px 2px no-repeat,
+          linear-gradient(#4fe3ff,#4fe3ff) right bottom / 2px 14px no-repeat;
+        filter: drop-shadow(0 0 4px #4fe3ff88);
       }
       #landing .level:hover {
-        transform: translateY(-4px); background: #a8e0631f; border-color: #a8e063aa;
+        transform: translateY(-5px); border-color: #4fe3ffcc;
+        box-shadow: 0 18px 38px -10px #000d, 0 0 26px -6px #4fe3ff88, inset 0 1px 0 #8fe6ff33;
       }
-      #landing .level .num { font-size: 13px; opacity: 0.6; letter-spacing: 2px; }
-      #landing .level .name { font-size: 21px; margin-top: 6px; font-weight: bold; }
-      #landing .level .desc { font-size: 12.5px; opacity: 0.65; margin-top: 8px; }
+      #landing .level .num { font-size: 12px; opacity: 0.85; letter-spacing: 3px; color: var(--fd-cyan); }
+      #landing .level .name { font-size: 22px; margin-top: 6px; font-weight: 800; letter-spacing: 0.5px; color: #eaffff; }
+      #landing .level .desc { font-size: 12.5px; color: var(--fd-ink-dim); margin-top: 8px; line-height: 1.4; }
     </style>
   </head>
   <body>
@@ -103,12 +150,12 @@
       <h2>Rotate your device</h2>
       <p>Forest Defender plays best in landscape.</p>
     </div>
-    <div id="landing">
+    <div id="landing" class="fd-holo">
       <h1>🌰 Forest Defender</h1>
       <div class="sub">Mushroom Mayhem · Select a level</div>
       <div class="levels"></div>
     </div>
-    <div id="boot">
+    <div id="boot" class="fd-holo">
       <h1>🌰 Forest Defender</h1>
       <div class="sub">Mushroom Mayhem</div>
       <div class="spinner"></div>

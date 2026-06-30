@@ -316,9 +316,20 @@ export class SFX {
     if (!this.audio?.ctx) return;
     if (kind === 'kick') {
       this._noise({ dur: 0.1, gain: 0.2, filter: 'bandpass', freq: 600, q: 2 });
-    } else { // tail
-      this._tone({ freq: 220, type: 'triangle', dur: 0.18, sweep: -80, gain: 0.14 });
-      this._noise({ dur: 0.12, gain: 0.12, filter: 'bandpass', freq: 800, q: 1.5 });
+    } else { // tail — big juicy whoosh + low impact thump
+      // Rising-then-falling airy whoosh: bandpass noise sweeps up through the
+      // swing, capturing the "vwoomp" of the tail cutting the air.
+      this._noise({ dur: 0.26, gain: 0.20, filter: 'bandpass', freq: 320, q: 0.8, sweep: 2600, attack: 0.05 });
+      // A second, brighter air layer that sweeps the opposite way for body.
+      this._noise({ dur: 0.18, gain: 0.12, filter: 'highpass', freq: 1800, q: 0.7, sweep: -1200 });
+      // Tonal core of the swing — a fat detuned triangle that dips down.
+      this._tone({ freq: 280, type: 'triangle', dur: 0.22, sweep: -150, gain: 0.16, detune: 30 });
+      // Landing impact a hair later: deep sine thump for the connect/shock.
+      setTimeout(() => {
+        if (!this.audio?.ctx) return;
+        this._tone({ freq: 110, type: 'sine', dur: 0.20, sweep: -55, gain: 0.30, detune: 20 });
+        this._noise({ dur: 0.12, gain: 0.18, filter: 'lowpass', freq: 900, q: 1.0, sweep: -500 });
+      }, 90);
     }
   }
 
