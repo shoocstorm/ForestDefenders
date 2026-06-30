@@ -9,6 +9,7 @@
     "build": "rm -rf dist && bun scripts/package-models.js . && bun build ./src/main.js --outdir dist --minify && sed 's|src=\"./src/main.js\"|src=\"./main.js\"|' index.html > dist/index.html && rm -f models.bundle"
   },
   "dependencies": {
+    "firebase": "^12.15.0",
     "three": "^0.171.0"
   },
   "devDependencies": {

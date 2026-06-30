@@ -5,3 +5,5 @@ models.bundle
 .DS_Store
 .claude
 assets/references/
+.firebase
+.agents
