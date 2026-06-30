@@ -136,6 +136,7 @@ export class AudioSystem {
   rescue() { this._sfx?.rescue(); }
   levelUp() { this._sfx?.levelUp(); }
   achievement() { this._sfx?.achievement(); }
+  powerUp(kind) { this._sfx?.powerUp(kind); }
   
   // Disable music for now
   startMusic(levelKey) { /* disabled */ }

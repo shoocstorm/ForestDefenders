@@ -17,6 +17,9 @@ export class VFX {
     this._burstPool = []; // reusable Points objects (see _acquireBurst)
     this._ringGeo = new THREE.RingGeometry(0.6, 0.85, 24);
     this._ringGeo.rotateX(-Math.PI / 2);
+    this._sphereGeo = new THREE.SphereGeometry(1, 16, 12); // reused by blast cores
+    this._scheduled = []; // dt-driven deferred sub-effects (respects slow-mo / hit-stop)
+    this._blasts = [];     // expanding additive blast-core spheres (the detonation flash)
     // Unit-length +Y cylinder (centered) reused for the laser beam — scaled by
     // length and oriented per frame, positioned at the segment midpoint.
     this._beamGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 7, 1, true);
@@ -90,7 +93,7 @@ export class VFX {
     return this._laser;
   }
 
-  _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2, colorVariety = 0.15 }) {
+  _burst(pos, { count, color, size, speed, spread = 1, up = 0.4, life = 0.5, gravity = 2, colorVariety = 0.15, drag = 0, fadeIn = 0 }) {
     count = Math.min(count, MAX_BURST_PARTICLES);
     const e = this._acquireBurst();
     const positions = e.positions, vels = e.vels, colors = e.colors;
@@ -123,8 +126,28 @@ export class VFX {
     e.points.material.opacity = 1;
     e.points.visible = true;
     e.count = count; e.life = life; e.maxLife = life; e.gravity = gravity;
+    e.drag = drag; e.fadeIn = fadeIn; e._baseSize = 0;
     e.active = true;
     this.active.push(e);
+  }
+
+  // Defer a sub-effect by `t` seconds, advanced by update(dt) so the staging
+  // honors hit-stop / slow-mo (a setTimeout would desync from scaled game time).
+  _delay(t, fn) { this._scheduled.push({ t, fn }); }
+
+  // Expanding white-hot blast sphere — the punchy detonation core. Grows with an
+  // ease-out while opacity collapses fast, so it reads as a flash, not a bubble.
+  _blastCore(pos, color, maxR, life) {
+    const mat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 1,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(this._sphereGeo, mat);
+    mesh.position.copy(pos);
+    mesh.scale.setScalar(0.3);
+    mesh.layers.enable(BLOOM_LAYER);
+    this.scene.add(mesh);
+    this._blasts.push({ mesh, mat, life, maxLife: life, maxR });
   }
 
   // Acquire a free pooled light (intensity toggled, never added/removed from the scene).
@@ -232,20 +255,35 @@ export class VFX {
   // lights, ~520 additive particles (lime + magenta + white-hot core + accent),
   // 3 stacked shockwaves, and chunky debris. The signature kill moment.
   spore(pos, accentColor = 0xffffff) {
-    this._flash(pos, 0xffffff, 28, 16);
-    this._flash(pos, accentColor, 20, 12);
-    // Lime-green primary burst - smaller, more varied
-    this._burst(pos, { count: 200, color: 0x9bff5a, size: 0.14, speed: 9, spread: 1.1, up: 0.7, life: 0.7, colorVariety: 0.3 });
-    // Magenta secondary burst
-    this._burst(pos, { count: 170, color: 0xff5ad0, size: 0.12, speed: 8, spread: 1.0, life: 0.65, colorVariety: 0.25 });
-    // White-hot core - very small and bright
-    this._burst(pos, { count: 120, color: 0xffffff, size: 0.08, speed: 12, spread: 1.2, life: 0.35, colorVariety: 0.1 });
-    // Accent color burst
-    this._burst(pos, { count: 100, color: accentColor, size: 0.10, speed: 7, spread: 0.9, up: 0.6, life: 0.6, colorVariety: 0.2 });
-    // Magical sparkles - tiny, slow-falling
-    this._burst(pos, { count: 60, color: 0xffaaFF, size: 0.05, speed: 4, spread: 0.7, up: 0.3, life: 0.8, gravity: 1, colorVariety: 0.4 });
-    this._debris(pos, accentColor, 12, 0.10, 8);
-    for (let i = 0; i < 3; i++) this._shockwave(pos, i === 0 ? 0xffffff : accentColor, 5.0 + i * 0.6, 0.45 + i * 0.1);
+    // --- Frame 0: blinding detonation — twin flash lights + expanding white-hot cores ---
+    this._flash(pos, 0xffffff, 34, 18);
+    this._flash(pos, accentColor, 24, 13);
+    this._blastCore(pos, 0xffffff, 2.4, 0.16);   // hard, fast white pop
+    this._blastCore(pos, accentColor, 3.6, 0.30); // slower accent-tinted bloom
+
+    // White-hot needle sparks blasted out hard, then snapped to a halt by drag.
+    this._burst(pos, { count: 130, color: 0xffffff, size: 0.09, speed: 17, spread: 1.3, up: 0.5, life: 0.34, gravity: 5, drag: 6, colorVariety: 0.1 });
+    // Primary lime fireball shell — fast launch that eases out for a soft bloom.
+    this._burst(pos, { count: 200, color: 0x9bff5a, size: 0.15, speed: 12, spread: 1.15, up: 0.7, life: 0.75, gravity: 3, drag: 3.4, colorVariety: 0.3 });
+
+    // --- A beat later: secondary shells bloom outward, layering the expansion ---
+    this._delay(0.05, () => {
+      this._burst(pos, { count: 180, color: 0xff5ad0, size: 0.13, speed: 9.5, spread: 1.05, up: 0.6, life: 0.72, gravity: 3, drag: 3, colorVariety: 0.28 });
+      this._burst(pos, { count: 130, color: accentColor, size: 0.11, speed: 7.5, spread: 0.95, up: 0.6, life: 0.66, gravity: 2.5, drag: 2.6, colorVariety: 0.22 });
+      this._shockwave(pos, accentColor, 5.8, 0.5);
+    });
+
+    // --- Settle: dark smoke puff fades in and lifts; embers drift upward, lingering ---
+    this._delay(0.04, () => {
+      this._burst(pos, { count: 64, color: 0x26262c, size: 0.24, speed: 2.6, spread: 0.8, up: 1.2, life: 1.35, gravity: -0.6, drag: 1.6, fadeIn: 0.14, colorVariety: 0.05 });
+    });
+    this._delay(0.11, () => {
+      this._burst(pos, { count: 80, color: 0xffd27a, size: 0.07, speed: 4, spread: 0.7, up: 1.5, life: 1.15, gravity: -1.3, drag: 1.3, colorVariety: 0.3 });
+    });
+
+    this._debris(pos, accentColor, 14, 0.10, 9);
+    this._shockwave(pos, 0xffffff, 4.6, 0.4);
+    this._delay(0.13, () => this._shockwave(pos, accentColor, 6.6, 0.55));
   }
 
   // Celebratory burst when an animal is freed (ANIMALS_SPEC §8) — gold + pink.
@@ -258,6 +296,26 @@ export class VFX {
 
   update(dt) {
     const time = performance.now() * 0.001;
+
+    // Fire any staged sub-effects whose delay has elapsed (dt-driven so the
+    // explosion's timing tracks hit-stop / slow-mo instead of wall-clock).
+    for (let i = this._scheduled.length - 1; i >= 0; i--) {
+      const s = this._scheduled[i];
+      s.t -= dt;
+      if (s.t <= 0) { this._scheduled.splice(i, 1); s.fn(); }
+    }
+
+    // Expanding blast-core spheres: grow with ease-out, opacity collapses fast.
+    for (let i = this._blasts.length - 1; i >= 0; i--) {
+      const bc = this._blasts[i];
+      bc.life -= dt;
+      if (bc.life <= 0) { this.scene.remove(bc.mesh); bc.mat.dispose(); this._blasts.splice(i, 1); continue; }
+      const t = 1 - bc.life / bc.maxLife;        // 0 → 1
+      const ease = 1 - Math.pow(1 - t, 3);       // ease-out cubic
+      bc.mesh.scale.setScalar(0.3 + ease * bc.maxR);
+      bc.mat.opacity = (1 - t) * (1 - t);        // quadratic fade to nothing
+    }
+
     for (let i = this.active.length - 1; i >= 0; i--) {
       const b = this.active[i];
       b.life -= dt;
@@ -272,7 +330,11 @@ export class VFX {
       const n = b.count * 3;
       const lifeRatio = b.life / b.maxLife;
 
+      // Air drag damps launch velocity so shells decelerate and ease out
+      // (the difference between a fluid bloom and particles flying off linearly).
+      const damp = b.drag ? Math.exp(-b.drag * dt) : 1;
       for (let j = 0; j < n; j += 3) {
+        if (b.drag) { b.vels[j] *= damp; b.vels[j + 1] *= damp; b.vels[j + 2] *= damp; }
         b.vels[j + 1] -= b.gravity * dt;
 
         // Add subtle spiral motion to particles
@@ -289,7 +351,10 @@ export class VFX {
 
       // Shimmer effect - pulse opacity with high-frequency variation
       const shimmer = 0.9 + Math.sin(time * 15 + i) * 0.1;
-      b.points.material.opacity = lifeRatio * shimmer;
+      // Optional fade-in ramp (smoke billows in rather than popping on at full alpha).
+      const age = b.maxLife - b.life;
+      const fade = b.fadeIn ? Math.min(1, age / b.fadeIn) : 1;
+      b.points.material.opacity = lifeRatio * shimmer * fade;
 
       // Size pulsing for more dynamic feel
       const sizePulse = 0.85 + Math.sin(time * 8 + i * 0.5) * 0.15;
@@ -373,6 +438,11 @@ export class VFX {
   // Clear all dynamic VFX (called on level restart to prevent accumulation).
   // Clears rings, debris, and active bursts, but keeps pooled resources (lights, burst pool).
   clear() {
+    // Drop any pending staged sub-effects and dispose live blast-core spheres.
+    this._scheduled.length = 0;
+    for (const bc of this._blasts) { this.scene.remove(bc.mesh); bc.mat.dispose(); }
+    this._blasts.length = 0;
+
     // Clear and dispose all shockwave rings
     for (let i = this.rings.length - 1; i >= 0; i--) {
       const r = this.rings[i];

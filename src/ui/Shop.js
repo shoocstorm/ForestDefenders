@@ -10,12 +10,13 @@ import {
 const TABS = ['All', 'Weapons', 'Hero', 'Supplies'];
 
 export class Shop {
-  constructor({ gameManager, player, onClose, onPurchase, toasts }) {
+  constructor({ gameManager, player, onClose, onPurchase, toasts, audio }) {
     this.gm = gameManager;
     this.player = player;
     this.onClose = onClose;
     this.onPurchase = onPurchase;
     this.toasts = toasts;
+    this.audio = audio;
     this.tab = 'All';
     this.isOpen = false;
 
@@ -183,6 +184,11 @@ export class Shop {
     } else if (it.kind === 'consumable') {
       if (this.gm.gold >= it.price && this.gm.spendGold(it.price)) {
         this.gm.applyConsumable(it.effect, this.player, this.player.weapons); ok = true;
+        const e = it.effect;
+        const kind = e.heal ? 'heal'
+          : (e.shield || e.hitShield || e.tailGuard) ? 'shield'
+          : 'buff';
+        this.audio?.powerUp?.(kind);
       }
     }
     if (ok) {

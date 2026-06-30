@@ -115,12 +115,11 @@ export class EnemyBase {
     return { final, mult };
   }
 
-  // Begin the pre-death shake/break phase - full death effects happen after delay
+  // Detonate immediately on death — no shrink/wind-down, burst right away.
   _startPreDeath(ctx) {
-    this._preDeathT = 0;
     this.dead = true; // Mark as dead so they don't keep acting
     ctx.gameManager.addKill(); // Count the kill immediately
-    // Keep the enemy visible but shaking - full effects (particles, gold, freeze) happen later
+    this._onDied(); // Straight to the explosion (skips the pre-death shrink)
   }
 
   // Knockback impulse (melee / explosive AOE). `dir` is a horizontal unit vector.
@@ -383,9 +382,16 @@ export class EnemyBase {
     this._deathT += dt;
     const t = this._deathT;
     const set = (x, y, z) => this.root?.scale.set(x, y, z);
-    // Fade the glow out as it collapses.
+    // White-hot emissive flash at the instant of detonation, fading as it collapses.
+    const flash = t < 0.06 ? (1 - t / 0.06) * 6 : 0;
     for (let i = 0; i < this._emissives.length; i++) {
-      this._emissives[i].emissiveIntensity = this._baseEmissive[i] * clamp(1 - t / 0.25, 0, 1);
+      this._emissives[i].emissiveIntensity = this._baseEmissive[i] * clamp(1 - t / 0.25, 0, 1) + flash;
+    }
+    // Chaotic tumble + a brief pop-up arc as the body is blown apart.
+    if (this.root) {
+      this.root.rotation.y += dt * 16;
+      this.root.rotation.x += dt * 7;
+      this.root.position.y = Math.sin(clamp(t / 0.32, 0, 1) * Math.PI) * 0.55;
     }
     if (t < 0.08) set(1 + (0.6) * (t / 0.08), 1 - 0.6 * (t / 0.08), 1 + 0.6 * (t / 0.08));
     else if (t < 0.18) { const k = (t - 0.08) / 0.10; set(1.6 - 1.1 * k, 0.4 + 1.4 * k, 1.6 - 1.1 * k); }

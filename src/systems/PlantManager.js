@@ -56,6 +56,12 @@ export class PlantManager {
     if (effect.hitShield) { gm.hitShield += effect.hitShield; gm.buffs.add('OAKSHIELD'); }
     if (effect.fireRounds) gm.fireRounds += effect.fireRounds;
 
+    // Exciting power-up fanfare, flavoured by what the hero just gained.
+    const kind = effect.heal ? 'heal'
+      : (effect.hitShield || effect.tailGuard) ? 'shield'
+      : 'buff';
+    ctx.audio?.powerUp?.(kind);
+
     // Feedback: burst at the plant + a floating label in its glow colour.
     _v.copy(plant.position).setY(plant.position.y + 0.7);
     ctx.vfx?.spore?.(_v, plant.def.glow);

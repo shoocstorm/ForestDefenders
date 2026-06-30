@@ -110,6 +110,7 @@ export class Game {
     );
     this.shop = new Shop({
       gameManager: this.gameManager, player: this.player, toasts: this.toasts,
+      audio: this.audio,
       onPurchase: () => this._persist(),
     });
 
