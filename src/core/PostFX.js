@@ -54,6 +54,16 @@ export class PostFX {
   }
 
   _buildFinal(w, h) {
+    // Rebuilding (quality/AO toggle) replaces the composer + its passes, each of
+    // which owns its own full-screen render targets/materials — dispose the
+    // outgoing ones or every toggle leaks a set of HDR framebuffers for the
+    // session's lifetime. EffectComposer.dispose() only frees its own read/write
+    // targets, not the passes added to it, so each owned pass is disposed too.
+    this.finalComposer?.dispose();
+    this.gtao?.dispose();
+    this.combine?.dispose();
+    this.outputPass?.dispose();
+
     const q = QUALITY[this.quality];
     const ao = AO_QUALITY[this.aoLevel] || AO_QUALITY[AO_QUALITY.DEFAULT];
     this.aoScale = ao.scale;
@@ -87,7 +97,8 @@ export class PostFX {
     this.combine.material.uniforms.uStrength.value = q.bloomScale;
     this.finalComposer.addPass(this.combine);
 
-    this.finalComposer.addPass(new OutputPass());
+    this.outputPass = new OutputPass();
+    this.finalComposer.addPass(this.outputPass);
     this.finalComposer.setSize(w, h);
   }
 

@@ -56,5 +56,8 @@ export function buildMushroom(type) {
     if (o.isMesh && o.material && (o.material.emissiveIntensity ?? 0) > 0.01) emissives.push(o.material);
   });
 
-  return { group, capPivot, emissives, mixer, actions };
+  // GLB path clones a cached master scene (see Assets.js) — geometry/materials
+  // are shared across every clone of this asset, so the caller must NOT dispose
+  // them when this enemy dies (ownsMaterials: false).
+  return { group, capPivot, emissives, mixer, actions, ownsMaterials: false };
 }

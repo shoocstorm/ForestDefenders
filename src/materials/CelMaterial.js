@@ -49,6 +49,16 @@ export function updateTime(t) {
   for (const m of _windMaterials) if (m.userData.__uTime) m.userData.__uTime.value = t;
 }
 
+// Drop a disposed wind material from the update set. Only needed for
+// PROCEDURAL wind materials (one fresh instance per tree, e.g. Vegetation.js) —
+// GLB wind materials are assigned once per asset at load time (celifyGLTF) and
+// shared by every clone of that asset for the session, so they're never disposed
+// per-instance and must stay registered. Safe to call on any material (no-op if
+// it was never tracked).
+export function untrackWind(mat) {
+  _windMaterials.delete(mat);
+}
+
 // --- Fresnel rim injection (world-space) + optional wind sway ---
 function injectExtras(mat, { rim, wind } = {}) {
   mat.userData = mat.userData || {};

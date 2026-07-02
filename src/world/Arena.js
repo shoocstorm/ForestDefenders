@@ -85,7 +85,17 @@ export class Arena {
     this.scene.traverse((o) => { if (o.userData.arenaOwned) toRemove.push(o); });
     for (const o of toRemove) {
       this.scene.remove(o);
-      o.traverse?.((c) => { if (c.isMesh) { c.geometry.dispose?.(); } });
+      // GLB landmark/prop clones (bossShroom, ancientTree, scatter props) share
+      // geometry + materials with the cached master asset (see Assets.js) — the
+      // whole subtree is skipped rather than disposed, or the next level's clone
+      // of the same asset would render blank/corrupt (same hazard as freeing a
+      // still-living enemy's shared model).
+      if (o.userData.__sharedAsset) continue;
+      o.traverse?.((c) => {
+        if (!c.isMesh && !c.isPoints) return;
+        c.geometry?.dispose?.();
+        c.material?.dispose?.();
+      });
     }
     this.colliders.length = 0;
     this._rings = null;
@@ -450,6 +460,7 @@ export class Arena {
       }
     });
     boss.userData.arenaOwned = true;
+    boss.userData.__sharedAsset = true; // clone() shares geometry/materials — see dispose()
     this.scene.add(boss);
   }
 
@@ -474,6 +485,7 @@ export class Arena {
       }
     });
     tree.userData.arenaOwned = true;
+    tree.userData.__sharedAsset = true; // clone() shares geometry/materials — see dispose()
     this.scene.add(tree);
     // Flickering fire glow at the base.
     const fireLight = new THREE.PointLight(lm.glow, 15, 18, 2);
@@ -541,6 +553,7 @@ export class Arena {
       g.position.set(x, -box.min.y * sc, z);
       g.rotation.y = rot;
       g.userData.arenaOwned = true;
+      g.userData.__sharedAsset = true; // clone() shares geometry/materials — see dispose()
       scene.add(g);
       if (colliderR > 0) this.colliders.push({ type: 'cylinder', x, z, r: colliderR });
       return g;

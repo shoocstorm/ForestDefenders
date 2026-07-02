@@ -18,6 +18,8 @@ export class VFX {
     this._ringGeo = new THREE.RingGeometry(0.6, 0.85, 24);
     this._ringGeo.rotateX(-Math.PI / 2);
     this._sphereGeo = new THREE.SphereGeometry(1, 16, 12); // reused by blast cores
+    this._debrisGeo = new THREE.DodecahedronGeometry(1, 0); // unit chunk, scaled per instance
+    this._debrisPool = []; // reusable debris meshes (see _acquireDebrisChunk)
     this._scheduled = []; // dt-driven deferred sub-effects (respects slow-mo / hit-stop)
     this._blasts = [];     // expanding additive blast-core spheres (the detonation flash)
     // Unit-length +Y cylinder (centered) reused for the laser beam — scaled by
@@ -174,17 +176,33 @@ export class VFX {
     this.rings.push({ mesh, life, maxLife: life, maxRadius });
   }
 
+  // Reusable debris chunk: shared unit geometry (scaled per use) + own material
+  // (color/emissive mutated on reuse, never recreated). Pooled like the burst/
+  // light systems above — allocating a fresh DodecahedronGeometry + Material
+  // per chunk per explosion was a stutter source at explosion-heavy moments
+  // (Boomstick, spore deaths, tail swing all fire _debris() every hit/kill).
+  _acquireDebrisChunk() {
+    const m = this._debrisPool.pop();
+    if (m) return m;
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.8, emissiveIntensity: 0.4, transparent: true });
+    const mesh = new THREE.Mesh(this._debrisGeo, mat);
+    mesh.castShadow = true;
+    return mesh;
+  }
+
   // Chunky debris flung outward with angular spin (VFX_SPEC §2.4).
   _debris(pos, color, count = 8, size = 0.12, speed = 6) {
     const chunks = [];
     const vels = [];
     const rots = [];
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.DodecahedronGeometry(size * (0.7 + Math.random() * 0.6), 0);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8, emissive: color, emissiveIntensity: 0.4 });
-      const m = new THREE.Mesh(geo, mat);
+      const m = this._acquireDebrisChunk();
+      m.material.color.setHex(color);
+      m.material.emissive.setHex(color);
+      m.material.opacity = 1;
+      m.scale.setScalar(size * (0.7 + Math.random() * 0.6));
       m.position.copy(pos);
-      m.castShadow = true;
+      m.rotation.set(0, 0, 0);
       this.scene.add(m);
       const theta = Math.random() * Math.PI * 2;
       const v = speed * (0.5 + Math.random() * 0.8);
@@ -442,7 +460,7 @@ export class VFX {
         const d = this.debris[i];
         d.life -= dt;
         if (d.life <= 0) {
-          for (const c of d.chunks) { this.scene.remove(c); c.geometry.dispose(); c.material.dispose(); }
+          for (const c of d.chunks) { this.scene.remove(c); this._debrisPool.push(c); }
           this.debris.splice(i, 1);
           continue;
         }
@@ -464,7 +482,8 @@ export class VFX {
   }
 
   // Clear all dynamic VFX (called on level restart to prevent accumulation).
-  // Clears rings, debris, and active bursts, but keeps pooled resources (lights, burst pool).
+  // Clears rings, debris, and active bursts, but keeps pooled resources (lights,
+  // burst pool, debris chunk pool).
   clear() {
     // Drop any pending staged sub-effects and dispose live blast-core spheres.
     this._scheduled.length = 0;
@@ -479,13 +498,12 @@ export class VFX {
     }
     this.rings.length = 0;
 
-    // Clear and dispose all debris chunks
+    // Return all live debris chunks to the pool (never disposed — reused)
     if (this.debris) {
       for (const d of this.debris) {
         for (const c of d.chunks) {
           this.scene.remove(c);
-          c.geometry.dispose();
-          c.material.dispose();
+          this._debrisPool.push(c);
         }
       }
       this.debris.length = 0;

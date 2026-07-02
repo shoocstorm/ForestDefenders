@@ -18,7 +18,10 @@ export class WorldLabels {
 
   _make(name) {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;transform:translate(-50%,-100%);text-align:center;will-change:transform;';
+    // top/left pinned at 0; positioning is done via transform (translate3d)
+    // each frame — compositor-only, no per-frame document layout (see
+    // DamageNumbers.js, which fixed the same left/top thrash under rapid fire).
+    wrap.style.cssText = 'position:absolute;top:0;left:0;text-align:center;will-change:transform;';
     wrap.innerHTML =
       `<div style="font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000c;letter-spacing:.5px;">${name}</div>` +
       '<div style="width:64px;height:7px;margin:2px auto 0;background:#0008;border:1px solid #ffffff33;border-radius:4px;overflow:hidden;">' +
@@ -41,8 +44,9 @@ export class WorldLabels {
       _v.project(this.camera);
       if (_v.z > 1) { L.wrap.style.display = 'none'; continue; }
       L.wrap.style.display = '';
-      L.wrap.style.left = (_v.x * 0.5 + 0.5) * w + 'px';
-      L.wrap.style.top = (-_v.y * 0.5 + 0.5) * h + 'px';
+      const x = (_v.x * 0.5 + 0.5) * w;
+      const y = (-_v.y * 0.5 + 0.5) * h;
+      L.wrap.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-100%)`;
 
       const pct = Math.max(0, a.health.percent);
       L.bar.style.width = (pct * 100) + '%';

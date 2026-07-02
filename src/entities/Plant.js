@@ -282,5 +282,16 @@ export class Plant {
     }
   }
 
-  dispose() { this.scene.remove(this.group); }
+  // Every geometry/material here is built fresh per-plant (no shared/cloned
+  // assets), so a full traverse-and-dispose is safe and necessary — otherwise
+  // every level reload (PlantManager.dispose() on retry/advance) leaks all of
+  // this plant's GPU buffers.
+  dispose() {
+    this.scene.remove(this.group);
+    this.group.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry?.dispose?.();
+      o.material?.dispose?.();
+    });
+  }
 }

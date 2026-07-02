@@ -203,7 +203,10 @@ export function buildProceduralMushroom(type) {
 
   // capPivot kept for parity with the GLB path; EnemyBase nulls it when a mixer
   // is present (the clips own the cap bob), so it's only a fallback handle.
-  return { group, capPivot: cap, emissives, mixer, actions };
+  // Every geometry/material here is built fresh for this instance (never shared
+  // with another mushroom), so EnemyBase.dispose() is safe — and responsible —
+  // to free them when this enemy dies.
+  return { group, capPivot: cap, emissives, mixer, actions, ownsMaterials: true };
 }
 
 // --- Element prop on the cap ---

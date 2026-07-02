@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA, VEGETATION } from '../config/Constants.js';
-import { toon } from '../materials/CelMaterial.js';
+import { toon, untrackWind } from '../materials/CelMaterial.js';
 
 // Stylized procedural trees (threejs-procedural-vegetation, adapted to the cel look).
 // A tree is a growth hierarchy — a curved segmented trunk, branches at stratified
@@ -314,16 +314,21 @@ export class Vegetation {
   update(dt) { this._t += dt; }
 
   dispose() {
-    // Remove all tree groups from the scene and dispose their geometries/materials
+    // Remove all tree groups from the scene and dispose their geometries/materials.
+    // Foliage materials carry `wind` (see toon() call above) and register
+    // themselves in CelMaterial's module-level _windMaterials Set for the
+    // per-frame sway update — untrackWind() drops that reference too, or every
+    // level reload leaks another batch of dead materials into that Set forever.
     for (const t of this.trees) {
       this.scene.remove(t.group);
       t.group.traverse((c) => {
         if (c.isMesh) {
           c.geometry?.dispose?.();
           if (Array.isArray(c.material)) {
-            c.material.forEach((m) => m?.dispose?.());
+            c.material.forEach((m) => { m?.dispose?.(); untrackWind(m); });
           } else {
             c.material?.dispose?.();
+            untrackWind(c.material);
           }
         }
       });

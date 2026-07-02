@@ -78,7 +78,7 @@ export class EnemyBase {
   // Subclasses call this with a buildMushroom(...) result. The optional
   // `mixer`/`actions` let authored GLB clips (idle/walk/attack/hit) drive the
   // enemy; when present, the manual cap bob is skipped to avoid fighting the clip.
-  attachModel({ group, capPivot, emissives, mixer, actions }) {
+  attachModel({ group, capPivot, emissives, mixer, actions, ownsMaterials }) {
     this.root = group;
     this.capPivot = mixer ? null : capPivot; // clip owns the bob when animating
     this._emissives = emissives;
@@ -86,6 +86,11 @@ export class EnemyBase {
     this.mixer = mixer || null;
     this.actions = actions || {};
     this._hasAnim = !!mixer;
+    // GLB-derived enemies clone a cached master scene (Assets.js) — their
+    // geometry/materials are shared with every other clone of that asset and
+    // must never be disposed per-instance. Only procedurally-built enemies
+    // (ProceduralMushroom) own geometry/materials created just for them.
+    this._ownsMaterials = !!ownsMaterials;
     this.group.add(group);
   }
 
@@ -454,9 +459,19 @@ export class EnemyBase {
   dispose() {
     this.removeMe = true;
     this.scene.remove(this.group);
-    this.group.traverse((o) => {
-      if (o.isMesh) { o.geometry.dispose?.(); }
-    });
+    // Only free geometry/materials this instance actually owns (procedural
+    // enemies). GLB-derived enemies (wood/boss/glow) share their geometry and
+    // materials with the cached master asset and every other clone of it —
+    // disposing those here would corrupt/blank still-living siblings.
+    if (this._ownsMaterials) {
+      this.group.traverse((o) => {
+        if (!o.isMesh) return;
+        o.geometry?.dispose?.();
+        // Outline meshes reuse CelMaterial's module-level shared outline
+        // material cache — never owned by this instance, must not be disposed.
+        if (!o.userData.__isOutline) o.material?.dispose?.();
+      });
+    }
   }
 
   // Subclasses override:
