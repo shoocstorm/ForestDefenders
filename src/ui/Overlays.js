@@ -261,6 +261,7 @@ export class Overlays {
     this.rankEl.textContent = '';
     this.levelupEl.textContent = ''; this.levelupEl.classList.remove('show');
     this.btn.textContent = 'RETRY';
+    this._useNext = false;  // RETRY always restarts — clear any stale flag from a prior victory
     this._show('defeat');
     this.confetti.innerHTML = '';
   }

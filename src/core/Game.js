@@ -149,7 +149,6 @@ export class Game {
       onAchievements: () => { this.pauseMenu.close(); this.achievementViewer.open(); },
       onBackpack: () => { this.pauseMenu.close(); this.backpack.open(); },
       onMainMenu: () => this._returnToLanding(),
-      onQuit: () => window.location.reload(), // Simple quit for web
     });
 
     // Reused per-frame combat context (avoids per-step allocation).
@@ -357,6 +356,12 @@ export class Game {
         this.accum -= this.fixedDt;
         steps++;
       }
+      // Hit the step cap without draining the backlog — sim is falling behind
+      // faster than 5 steps/frame can catch up (sustained <12fps). Drop the
+      // remainder instead of carrying it forward: otherwise the debt compounds
+      // frame over frame into a permanent slow-motion "stuck" state that never
+      // recovers, rather than just a momentary stutter.
+      if (steps >= 5) this.accum = 0;
       simStepped = steps > 0;
       this.vfx.update(simDt);
       this.loot.update(simDt, this.player.position);

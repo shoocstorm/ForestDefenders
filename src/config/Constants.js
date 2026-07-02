@@ -469,7 +469,8 @@ export const BIOMES = {
     firefly: 0x7fff9f, fireflyN: 210,
     ambientFall: { type: 'petals', color: 0x7fff9f, size: 0.10, opacity: 0.75 },
     skyDecor: { body: 'sun', bodyColor: 0xfff4d8, bodyGlow: 0xffe2a0, bodyPos: [-150, 200, 320], bodyR: 26,
-      cloud: 0xeef3f7, cloudShadow: 0xb9c6d2, cloudN: 16, comets: 1, ships: 2, stars: 40 },
+      cloud: 0xeef3f7, cloudShadow: 0xb9c6d2, cloudN: 16, comets: 1, ships: 2, stars: 40,
+      balloons: 3, balloonColors: [0xff5e5e, 0xfff4d8] },
   },
   // L2 — Ember Hollow: hot orange/charred, volcanic haze (SEASONS autumn/decay).
   L2: {
@@ -492,7 +493,8 @@ export const BIOMES = {
     firefly: 0xff7a3a, fireflyN: 270,
     ambientFall: { type: 'ash', color: 0xff7a30, size: 0.08, opacity: 0.8 },
     skyDecor: { body: 'sun', bodyColor: 0xff5a1a, bodyGlow: 0xff3000, bodyPos: [130, 110, 330], bodyR: 34,
-      cloud: 0x5a2c20, cloudShadow: 0x331812, cloudN: 18, comets: 3, ships: 3, stars: 0 },
+      cloud: 0x5a2c20, cloudShadow: 0x331812, cloudN: 18, comets: 3, ships: 3, stars: 0,
+      balloons: 2, balloonColors: [0xff5a2a, 0x2c211c] },
   },
   // L3 — Ancient Grove: cool blue/violet, ethereal moonlight (SEASONS winter).
   L3: {
@@ -515,7 +517,8 @@ export const BIOMES = {
     firefly: 0x6ad0ff, fireflyN: 240,
     ambientFall: { type: 'leaves', color: 0x80c0ff, size: 0.09, opacity: 0.78 },
     skyDecor: { body: 'moon', bodyColor: 0xdfe8ff, bodyGlow: 0x8ab0ff, bodyPos: [160, 210, 300], bodyR: 24,
-      cloud: 0x3a4a78, cloudShadow: 0x222d52, cloudN: 12, comets: 2, ships: 4, stars: 260 },
+      cloud: 0x3a4a78, cloudShadow: 0x222d52, cloudN: 12, comets: 2, ships: 4, stars: 260,
+      balloons: 2, balloonColors: [0x9ae0ff, 0x222a48] },
   },
 };
 

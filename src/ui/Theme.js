@@ -160,6 +160,10 @@ body .pause-btn{background:#0a1726cc!important;border:1px solid #4fe3ff2a!import
 body .pause-btn:hover{background:#102536!important;border-color:#4fe3ff99!important;
   box-shadow:inset 0 0 18px -6px #4fe3ffaa!important;}
 body .pause-btn.primary{border:none!important;}
+body .pause-btn.primary:hover{color:var(--fd-cyan-ink)!important;
+  background:linear-gradient(90deg,#9df3ff,#37b0ec)!important;
+  box-shadow:0 5px 0 var(--fd-cyan-deep),0 7px 16px #0007,
+    0 0 24px -3px #4fe3ffaa!important;}
 body .pause-btn.warn{border-color:#ffb34766!important;}
 body .pause-btn.warn:hover{border-color:#ffb347!important;background:#ffb34714!important;}
 body .pause-btn.danger{border-color:#ff4d5e66!important;}

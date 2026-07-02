@@ -12,7 +12,6 @@ export class PauseMenu {
     onAchievements,
     onBackpack,
     onMainMenu,
-    onQuit,
   }) {
     this.gm = gameManager;
     this.waves = waves;
@@ -23,7 +22,6 @@ export class PauseMenu {
     this.onAchievements = onAchievements;
     this.onBackpack = onBackpack;
     this.onMainMenu = onMainMenu;
-    this.onQuit = onQuit;
     this.isOpen = false;
 
     this._buildDom();
@@ -140,7 +138,10 @@ export class PauseMenu {
         }
 
         .pause-btn.primary:hover {
-          filter: brightness(1.1);
+          background: linear-gradient(90deg, #b6ec78, #85e069);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 18px #a8e06355, 0 2px 8px #0006;
+          filter: brightness(1.05);
         }
 
         .pause-btn.warn {
@@ -215,10 +216,6 @@ export class PauseMenu {
             <span class="pause-btn-icon">🏠</span>
             MAIN MENU
           </button>
-          <button class="pause-btn danger" id="p-quit">
-            <span class="pause-btn-icon">✕</span>
-            QUIT TO DESKTOP
-          </button>
         </div>
         <div id="pause-hint">Press [ESC] to resume</div>
       </div>`;
@@ -236,7 +233,6 @@ export class PauseMenu {
     this.root.querySelector('#p-settings').addEventListener('click', () => this._handleSettings());
     this.root.querySelector('#p-backpack').addEventListener('click', () => this._handleBackpack());
     this.root.querySelector('#p-menu').addEventListener('click', () => this._handleMainMenu());
-    this.root.querySelector('#p-quit').addEventListener('click', () => this._handleQuit());
   }
 
   open() {
@@ -292,10 +288,5 @@ export class PauseMenu {
   _handleMainMenu() {
     this.close();
     this.onMainMenu?.();
-  }
-
-  _handleQuit() {
-    this.close();
-    this.onQuit?.();
   }
 }
