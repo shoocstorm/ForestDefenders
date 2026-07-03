@@ -36,6 +36,10 @@ export class WaveManager {
     this.timer = this.waves[0].delay;
     this.done = false;
     this.waveEnemies = [];
+    // Live count of not-yet-dead enemies in the current wave, decremented via each
+    // enemy's onDeath hook — avoids rescanning waveEnemies every frame to detect
+    // wave-clear.
+    this._aliveInWave = 0;
   }
 
   get waveNumber() { return Math.max(0, this.index + 1); }
@@ -47,7 +51,7 @@ export class WaveManager {
       this.timer -= dt;
       if (this.timer <= 0) this._startNextWave();
     } else if (this.state === 'ACTIVE') {
-      if (!this.waveEnemies.some((e) => !e.dead)) {
+      if (this._aliveInWave <= 0) {
         this.onWaveCleared?.(this.waveNumber);
         if (this.index + 1 < this.waves.length) {
           this.state = 'PREWAVE';
@@ -65,6 +69,7 @@ export class WaveManager {
     this.index++;
     const w = this.waves[this.index];
     this.waveEnemies = [];
+    this._aliveInWave = 0;
     let i = 0;
     const mult = this.director?.spawnCountMult ?? 1;
     for (const [type, count] of w.enemies) {
@@ -73,7 +78,9 @@ export class WaveManager {
       const scaled = Math.max(1, count - 1, Math.round(count * mult));
       for (let n = 0; n < scaled; n++, i++) {
         const e = this.enemies.spawn(ENEMY_CLASSES[type], this._spawnPos(w.spread, type, i), this.level);
+        e.onDeath = () => { this._aliveInWave--; };
         this.waveEnemies.push(e);
+        this._aliveInWave++;
       }
     }
     this.state = 'ACTIVE';

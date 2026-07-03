@@ -340,7 +340,11 @@ export class Player {
   // their body is below the top surface — so they can't walk through it.
   _resolvePlatformSides(standables, r) {
     for (const s of standables) {
-      if (!s.solid || this.position.y >= s.top - 0.1) continue;
+      // Margin must clear the gap between the top stair (which lands you just
+      // below the deck's true surface) and this standable's top, or the side
+      // push fires on the last step and walls the player off instead of
+      // letting the vertical auto-step carry them up onto the deck.
+      if (!s.solid || this.position.y >= s.top - 0.3) continue;
       if (this.position.x <= s.minX - r || this.position.x >= s.maxX + r) continue;
       if (this.position.z <= s.minZ - r || this.position.z >= s.maxZ + r) continue;
       const dxL = this.position.x - (s.minX - r);

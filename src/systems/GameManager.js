@@ -24,6 +24,7 @@ export class GameManager {
     this.level = 0;                     // campaign level → enemy scaling + biome (L1=0, L2=1, L3=2)
     this.upgrades = { DAMAGE: 0, HP: 0, SPEED: 0 };
     this.unlockedWeapons = new Set(DEFAULT_WEAPON_UNLOCKS);
+    this.weaponUnlockVersion = 0; // bumped by unlockWeapon() — see isWeaponUnlocked cache note below
     this.clearedLevelsMask = 0;
     this.currentWeapon = 0;
     this.goldenKeys = 0;
@@ -181,6 +182,9 @@ export class GameManager {
   unlockWeapon(id) {
     if (this.unlockedWeapons.has(id)) return false;
     this.unlockedWeapons.add(id);
+    // Bumped only on a real unlock (rare) so callers building a per-weapon
+    // unlocked-state array (HUD) can cache it instead of rebuilding every frame.
+    this.weaponUnlockVersion = (this.weaponUnlockVersion || 0) + 1;
     return true;
   }
 

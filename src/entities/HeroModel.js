@@ -18,6 +18,11 @@ import { damp, lerp, clamp } from '../util/MathUtils.js';
 //   .setLocomotion({moving,running,grounded}), .playJump(), .playShot(),
 //   .setFirstPerson(fp)
 
+// Reused by muzzleWorldPosition — called every frame while firing (Player.js), and
+// every reader consumes the value synchronously (copies it) rather than retaining
+// the object, so a shared scratch vector is safe.
+const _muzzleWorldPos = new THREE.Vector3();
+
 const HIP_Y = 0.40;          // hip pivot height (legs hang below to the ground)
 const SHOT_DUR = 0.26;       // recoil one-shot length (s)
 const JUMP_POP = 0.18;       // takeoff knee-pop decay window (s)
@@ -332,7 +337,7 @@ export class HeroModel {
   }
 
   get muzzleWorldPosition() {
-    return this.pivots.muzzle.getWorldPosition(new THREE.Vector3());
+    return this.pivots.muzzle.getWorldPosition(_muzzleWorldPos);
   }
 
   // Two-bone IK (law of cosines) solved in body-local space: orient the shoulder

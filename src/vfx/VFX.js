@@ -7,6 +7,9 @@ import { BLOOM_LAYER } from '../config/Constants.js';
 // spark and a simplified spore explosion; the full ~520-particle death burst and
 // per-weapon flashes land in M4 (JUICE_SPEC §10).
 const MAX_BURST_PARTICLES = 200; // largest single burst (spore = 180)
+// Reused across _burst()'s per-particle color-variation step — safe since each
+// particle's HSL offset is written into `colors` synchronously before the next.
+const _scratchColor = new THREE.Color();
 
 export class VFX {
   constructor(scene) {
@@ -20,6 +23,7 @@ export class VFX {
     this._sphereGeo = new THREE.SphereGeometry(1, 16, 12); // reused by blast cores
     this._debrisGeo = new THREE.DodecahedronGeometry(1, 0); // unit chunk, scaled per instance
     this._debrisPool = []; // reusable debris meshes (see _acquireDebrisChunk)
+    this._debrisRecPool = []; // reusable {chunks,vels,rots} debris-burst records (see _acquireDebrisRec)
     this._scheduled = []; // dt-driven deferred sub-effects (respects slow-mo / hit-stop)
     this._blastPool = []; // reusable blast-core mesh+material entries (see _acquireBlast)
     this._blasts = [];     // currently-active blast cores (subset of _blastPool)
@@ -117,11 +121,11 @@ export class VFX {
       vels[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * v * spread;
 
       // Per-particle color variation for more colorful effects
-      const variedColor = baseColor.clone();
-      variedColor.offsetHSL(0, (Math.random() - 0.5) * colorVariety, (Math.random() - 0.5) * colorVariety * 0.5);
-      colors[i * 3] = variedColor.r;
-      colors[i * 3 + 1] = variedColor.g;
-      colors[i * 3 + 2] = variedColor.b;
+      _scratchColor.copy(baseColor);
+      _scratchColor.offsetHSL(0, (Math.random() - 0.5) * colorVariety, (Math.random() - 0.5) * colorVariety * 0.5);
+      colors[i * 3] = _scratchColor.r;
+      colors[i * 3 + 1] = _scratchColor.g;
+      colors[i * 3 + 2] = _scratchColor.b;
     }
     e.points.geometry.setDrawRange(0, count);
     e.points.geometry.attributes.position.needsUpdate = true;
@@ -222,11 +226,19 @@ export class VFX {
     return mesh;
   }
 
+  // Reusable {chunks, vels, rots} debris-burst record — explosion-heavy moments
+  // (Boomstick, spore deaths, tail swing) used to allocate three fresh arrays per
+  // call even though the chunk meshes themselves were already pooled above.
+  _acquireDebrisRec() {
+    const rec = this._debrisRecPool.pop();
+    if (rec) { rec.chunks.length = 0; rec.vels.length = 0; rec.rots.length = 0; return rec; }
+    return { chunks: [], vels: [], rots: [] };
+  }
+
   // Chunky debris flung outward with angular spin (VFX_SPEC §2.4).
   _debris(pos, color, count = 8, size = 0.12, speed = 6) {
-    const chunks = [];
-    const vels = [];
-    const rots = [];
+    const rec = this._acquireDebrisRec();
+    const { chunks, vels, rots } = rec;
     for (let i = 0; i < count; i++) {
       const m = this._acquireDebrisChunk();
       m.material.color.setHex(color);
@@ -243,7 +255,8 @@ export class VFX {
       chunks.push(m);
     }
     this.debris = this.debris || [];
-    this.debris.push({ chunks, vels, rots, life: 1.2, maxLife: 1.2, gravity: 14 });
+    rec.life = 1.2; rec.maxLife = 1.2; rec.gravity = 14;
+    this.debris.push(rec);
   }
 
   muzzleFlash(pos, color = 0xc7e08a) {
@@ -387,7 +400,7 @@ export class VFX {
     for (let i = this._blasts.length - 1; i >= 0; i--) {
       const bc = this._blasts[i];
       bc.life -= dt;
-      if (bc.life <= 0) { this.scene.remove(bc.mesh); bc.mat.dispose(); this._blasts.splice(i, 1); continue; }
+      if (bc.life <= 0) { bc.mesh.visible = false; bc.active = false; this._blasts.splice(i, 1); continue; }
       const t = 1 - bc.life / bc.maxLife;        // 0 → 1
       const ease = 1 - Math.pow(1 - t, 3);       // ease-out cubic
       bc.mesh.scale.setScalar(0.3 + ease * bc.maxR);
@@ -458,13 +471,12 @@ export class VFX {
       const r = this.rings[i];
       r.life -= dt;
       if (r.life <= 0) {
-        this.scene.remove(r.mesh);
-        r.mesh.material.dispose();
+        r.mesh.visible = false; r.active = false;
         this.rings.splice(i, 1);
       } else {
         const t = 1 - r.life / r.maxLife;
         r.mesh.scale.setScalar(0.5 + t * r.maxRadius);
-        r.mesh.material.opacity = 0.7 * (1 - t);
+        r.mat.opacity = 0.7 * (1 - t);
       }
     }
 
@@ -494,6 +506,7 @@ export class VFX {
         if (d.life <= 0) {
           for (const c of d.chunks) { this.scene.remove(c); this._debrisPool.push(c); }
           this.debris.splice(i, 1);
+          this._debrisRecPool.push(d);
           continue;
         }
         const fade = d.life / d.maxLife;
@@ -515,28 +528,25 @@ export class VFX {
 
   // Clear all dynamic VFX (called on level restart to prevent accumulation).
   // Clears rings, debris, and active bursts, but keeps pooled resources (lights,
-  // burst pool, debris chunk pool).
+  // burst pool, debris chunk pool, debris record pool, blast-core pool, ring pool).
   clear() {
-    // Drop any pending staged sub-effects and dispose live blast-core spheres.
+    // Drop any pending staged sub-effects and return live blast-core spheres to the pool.
     this._scheduled.length = 0;
-    for (const bc of this._blasts) { this.scene.remove(bc.mesh); bc.mat.dispose(); }
+    for (const bc of this._blasts) { bc.mesh.visible = false; bc.active = false; }
     this._blasts.length = 0;
 
-    // Clear and dispose all shockwave rings
-    for (let i = this.rings.length - 1; i >= 0; i--) {
-      const r = this.rings[i];
-      this.scene.remove(r.mesh);
-      r.mesh.material.dispose();
-    }
+    // Return all live shockwave rings to the pool
+    for (const r of this.rings) { r.mesh.visible = false; r.active = false; }
     this.rings.length = 0;
 
-    // Return all live debris chunks to the pool (never disposed — reused)
+    // Return all live debris chunks + burst records to their pools (never disposed — reused)
     if (this.debris) {
       for (const d of this.debris) {
         for (const c of d.chunks) {
           this.scene.remove(c);
           this._debrisPool.push(c);
         }
+        this._debrisRecPool.push(d);
       }
       this.debris.length = 0;
     }

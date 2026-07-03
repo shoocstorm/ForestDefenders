@@ -8,6 +8,7 @@ import { Water } from './Water.js';
 import { Lanterns } from './Lanterns.js';
 import { SkyDecor } from './SkyDecor.js'; 
 import { gridMaterial, forceFieldMaterial } from './TechFX.js';
+import { fireflyMaterial } from '../materials/DriftParticles.js';
 
 // Biome-driven arena (LEVELS_SPEC). M1–M5 hard-coded L1 Misty Forest; M6 adds L2
 // Ember Hollow + L3 Ancient Grove by re-skinning all 7 set pieces from a BIOMES
@@ -35,13 +36,15 @@ export class Arena {
     if (this._techMats) for (const m of this._techMats) {
       if (m.userData.__uTime) m.userData.__uTime.value = this._t;
     }
-    // Floating antigrav props bob + slow-spin; holo cores rotate.
+    // Floating antigrav props bob + slow-spin; holo cores rotate. Rotation is driven
+    // by absolute this._t (all start at rotation 0) rather than `+= dt * speed`, so
+    // it can't drift from float accumulation over a long play session.
     if (this._floaters) for (const f of this._floaters) {
       f.obj.position.y = f.baseY + Math.sin(this._t * f.bobSpeed + f.phase) * f.bobAmp;
-      f.obj.rotation.y += dt * f.spin;
+      f.obj.rotation.y = this._t * f.spin;
     }
     if (this._holoCores) for (const c of this._holoCores) {
-      c.rotation.y += dt * 0.6;
+      c.rotation.y = this._t * 0.6;
       c.material.opacity = 0.25 + Math.sin(this._t * 2.0 + c.position.x) * 0.1;
     }
     if (this._rings) {
@@ -53,7 +56,7 @@ export class Arena {
         // Inner ring counter-pulses + slowly spins for a holographic read.
         const si = 1 + Math.sin(this._t * 2.6 + r.phase) * 0.12;
         r.inner.scale.set(si, si, 1);
-        r.inner.rotation.z += dt * 0.8;
+        r.inner.rotation.z = this._t * 0.8;
         r.inner.material.opacity = 0.4 + Math.cos(this._t * 2.6 + r.phase) * 0.25;
       }
     }
@@ -69,23 +72,11 @@ export class Arena {
       }
     }
     if (this.fireflies) {
-      const arr = this.fireflies.geometry.attributes.position.array;
-      for (let i = 0; i < this._ffSeed.length; i++) {
-        const s = this._ffSeed[i];
-        const speed = this._ffSpeed[i];
-
-        // More organic figure-8 motion
-        arr[i * 3] += Math.cos(this._t * 0.8 + s) * dt * speed * 0.5;
-        arr[i * 3 + 1] = this._ffBaseY[i] + Math.sin(this._t * 1.5 + s) * 0.5 + Math.sin(this._t * 0.7 + s * 2) * 0.3;
-        arr[i * 3 + 2] += Math.sin(this._t * 0.6 + s) * dt * speed * 0.4;
-
-        // Gentle bobbing
-        arr[i * 3 + 1] += Math.sin(this._t * 2 + s) * dt * 0.2;
-      }
-      this.fireflies.geometry.attributes.position.needsUpdate = true;
-
-      // Pulse opacity for twinkling effect
-      this.fireflies.material.opacity = 0.7 + Math.sin(this._t * 3) * 0.15;
+      // Drift/bob/twinkle is entirely GPU-side now (DriftParticles.js) — just
+      // advance the two scalar uniforms instead of rewriting + re-uploading
+      // the whole position buffer every frame.
+      this.fireflies.material.uniforms.uTime.value = this._t;
+      this.fireflies.material.uniforms.uOpacity.value = 0.7 + Math.sin(this._t * 3) * 0.15;
     }
     if (this._landmarkUpdate) this._landmarkUpdate(dt, this._t);
   }
@@ -293,17 +284,20 @@ export class Arena {
     const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
     const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
     const trimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.15 });
+    // Dimmer trim for the dais root (base course) — it sits at eye level right
+    // where the player stands, so the full accent glow reads as too hot.
+    const rootTrimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.05 });
 
     // Glowing accent edge-trim band (a flat emissive ring hugging a course edge).
-    const addTrim = (w, y, thick = 0.12) => {
-      const trim = add(new THREE.Mesh(new THREE.BoxGeometry(w, thick, w), trimMat), 0, y, cz, false);
+    const addTrim = (w, y, thick = 0.12, mat = trimMat) => {
+      const trim = add(new THREE.Mesh(new THREE.BoxGeometry(w, thick, w), mat), 0, y, cz, false);
       trim.layers.enable(BLOOM_LAYER);
       return trim;
     };
 
     // Stacked dark-metal dais courses with emissive seams between them.
     add(new THREE.Mesh(new THREE.BoxGeometry(11.2, 0.6, 11.2), stepMat), 0, 0.3, cz);
-    addTrim(11.3, 0.62);
+    addTrim(11.3, 0.62, 0.12, rootTrimMat);
     add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), topMat), 0, 0.825, cz);
 
     // Main column, inset so base + cornice overhang.
@@ -368,7 +362,15 @@ export class Arena {
       orb.layers.enable(BLOOM_LAYER);
     }
     this.standables = [
-      { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h, solid: true },
+      // Deck cap's rendered top is h + 0.2 (cap box + grid inlay, see above) —
+      // registering just `h` here left the player's feet 0.2 below the visible
+      // surface, sinking into the deck on the platform itself.
+      { minX: -5, maxX: 5, minZ: -1, maxZ: 9, top: h + 0.2, solid: true },
+      // Base dais course ("root") — wider than the deck above it, so it forms a
+      // walkable lip around the platform. Without this the player's feet sink
+      // into the ledge when standing on the overhang.
+      { minX: -5.6, maxX: 5.6, minZ: cz - 5.6, maxZ: cz + 5.6, top: 0.6, solid: false },
+      { minX: -5.2, maxX: 5.2, minZ: cz - 5.2, maxZ: cz + 5.2, top: 1.05, solid: false },
     ];
     const steps = 5;
     for (let i = 0; i < steps; i++) {
@@ -590,16 +592,25 @@ export class Arena {
       return g;
     };
     // A few overgrown "contained flora" specimens remain for silhouette variety.
-    place('ancientTree', -8, 4, 5.5, 0.6, 0.6);
-    place('ancientTree', 8, 4, 5.5, -0.5, 0.6);
+    // Pulled out to x=±10 so their canopies clear the platform's 5.6-unit half-width.
+    place('ancientTree', -10, 4, 5.5, 0.6, 0.6);
+    place('ancientTree', 10, 4, 5.5, -0.5, 0.6);
+
+    // Keep-clear zone around the central platform (dais + steps + corner pylons +
+    // flanking trees) so random scatter doesn't pile props onto/beside it.
+    const platformClear = (x, z) => Math.abs(x) < 11 && z > -6.5 && z < 10.5;
 
     // Sci-fi scatter: procedural tech debris + a few crystal/crate clones that
     // already read industrial. Big props push cylinder colliders like before.
     const cloneKeys = ['crystalRock', 'crystalRock', 'supplyCrate'];
     for (let i = 0; i < 84; i++) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const x = side * randRange(4.5, ARENA.WIDTH / 2 - 1);
-      const z = randRange(-ARENA.LENGTH / 2 + 5, ARENA.LENGTH / 2 - 8);
+      let x, z, tries = 0;
+      do {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        x = side * randRange(4.5, ARENA.WIDTH / 2 - 1);
+        z = randRange(-ARENA.LENGTH / 2 + 5, ARENA.LENGTH / 2 - 8);
+      } while (platformClear(x, z) && ++tries < 10);
+      if (platformClear(x, z)) continue; // gave up rerolling — skip rather than crowd the platform
       const roll = Math.random();
       if (roll < 0.3) {
         place(cloneKeys[Math.floor(Math.random() * cloneKeys.length)], x, z,
@@ -685,12 +696,12 @@ export class Arena {
   _fireflies() {
     const b = this.biome;
     const n = b.fireflyN;
+    // `pos` doubles as each firefly's baked spawn point — the drift/bob shader
+    // (DriftParticles.js) reads it as (x0, baseY, z0) and never gets rewritten.
     const pos = new Float32Array(n * 3);
-    const colors = new Float32Array(n * 3); // Add per-firefly colors
-    this._ffSeed = new Float32Array(n);
-    this._ffPhase = new Float32Array(n); // Individual blink phase
-    this._ffSpeed = new Float32Array(n); // Individual movement speed
-    this._ffBaseY = new Float32Array(n); // Base height for bobbing
+    const colors = new Float32Array(n * 3);
+    const seed = new Float32Array(n);
+    const speed = new Float32Array(n);
 
     const baseColor = new THREE.Color(b.firefly);
 
@@ -698,10 +709,8 @@ export class Arena {
       pos[i * 3] = (Math.random() - 0.5) * (ARENA.WIDTH - 4);
       pos[i * 3 + 1] = 0.3 + Math.random() * 3.0;
       pos[i * 3 + 2] = (Math.random() - 0.5) * (ARENA.LENGTH - 8);
-      this._ffSeed[i] = Math.random() * 100;
-      this._ffPhase[i] = Math.random() * Math.PI * 2;
-      this._ffSpeed[i] = 0.3 + Math.random() * 0.7;
-      this._ffBaseY[i] = pos[i * 3 + 1];
+      seed[i] = Math.random() * 100;
+      speed[i] = 0.3 + Math.random() * 0.7;
 
       // Varied colors per firefly - more colorful
       const variedColor = baseColor.clone();
@@ -714,11 +723,9 @@ export class Arena {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      color: 0xffffff, size: 0.08, transparent: true, opacity: 0.85,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-      vertexColors: true,
-    });
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+    geo.setAttribute('aSpeed', new THREE.BufferAttribute(speed, 1));
+    const mat = fireflyMaterial(0.08);
     this.fireflies = new THREE.Points(geo, mat);
     this.fireflies.frustumCulled = false;
     this.fireflies.layers.enable(BLOOM_LAYER);

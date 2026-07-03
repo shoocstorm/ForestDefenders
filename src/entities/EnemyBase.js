@@ -47,6 +47,10 @@ export class EnemyBase {
     this.state = STATE.PURSUE;
     this.dead = false;
     this.removeMe = false;
+    // Optional single-fire callback, set by whoever needs to react to this enemy's
+    // death without rescanning the enemy list every frame (e.g. WaveManager's
+    // live wave-clear counter). Fired once from _startPreDeath.
+    this.onDeath = null;
 
     this._attackTimer = randRange(0.3, this.attackCooldown); // stagger first attacks
     this._stuckTimer = 0;
@@ -135,6 +139,7 @@ export class EnemyBase {
   _startPreDeath(ctx) {
     this.dead = true; // Mark as dead so they don't keep acting
     ctx.gameManager.addKill(); // Count the kill immediately
+    this.onDeath?.(this);
     this._onDied(); // Straight to the explosion (skips the pre-death shrink)
   }
 

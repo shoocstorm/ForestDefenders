@@ -4,6 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { TouchControls } from './TouchControls.js';
 import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
+import { fallingParticleMaterial } from '../materials/DriftParticles.js';
 import { Player } from '../entities/Player.js';
 import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES, GRAPHICS } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
@@ -227,13 +228,13 @@ export class Game {
     if (this.petals) { this.scene.remove(this.petals); this.petals.geometry.dispose(); this.petals.material.dispose(); }
     const af = (BIOMES[biomeKey] || BIOMES.L1).ambientFall;
     const count = 500; // More particles for better coverage
+    // `positions` doubles as each particle's baked spawn point — the fall/sway
+    // shader (DriftParticles.js) reads it as (x0, y0, z0) and never rewrites it.
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3); // Per-particle colors
-    this._fallY = new Float32Array(count);
-    this._fallSpeed = new Float32Array(count);
-    this._fallDrift = new Float32Array(count); // Horizontal drift
-    this._fallPhase = new Float32Array(count); // For oscillation
-    this._fallSize = new Float32Array(count); // Individual sizes
+    const fallSpeed = new Float32Array(count);
+    const fallDrift = new Float32Array(count); // Horizontal drift
+    const phase = new Float32Array(count); // For oscillation
 
     const baseColor = new THREE.Color(af.color);
 
@@ -241,10 +242,9 @@ export class Game {
       positions[i * 3] = (Math.random() - 0.5) * 35;
       positions[i * 3 + 1] = Math.random() * 20;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 75;
-      this._fallSpeed[i] = 0.5 + Math.random() * 0.7;
-      this._fallDrift[i] = (Math.random() - 0.5) * 2;
-      this._fallPhase[i] = Math.random() * Math.PI * 2;
-      this._fallSize[i] = 0.6 + Math.random() * 0.8; // Size multiplier
+      fallSpeed[i] = 0.5 + Math.random() * 0.7;
+      fallDrift[i] = (Math.random() - 0.5) * 2;
+      phase[i] = Math.random() * Math.PI * 2;
 
       // Varied colors per particle
       const variedColor = baseColor.clone();
@@ -259,49 +259,24 @@ export class Game {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: af.size * 0.6, // Smaller base size
-      transparent: true,
-      opacity: af.opacity,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    geo.setAttribute('aFallSpeed', new THREE.BufferAttribute(fallSpeed, 1));
+    geo.setAttribute('aFallDrift', new THREE.BufferAttribute(fallDrift, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    const mat = fallingParticleMaterial(af.size * 0.6);
+    mat.uniforms.uOpacity.value = af.opacity;
     this.petals = new THREE.Points(geo, mat);
     this.petals.frustumCulled = false;
     this.scene.add(this.petals);
   }
 
-  _updateAmbientFall(dt) {
+  _updateAmbientFall() {
     if (!this.petals) return;
-    const pos = this.petals.geometry.attributes.position;
-    const arr = pos.array;
+    // Fall/drift/sway/reset is entirely GPU-side now (DriftParticles.js) —
+    // just advance the two scalar uniforms instead of rewriting + re-uploading
+    // the whole position buffer every frame.
     const time = performance.now() * 0.001;
-
-    for (let i = 0; i < arr.length / 3; i++) {
-      // Falling with drift
-      arr[i * 3 + 1] -= this._fallSpeed[i] * dt;
-
-      // Gentle horizontal drift with figure-8 pattern
-      const phase = this._fallPhase[i];
-      arr[i * 3] += (Math.sin(time * 0.5 + phase) * 0.5 + this._fallDrift[i]) * dt;
-      arr[i * 3 + 2] += Math.cos(time * 0.4 + phase * 0.7) * dt * 0.4;
-
-      // Swaying motion
-      arr[i * 3] += Math.sin(time * 2 + phase) * dt * 0.2;
-
-      // Reset when below ground
-      if (arr[i * 3 + 1] < 0) {
-        arr[i * 3 + 1] = 20;
-        arr[i * 3] = (Math.random() - 0.5) * 35;
-        arr[i * 3 + 2] = (Math.random() - 0.5) * 75;
-      }
-    }
-    pos.needsUpdate = true;
-
-    // Subtle pulsing of opacity
-    this.petals.material.opacity = 0.7 + Math.sin(time * 0.8) * 0.1;
+    this.petals.material.uniforms.uTime.value = time;
+    this.petals.material.uniforms.uOpacity.value = 0.7 + Math.sin(time * 0.8) * 0.1;
   }
 
   start() {
@@ -725,6 +700,12 @@ export class Game {
     this._updateCrosshair();
     const p = this.player;
     const biome = CAMPAIGN[this.campaignLevel];
+    // Weapon unlock state changes only on an actual unlock event (rare), so cache
+    // the per-slot array instead of rebuilding it every frame.
+    if (this._unlockedCacheVersion !== this.gameManager.weaponUnlockVersion) {
+      this._unlockedCache = p.weapons.weapons.map((w) => this.gameManager.isWeaponUnlocked(w.def.id));
+      this._unlockedCacheVersion = this.gameManager.weaponUnlockVersion;
+    }
     this.hud.update({
       hp: p.hp,
       maxHp: p.maxHp,
@@ -741,7 +722,7 @@ export class Game {
       element: p.weapon.element,
       ammo: p.weapon.ammoInfo(),
       weaponIndex: p.weapons.index,
-      unlocked: p.weapons.weapons.map((w) => this.gameManager.isWeaponUnlocked(w.def.id)),
+      unlocked: this._unlockedCache,
       buffs: this.gameManager.buffs,
       timedBuffs: this.gameManager.timedBuffs,
       fireRounds: this.gameManager.fireRounds,

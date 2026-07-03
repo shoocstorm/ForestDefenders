@@ -12,6 +12,10 @@ export class EnemyManager {
     // enemy every frame); the wider tactic-neighbor scan just walks more cells.
     // Rebuilt from scratch each frame in update() — see SpatialGrid.js.
     this.grid = new SpatialGrid(COMBAT.SEPARATION_RADIUS * 2);
+    // Recomputed each frame in update() alongside the grid build (a pass over
+    // `enemies` we already have to do), so the getter below is O(1) instead of
+    // re-scanning the full list on every read (HUD reads it every frame).
+    this._aliveCount = 0;
   }
 
   spawn(EnemyClass, pos, level = 0) {
@@ -20,16 +24,17 @@ export class EnemyManager {
     return e;
   }
 
-  get aliveCount() {
-    let n = 0;
-    for (const e of this.enemies) if (!e.dead) n++;
-    return n;
-  }
+  get aliveCount() { return this._aliveCount; }
 
   update(dt, ctx) {
     ctx.enemies = this.enemies; // expose for separation / projectile hit-tests
     this.grid.clear();
-    for (const e of this.enemies) if (!e.dead) this.grid.insert(e, e.position.x, e.position.z);
+    this._aliveCount = 0;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      this.grid.insert(e, e.position.x, e.position.z);
+      this._aliveCount++;
+    }
     ctx.enemyGrid = this.grid; // broad-phase neighbor queries (EnemyBase, Projectile)
     for (const e of this.enemies) e.update(dt, ctx);
     for (let i = this.enemies.length - 1; i >= 0; i--) {

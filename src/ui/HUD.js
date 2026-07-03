@@ -330,6 +330,16 @@ export class HUD {
     this.rctx.scale(dpr, dpr);
     this._sweep = 0;
     this._radarRange = 42; // world units shown to the rim
+    // Grid rings + crosshair never change frame to frame — pre-render them once
+    // to an offscreen canvas and blit it every frame instead of re-stroking two
+    // arcs + a cross every single frame (only the sweep wedge + blips actually
+    // move, so only those get redrawn live).
+    this._radarBg = document.createElement('canvas');
+    this._radarBg.width = this._radarSize * dpr;
+    this._radarBg.height = this._radarSize * dpr;
+    const bgCtx = this._radarBg.getContext('2d');
+    bgCtx.scale(dpr, dpr);
+    this._drawRadarGrid(bgCtx);
 
     // Change-tracking caches.
     this._last = { gold: -1, kills: -1, enemies: -1, wave: -1, saved: -1, weaponIndex: -1,
@@ -471,7 +481,8 @@ export class HUD {
     if (info) {
       if (info.label !== L.ammo) { this.ammoEl.textContent = info.label; L.ammo = info.label; }
       this.ammoEl.classList.toggle('low', !!info.low);
-      this.ammoFill.style.width = Math.max(0, Math.min(1, info.ratio || 0)) * 100 + '%';
+      const ratio = Math.max(0, Math.min(1, info.ratio || 0));
+      if (ratio !== L.ammoRatio) { this.ammoFill.style.width = ratio * 100 + '%'; L.ammoRatio = ratio; }
       const icon = { mag: '▮', heat: '♨', energy: '⚡', infinite: '∞' }[info.kind] || '▮';
       if (this.ammoIconEl.textContent !== icon) this.ammoIconEl.textContent = icon;
     }
@@ -498,18 +509,23 @@ export class HUD {
     if (state.radar) this._drawRadar(state.radar);
   }
 
+  // Static grid rings + crosshair — drawn once into an offscreen canvas (see
+  // ctor) since nothing about them changes frame to frame.
+  _drawRadarGrid(ctx) {
+    const s = this._radarSize, c = s / 2;
+    ctx.strokeStyle = '#4fe0b033'; ctx.lineWidth = 1;
+    for (let i = 1; i <= 2; i++) { ctx.beginPath(); ctx.arc(c, c, (c - 8) * i / 2, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(c, 8); ctx.lineTo(c, s - 8);
+    ctx.moveTo(8, c); ctx.lineTo(s - 8, c); ctx.stroke();
+  }
+
   // Canvas sweep radar: player-centred, rotated so the player's facing is "up".
   // Enemies = red blips (boss bigger), caged animals = amber, freed/safe = green.
   _drawRadar(r) {
     const ctx = this.rctx, s = this._radarSize, c = s / 2;
     const range = this._radarRange, scale = (c - 8) / range;
     ctx.clearRect(0, 0, s, s);
-
-    // Grid rings + crosshair.
-    ctx.strokeStyle = '#4fe0b033'; ctx.lineWidth = 1;
-    for (let i = 1; i <= 2; i++) { ctx.beginPath(); ctx.arc(c, c, (c - 8) * i / 2, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.beginPath(); ctx.moveTo(c, 8); ctx.lineTo(c, s - 8);
-    ctx.moveTo(8, c); ctx.lineTo(s - 8, c); ctx.stroke();
+    ctx.drawImage(this._radarBg, 0, 0, s, s);
 
     // Rotating sweep wedge.
     this._sweep = (this._sweep + 0.045) % (Math.PI * 2);
