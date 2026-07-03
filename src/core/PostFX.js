@@ -36,7 +36,7 @@ export class PostFX {
     this.quality = QUALITY.DEFAULT;
     this.aoLevel = AO_QUALITY.DEFAULT; // player-facing GTAO tier (HIGH | LOW | OFF)
     this.aoScale = 1; // GTAO resolution multiplier for the active tier
-    this.gtaoEnabled = true; // player override: false force-drops the GTAO pass entirely
+    this.gtaoEnabled = false; // player override: defaults off — GTAO nearly doubles frame cost
     this.postEnabled = true; // false → bypass the whole composer stack (Performance preset)
     this.mode = 'full'; // 'full' | 'nopost' | 'bloom' | 'ao'
     const w = window.innerWidth, h = window.innerHeight;

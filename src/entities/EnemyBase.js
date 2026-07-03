@@ -19,6 +19,10 @@ const _desired = new THREE.Vector3();
 const _strafe = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const _center = new THREE.Vector3();
+// Reused across _separation()/_chooseTactic() SpatialGrid queries — safe since
+// enemies update one-at-a-time (see the scratch-vector note above) and each
+// query is consumed synchronously before the next one runs.
+const _neighborBuf = [];
 
 export class EnemyBase {
   constructor(scene, def, pos, level = 0) {
@@ -256,7 +260,7 @@ export class EnemyBase {
     }
 
     // Boids separation from nearby enemies.
-    this._separation(ctx.enemies, _sep);
+    this._separation(ctx, _sep);
     _desired.add(_sep);
 
     if (_desired.lengthSq() > 1e-4) _desired.normalize();
@@ -271,7 +275,8 @@ export class EnemyBase {
   _chooseTactic(ctx) {
     const TIGHT2 = 5 * 5, WIDE2 = 18 * 18;
     let near = 0, far = 0, cx = 0, cz = 0;
-    for (const e of ctx.enemies) {
+    ctx.enemyGrid.queryNear(this.position.x, this.position.z, 18, _neighborBuf);
+    for (const e of _neighborBuf) {
       if (e === this || e.dead) continue;
       const dx = e.position.x - this.position.x;
       const dz = e.position.z - this.position.z;
@@ -309,10 +314,15 @@ export class EnemyBase {
     return best;
   }
 
-  _separation(enemies, out) {
+  // Neighbor scan for the boids push — queries the shared per-frame SpatialGrid
+  // (EnemyManager.update) instead of the full enemy list, so this stays cheap as
+  // the Director scales wave sizes up (was an O(n^2) full-list scan, every enemy,
+  // every frame).
+  _separation(ctx, out) {
     out.set(0, 0, 0);
     const r = COMBAT.SEPARATION_RADIUS;
-    for (const e of enemies) {
+    ctx.enemyGrid.queryNear(this.position.x, this.position.z, r, _neighborBuf);
+    for (const e of _neighborBuf) {
       if (e === this || e.dead) continue;
       const dx = this.position.x - e.position.x;
       const dz = this.position.z - e.position.z;

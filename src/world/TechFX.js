@@ -24,12 +24,13 @@ function _mat(uniforms, vertexShader, fragmentShader) {
 // expanding from arena centre + soft distance vignette. `cell` = grid spacing
 // in world units; the plane is expected to carry world XZ in its UVs scaled to
 // world size (Arena maps uv → world position via uScale).
-export function gridMaterial(accentColor, { cell = 4.0, sizeX = 1.0, sizeZ = 1.0 } = {}) {
+export function gridMaterial(accentColor, { cell = 4.0, sizeX = 1.0, sizeZ = 1.0, scan = 1.0 } = {}) {
   const uniforms = {
     uTime: { value: 0 },
     uAccent: { value: new THREE.Color(accentColor) },
     uCell: { value: cell },
     uSize: { value: new THREE.Vector2(sizeX, sizeZ) },
+    uScan: { value: scan },
   };
   const vertexShader = /* glsl */`
     varying vec2 vUv;
@@ -45,6 +46,7 @@ export function gridMaterial(accentColor, { cell = 4.0, sizeX = 1.0, sizeZ = 1.0
     uniform vec3 uAccent;
     uniform float uCell;
     uniform vec2 uSize;
+    uniform float uScan;
 
     float gridLine(vec2 p, float cell) {
       vec2 g = abs(fract(p / cell - 0.5) - 0.5) / fwidth(p / cell);
@@ -60,10 +62,13 @@ export function gridMaterial(accentColor, { cell = 4.0, sizeX = 1.0, sizeZ = 1.0
       float coarse = gridLine(wp, uCell * 4.0) * 1.4;
       float grid = max(fine * 0.5, coarse);
 
-      // Radial scan pulse rippling outward from centre.
+      // Radial scan pulse rippling outward from centre (uScan lets callers
+      // silence this per-instance — e.g. the platform deck trades it for
+      // rings that rise off the deck instead of a ground ripple).
       float r = length(wp);
       float scan = smoothstep(0.06, 0.0, abs(fract(r * 0.03 - uTime * 0.18) - 0.0));
       scan += smoothstep(0.06, 0.0, abs(fract(r * 0.03 - uTime * 0.18) - 1.0));
+      scan *= uScan;
 
       // Fade with distance so the far field dissolves into fog.
       float maxR = length(uSize) * 0.5;

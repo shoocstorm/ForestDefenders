@@ -12,7 +12,7 @@ export class Settings {
     this.onGTAOChange = onGTAOChange; // live-preview the GTAO override in Game
     this.onClose = onClose;
     this.isOpen = false;
-    this._gtaoOn = gameManager.settings.gtao !== false; // defaults on
+    this._gtaoOn = gameManager.settings.gtao === true; // defaults off — big FPS win
     this._gfx = gameManager.settings.gfx || GRAPHICS.DEFAULT;
 
     // Working copy of settings (committed on save)
@@ -314,9 +314,9 @@ export class Settings {
             <div class="stg-hint">Choose <b>Performance</b> if the game runs slowly on mobile — it lowers the render resolution, skips post-processing, and softens shadows.</div>
             <div class="stg-row" style="margin-top:12px">
               <span class="stg-row-name">Ambient Occlusion</span>
-              <button class="stg-toggle" id="stg-gtao">ON</button>
+              <button class="stg-toggle" id="stg-gtao">OFF</button>
             </div>
-            <div class="stg-hint">Turn this <b>Off</b> for extra FPS — GTAO adds soft contact shadows but is the heaviest effect.</div>
+            <div class="stg-hint">Turn this <b>On</b> for soft contact shadows — GTAO is the heaviest effect and costs significant FPS.</div>
           </div>
         </div>
         <div id="stg-foot">
@@ -416,7 +416,7 @@ export class Settings {
     // Sync graphics control to the persisted preset.
     this._gfx = this.gm.settings.gfx || GRAPHICS.DEFAULT;
     this._renderGfx();
-    this._gtaoOn = this.gm.settings.gtao !== false;
+    this._gtaoOn = this.gm.settings.gtao === true;
     this._renderGTAO();
   }
 

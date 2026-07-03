@@ -57,6 +57,17 @@ export class Arena {
         r.inner.material.opacity = 0.4 + Math.cos(this._t * 2.6 + r.phase) * 0.25;
       }
     }
+    if (this._platformRings) {
+      const riseSpeed = 1.5, riseHeight = 9.0;
+      const period = riseHeight / riseSpeed;
+      for (const r of this._platformRings) {
+        const localT = ((this._t / period) + r.phase) % 1;
+        r.mesh.position.y = this._platformDeckY + localT * riseHeight;
+        const s = 1 + localT * 0.7;
+        r.mesh.scale.set(s, s, 1);
+        r.mesh.material.opacity = Math.sin(localT * Math.PI) * 0.7;
+      }
+    }
     if (this.fireflies) {
       const arr = this.fireflies.geometry.attributes.position.array;
       for (let i = 0; i < this._ffSeed.length; i++) {
@@ -99,6 +110,7 @@ export class Arena {
     }
     this.colliders.length = 0;
     this._rings = null;
+    this._platformRings = null;
     this.fireflies = null;
     if (this._techMats) for (const m of this._techMats) m.dispose();
     this._techMats = null;
@@ -280,7 +292,7 @@ export class Arena {
     const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.45 } });
     const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
     const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
-    const trimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.85 });
+    const trimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.15 });
 
     // Glowing accent edge-trim band (a flat emissive ring hugging a course edge).
     const addTrim = (w, y, thick = 0.12) => {
@@ -309,16 +321,35 @@ export class Arena {
     ), 0, h + 0.1, cz, false);
     const deckGrid = add(new THREE.Mesh(
       new THREE.PlaneGeometry(9.6, 9.6),
-      gridMaterial(t.accent, { cell: 1.2, sizeX: 9.6, sizeZ: 9.6 })
+      gridMaterial(t.accent, { cell: 1.2, sizeX: 9.6, sizeZ: 9.6, scan: 0.0 })
     ), 0, h + 0.21, cz, false);
     deckGrid.rotation.x = -Math.PI / 2;
     deckGrid.layers.enable(BLOOM_LAYER);
     this._techMats.push(deckGrid.material);
 
+    // Light rings rising off the deck toward the sky (replaces the old ground
+    // ripple pulse — the deck's own scan is silenced above via `scan: 0`).
+    const riseMat = () => new THREE.MeshBasicMaterial({
+      color: t.accent, transparent: true, opacity: 0, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this._platformRings = [];
+    const riseCount = 4;
+    for (let i = 0; i < riseCount; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.05, 8, 40), riseMat());
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, h + 0.2, cz);
+      ring.layers.enable(BLOOM_LAYER);
+      ring.userData.arenaOwned = true;
+      this.scene.add(ring);
+      this._platformRings.push({ mesh: ring, phase: i / riseCount });
+    }
+    this._platformDeckY = h + 0.2;
+
     // Slow-rotating holographic projector core hovering over the deck.
     const core = add(new THREE.Mesh(
       new THREE.ConeGeometry(1.6, 2.4, 6, 1, true),
-      new THREE.MeshBasicMaterial({ color: t.accent, transparent: true, opacity: 0.28,
+      new THREE.MeshBasicMaterial({ color: t.accent, transparent: true, opacity: 0.06,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
     ), 0, h + 1.6, cz, false);
     core.layers.enable(BLOOM_LAYER);

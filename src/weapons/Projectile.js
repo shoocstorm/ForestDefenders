@@ -31,6 +31,10 @@ const BULLET_STYLES = {
   ring:   { geo: 'torus',   scale: [1, 1, 1], orient: true, spin: 13 },      // spinning EMP halo
 };
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+// Largest hitRadius across ENEMY_DEFS (Constants.js), rounded up. Used to size the
+// SpatialGrid query margin for the player-team hit-test below — generous enough to
+// never miss a real hit, still narrow enough to keep the query to a handful of cells.
+const MAX_ENEMY_HIT_RADIUS = 1.2;
 
 export class ProjectilePool {
   constructor(scene) {
@@ -43,6 +47,7 @@ export class ProjectilePool {
     this._dir = new THREE.Vector3();
     this._q = new THREE.Quaternion();
     this._spin = new THREE.Quaternion();
+    this._hitBuf = []; // reused SpatialGrid query results (player-team hit-test)
   }
 
   // Lazily build & cache the unit geometry for a style. Elongated shapes are baked
@@ -147,7 +152,12 @@ export class ProjectilePool {
 
       if (!dead) {
         if (p.team === 'player') {
-          for (const e of ctx.enemies) {
+          // Broad-phase via the shared per-frame SpatialGrid (built in
+          // EnemyManager.update, before projectiles update in Game._fixedUpdate)
+          // instead of testing every live enemy against every bullet — was an
+          // O(bullets * enemies) scan every frame, worst under rapid fire.
+          ctx.enemyGrid.queryNear(p.pos.x, p.pos.z, p.radius + MAX_ENEMY_HIT_RADIUS, this._hitBuf);
+          for (const e of this._hitBuf) {
             if (e.dead) continue;
             const rr = p.radius + e.hitRadius;
             if (this._tmp.copy(e.position).setY(e.position.y + 0.6).distanceToSquared(p.pos) < rr * rr) {

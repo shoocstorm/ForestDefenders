@@ -36,6 +36,10 @@ export class Lanterns {
 
     let idx = 0;
     for (let z = -ARENA.LENGTH / 2 + 8; z <= ARENA.LENGTH / 2 - 8; z += 6, idx++) {
+      // Skip pylons that would land inside the central platform's footprint
+      // (dais centred at z≈4, ~10 wide) — one otherwise spawns embedded in the
+      // deck and stacks its point light with the platform's own beacon glow.
+      if (z > -2 && z < 10) continue;
       const side = idx % 2 === 0 ? -1 : 1;
       const x = side * 2.8;
       const g = new THREE.Group();

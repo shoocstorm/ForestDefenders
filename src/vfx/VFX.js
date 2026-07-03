@@ -13,7 +13,7 @@ export class VFX {
     this.scene = scene;
     this.active = [];     // particle bursts (pooled — entries reused, never disposed)
     this.lights = [];     // pooled flash lights (added to scene once, intensity toggled)
-    this.rings = [];      // expanding shockwave meshes
+    this.rings = [];      // currently-active shockwave rings (subset of _ringPool)
     this._burstPool = []; // reusable Points objects (see _acquireBurst)
     this._ringGeo = new THREE.RingGeometry(0.6, 0.85, 24);
     this._ringGeo.rotateX(-Math.PI / 2);
@@ -21,7 +21,9 @@ export class VFX {
     this._debrisGeo = new THREE.DodecahedronGeometry(1, 0); // unit chunk, scaled per instance
     this._debrisPool = []; // reusable debris meshes (see _acquireDebrisChunk)
     this._scheduled = []; // dt-driven deferred sub-effects (respects slow-mo / hit-stop)
-    this._blasts = [];     // expanding additive blast-core spheres (the detonation flash)
+    this._blastPool = []; // reusable blast-core mesh+material entries (see _acquireBlast)
+    this._blasts = [];     // currently-active blast cores (subset of _blastPool)
+    this._ringPool = []; // reusable shockwave ring mesh+material entries (see _acquireRing)
     // Unit-length +Y cylinder (centered) reused for the laser beam — scaled by
     // length and oriented per frame, positioned at the segment midpoint.
     this._beamGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 7, 1, true);
@@ -137,19 +139,35 @@ export class VFX {
   // honors hit-stop / slow-mo (a setTimeout would desync from scaled game time).
   _delay(t, fn) { this._scheduled.push({ t, fn }); }
 
+  // Pooled blast-core mesh+material (see _acquireDebrisChunk for the same pattern) —
+  // explosion-heavy moments used to allocate+dispose a fresh MeshBasicMaterial per
+  // call, a measured stutter source at multi-kill/Boomstick/tail-swing moments.
+  _acquireBlast() {
+    for (const bc of this._blastPool) if (!bc.active) return bc;
+    const mat = new THREE.MeshBasicMaterial({
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(this._sphereGeo, mat);
+    mesh.visible = false;
+    mesh.layers.enable(BLOOM_LAYER);
+    this.scene.add(mesh);
+    const entry = { mesh, mat, life: 0, maxLife: 0, maxR: 0, active: false };
+    this._blastPool.push(entry);
+    return entry;
+  }
+
   // Expanding white-hot blast sphere — the punchy detonation core. Grows with an
   // ease-out while opacity collapses fast, so it reads as a flash, not a bubble.
   _blastCore(pos, color, maxR, life) {
-    const mat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 1,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(this._sphereGeo, mat);
-    mesh.position.copy(pos);
-    mesh.scale.setScalar(0.3);
-    mesh.layers.enable(BLOOM_LAYER);
-    this.scene.add(mesh);
-    this._blasts.push({ mesh, mat, life, maxLife: life, maxR });
+    const bc = this._acquireBlast();
+    bc.mat.color.setHex(color);
+    bc.mat.opacity = 1;
+    bc.mesh.position.copy(pos);
+    bc.mesh.scale.setScalar(0.3);
+    bc.mesh.visible = true;
+    bc.life = life; bc.maxLife = life; bc.maxR = maxR;
+    bc.active = true;
+    this._blasts.push(bc);
   }
 
   // Acquire a free pooled light (intensity toggled, never added/removed from the scene).
@@ -165,15 +183,29 @@ export class VFX {
     e.life = 0.18; e.maxLife = 0.18;
   }
 
-  _shockwave(pos, color, maxRadius, life) {
+  // Pooled shockwave ring mesh+material — same rationale as _acquireBlast.
+  _acquireRing() {
+    for (const r of this._ringPool) if (!r.active) return r;
     const mat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.7,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(this._ringGeo, mat);
-    mesh.position.set(pos.x, 0.06, pos.z);
+    mesh.visible = false;
     this.scene.add(mesh);
-    this.rings.push({ mesh, life, maxLife: life, maxRadius });
+    const entry = { mesh, mat, life: 0, maxLife: 0, maxRadius: 0, active: false };
+    this._ringPool.push(entry);
+    return entry;
+  }
+
+  _shockwave(pos, color, maxRadius, life) {
+    const r = this._acquireRing();
+    r.mat.color.setHex(color);
+    r.mat.opacity = 0.7;
+    r.mesh.position.set(pos.x, 0.06, pos.z);
+    r.mesh.visible = true;
+    r.life = life; r.maxLife = life; r.maxRadius = maxRadius;
+    r.active = true;
+    this.rings.push(r);
   }
 
   // Reusable debris chunk: shared unit geometry (scaled per use) + own material

@@ -10,6 +10,183 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
+## Enemy boids separation + projectile hit-tests independently O(n²)-scan the enemy list
+
+**Date:** 2026-07-02 · **Files:** `src/util/SpatialGrid.js` (new), `src/systems/EnemyManager.js`,
+`src/entities/EnemyBase.js`, `src/weapons/Projectile.js`
+
+**Symptom:** (Found via audit, not yet a visible bottleneck at current wave sizes)
+Three separate hot paths each scanned the *entire* live enemy list independently:
+`EnemyBase._separation()` (every enemy, every frame), `EnemyBase._chooseTactic()`
+(every enemy, every 0.5s), and `Projectile.update()`'s player-team hit-test (every
+active bullet, every frame). None of these were bottlenecks yet at the game's current
+enemy caps (~13-20 alive, `DIRECTOR.SPAWN_COUNT_MAX` only scales waves 1.3x), but the
+adaptive Director exists specifically to push difficulty up over a session, and three
+independent O(n) scans per query compounds fast if that cap ever grows.
+
+**Fix:** Added `SpatialGrid` — a uniform grid over the XZ plane, rebuilt from scratch
+once per frame (simplest correct option at this entity count, no incremental-update
+staleness risk). `EnemyManager.update()` builds it from the alive enemy list once and
+exposes it as `ctx.enemyGrid`, **before** enemies or projectiles update that frame
+(`Game._fixedUpdate` order: `enemies.update()` then `projectiles.update()` — this
+matters, see gotcha below). All three consumers now call `grid.queryNear(x, z, radius,
+buf)` (fills a reused scratch array, no per-call allocation) instead of scanning
+`ctx.enemies` directly:
+```js
+// EnemyBase.js — was `for (const e of enemies)` scanning the full list
+ctx.enemyGrid.queryNear(this.position.x, this.position.z, r, _neighborBuf);
+for (const e of _neighborBuf) { /* exact distance check, same as before */ }
+
+// Projectile.js — was `for (const e of ctx.enemies)` per bullet per frame
+ctx.enemyGrid.queryNear(p.pos.x, p.pos.z, p.radius + MAX_ENEMY_HIT_RADIUS, this._hitBuf);
+for (const e of this._hitBuf) { /* exact distance check, same as before */ }
+```
+Cell size is `COMBAT.SEPARATION_RADIUS * 2` (tuned for the hottest/most frequent
+query); wider queries (tactic's 18-unit radius) just walk more cells.
+
+**Gotcha to remember:** A grid/tree exposed via `ctx` for one frame is only valid if
+**every consumer reads it after the one writer built it that same tick** — here that
+means `EnemyManager.update()` (which owns and rebuilds `ctx.enemyGrid`) must run
+before `ProjectilePool.update()` in `Game._fixedUpdate`, or projectiles would test
+against a stale/empty grid. If you reorder systems in the fixed-update pipeline, check
+what each system's `ctx.*` reads assume was already written this tick. Also: `queryNear`
+returns a **broad-phase** candidate set (square cells vs. a circular query) — every
+consumer still does its own exact `distanceToSquared` check on the results, same as
+the original full-list scan did; only the candidate set shrank.
+
+## Game permanently "gets stuck"/slow-motion in Performance mode after a rough frame
+
+**Date:** 2026-07-01 · **Files:** `src/core/Game.js`
+
+**Symptom:** In Performance quality mode especially, the game would periodically get
+stuck/enter slow motion and — unlike an ordinary stutter — never recover on its own.
+Happened often enough to be disruptive.
+
+**Root cause:** Classic fixed-timestep "spiral of death." `_raf()` accumulates real
+elapsed time into `this.accum` and drains it in `1/60` fixed steps, capped at 5
+sub-steps per frame so a single slow frame can't block the render loop:
+```js
+this.accum += simDt;
+let steps = 0;
+while (this.accum >= this.fixedDt && steps < 5) {
+  this._fixedUpdate(this.fixedDt);
+  this.accum -= this.fixedDt;
+  steps++;
+}
+```
+The cap is correct for a *transient* hitch, but nothing trimmed the leftover backlog
+when the cap was hit — if the sim falls behind faster than 5 steps/frame can catch up
+(sustained <12fps, e.g. from a GC pause or the OS backgrounding the tab), `this.accum`
+keeps growing every frame forever. The game doesn't crash — it just runs in permanent
+slow motion, because the simulation is perpetually seconds behind real time with no
+way to ever pay off the debt.
+
+**Fix:** When the step cap is hit, drop the remainder instead of carrying it forward:
+```js
+if (steps >= 5) this.accum = 0; // sustained slowdown — drop the debt, don't compound it
+```
+This trades "catch up perfectly" for "recover to real-time on the next good frame,"
+which is the right tradeoff for a game (a momentary stutter should stay a stutter, not
+convert into a permanent slow-mo state).
+
+**Gotcha to remember:** Any fixed-timestep accumulator loop with a per-frame step cap
+needs an explicit policy for what happens when the cap is hit *and the backlog wasn't
+fully drained* — silently carrying the leftover forward is a spiral-of-death waiting
+for a slow-enough frame (or a long enough tab-backgrounding) to trigger. Either reset
+the accumulator (simplest — used here) or clamp it to some small multiple of `fixedDt`
+if partial catch-up across a couple of frames is desired.
+
+## Disposing a GLB-cloned enemy/prop corrupts its living siblings (blank/missing meshes)
+
+**Date:** 2026-07-01 · **Files:** `src/entities/EnemyBase.js`,
+`src/entities/enemies/MushroomModel.js`, `src/entities/enemies/ProceduralMushroom.js`,
+`src/world/Arena.js`, `src/core/Assets.js`, `src/materials/CelMaterial.js`
+
+**Symptom:** (Found via audit, not yet observed live) Killing one enemy of a GLB-based
+type (wood/boss/glow mushroom, or an Arena landmark/scatter prop) risks other living
+clones of that same asset — or the next level's fresh clones — rendering blank,
+corrupted, or with missing geometry.
+
+**Root cause:** `Assets.clone(key)` uses `SkeletonUtils.clone()`, which deep-clones the
+**hierarchy/skeleton** but leaves `geometry` and `material` as **shared references** —
+every clone of an asset, plus the cached master scene used for *future* clones, points
+at the same geometry/material objects. A blanket `mesh.geometry.dispose(); mesh.material.dispose()`
+on death/teardown (a pattern that's correct for procedurally-built objects) frees GPU
+buffers/shaders still in use by every other living clone and by the master cache.
+Meanwhile procedurally-built meshes (`ProceduralMushroom`, `Plant.js`, Arena's own
+boundary/platform/grid geometry) build fresh geometry/materials per instance and
+**must** be disposed the same way, or every death/level-reload leaks GPU memory
+(the class of bug already logged above under "Progressive FPS degradation").
+
+**Fix:** Model builders now return ownership info; consumers branch on it instead of
+disposing unconditionally.
+```js
+// MushroomModel.js (GLB path) — never dispose what you don't own
+return { group, capPivot, emissives, mixer, actions, ownsMaterials: false };
+// ProceduralMushroom.js — everything here is built fresh for this instance
+return { group, capPivot: cap, emissives, mixer, actions, ownsMaterials: true };
+
+// EnemyBase.dispose()
+if (this._ownsMaterials) {
+  this.group.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose?.();
+    if (!o.userData.__isOutline) o.material?.dispose?.(); // outline mat is a shared cache too
+  });
+}
+```
+Arena tags every GLB-cloned landmark/prop with `userData.__sharedAsset = true` at
+spawn and its `dispose()` skips disposing that subtree entirely, while still disposing
+geometry+material for its own procedural meshes (boundary/platform/portal/grid) —
+and now also `THREE.Points` (fireflies), which a `c.isMesh`-only check had been
+silently skipping.
+
+**Gotcha to remember:** Before writing or reviewing a `dispose()` that frees
+`geometry`/`material`, first ask **"was this object built fresh for this instance, or
+is it a clone of a shared/cached asset?"** — check for `SkeletonUtils.clone()` /
+`Assets.clone()` upstream. Cloned-hierarchy objects share geometry+materials with
+every sibling clone and the master cache; disposing them is a correctness bug
+(corrupted rendering), not just a leak. Procedurally-built objects (fresh
+`new THREE.*Geometry()` / `new THREE.*Material()` per instance, e.g. `Plant.js`,
+`ProceduralMushroom.js`, Arena's own terrain) must be disposed or they leak. Also
+watch for **module-level side-registries** that hold a reference independent of the
+scene graph: `CelMaterial.js`'s `_windMaterials` Set (populated by `toon()`/`painted()`
+when `wind` is passed) is iterated every frame by `updateTime()` and is **never
+auto-cleared** — a system that builds fresh wind-enabled materials per instance
+(`Vegetation.js`, one per tree with foliage) must call the new `untrackWind(mat)`
+export from its own `dispose()`, or the Set accumulates one dead material per tree per
+level reload forever. GLB wind materials (trees loaded via `Assets.js`) are the
+opposite case — assigned once per asset at load time and shared by every clone, so
+they're correctly registered once and never removed.
+
+## Debris chunks (explosions/tail-swing/spore deaths) allocate fresh geometry+material per chunk
+
+**Date:** 2026-07-01 · **Files:** `src/vfx/VFX.js`
+
+**Symptom:** (Found via audit) Minor stutter clustered around explosion-heavy moments
+(Boomstick, Fire Bullet, tail swing, spore/enemy-death VFX) — smaller-scale version of
+the Machine Gun light/burst recompile-storm bug already logged above, but for
+`_debris()` instead of `_flash()`/`_burst()`.
+
+**Root cause:** `_debris()` called `new THREE.DodecahedronGeometry(...)` and
+`new THREE.MeshStandardMaterial({...})` per chunk (8-14 chunks per call) on every
+explosion, disposing them ~1.2s later. Every other short-lived VFX object in this file
+was already pooled (`_ringGeo`, `_sphereGeo`, `_beamGeo`, the flash-light pool, the
+burst-particle pool) — debris was the one leftover per-call allocator.
+
+**Fix:** Added `_debrisGeo` (one shared unit `DodecahedronGeometry`, scaled per chunk
+via `mesh.scale`) and `_debrisPool` (free-list of reusable `Mesh`es, each keeping its
+own `MeshStandardMaterial` whose `color`/`emissive` are mutated with `.setHex()` on
+reuse instead of constructing a new material). Retiring a chunk (`life <= 0` in
+`update()`, or `clear()` on level reload) now pushes it back into `_debrisPool` instead
+of calling `.dispose()`.
+
+**Gotcha to remember:** In this file, any new short-lived VFX object should follow the
+existing pool pattern (shared/reused geometry + a free-list of meshes with mutated
+material properties) rather than allocating fresh Three.js resources per call — that
+convention exists specifically because this codebase already hit (and fixed, twice
+now) stutter from per-call allocation in a hot VFX path.
+
 ## Weapon switching (1-9) & tail swing (R) feel sluggish / need a double-press
 
 **Date:** 2026-06-29 · **Files:** `src/core/Input.js`, `src/core/Game.js`,
