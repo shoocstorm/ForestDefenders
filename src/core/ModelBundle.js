@@ -1,4 +1,4 @@
-import _bundleUrl from '../../models.bundle';
+import _bundleUrl from '../models.bundle';
 
 const MAGIC = 'FDB1';
 

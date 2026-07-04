@@ -1,6 +1,8 @@
 node_modules/
 dist/
 models.bundle
+icons.bundle
+src/ui/Icon.bundle.js
 *.log
 .DS_Store
 .claude

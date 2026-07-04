@@ -207,15 +207,8 @@ export class Player {
     this.position.x = clamp(this.position.x, -halfX, halfX);
     this.position.z = clamp(this.position.z, -halfZ, halfZ);
 
-    // --- Facing: toward movement (or camera forward when idle in non-FP) ---
-    let desiredFacing = this.facing;
-    if (moving) desiredFacing = Math.atan2(this._wish.x, this._wish.z);
-    else if (rig.mode !== CAMERA.TOP) desiredFacing = Math.atan2(this._fwd.x, this._fwd.z);
-    this.facing = dampAngle(this.facing, desiredFacing, PLAYER.ROTATION_SPEED, dt);
-
-    // --- Apply transform to model ---
+    // --- Apply transform to model (position only; rotation set after aiming) ---
     this.model.group.position.copy(this.position);
-    this.model.group.rotation.y = this.facing;
     // The FP camera now sits behind/above the head (near first-person), so the
     // hero stays visible in every mode — no need to hide the mesh.
     this.model.setFirstPerson?.(false);
@@ -256,6 +249,26 @@ export class Player {
         this.model.playShot?.();
         if (ctx.gameManager?.fireRounds > 0) ctx.gameManager.fireRounds -= 1;
       }
+
+      // --- Facing: toward aim when firing, else movement (or camera forward when idle) ---
+      let desiredFacing = this.facing;
+      if (firing) {
+        // Face the shooting direction (aim at enemy or camera aim direction)
+        desiredFacing = Math.atan2(dir.x, dir.z);
+      } else if (moving) {
+        desiredFacing = Math.atan2(this._wish.x, this._wish.z);
+      } else if (rig.mode !== CAMERA.TOP) {
+        desiredFacing = Math.atan2(this._fwd.x, this._fwd.z);
+      }
+      this.facing = dampAngle(this.facing, desiredFacing, PLAYER.ROTATION_SPEED, dt);
+      this.model.group.rotation.y = this.facing;
+    } else {
+      // No ctx: still update facing based on movement/camera (no shooting)
+      let desiredFacing = this.facing;
+      if (moving) desiredFacing = Math.atan2(this._wish.x, this._wish.z);
+      else if (rig.mode !== CAMERA.TOP) desiredFacing = Math.atan2(this._fwd.x, this._fwd.z);
+      this.facing = dampAngle(this.facing, desiredFacing, PLAYER.ROTATION_SPEED, dt);
+      this.model.group.rotation.y = this.facing;
     }
   }
 
