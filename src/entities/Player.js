@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PLAYER, CAMERA, ARENA, COMBAT, AIM_ASSIST, TAIL_GUARD } from '../config/Constants.js';
 import { HeroModel } from './HeroModel.js';
 import { WeaponManager } from '../weapons/WeaponManager.js';
-import { resolveCircleColliders } from '../util/Collision.js';
+import { resolveCircleColliders, resolvePlatformSides } from '../util/Collision.js';
 import { clamp, lerp, damp, dampAngle } from '../util/MathUtils.js';
 
 // Player character controller: camera-relative movement, jump + double-jump,
@@ -180,7 +180,7 @@ export class Player {
     const r = PLAYER.RADIUS;
     if (ctx?.colliders) resolveCircleColliders(this.position, r, ctx.colliders);
     const standables = ctx?.standables;
-    if (standables) this._resolvePlatformSides(standables, r);
+    if (standables) resolvePlatformSides(this.position, r, standables);
 
     // --- Vertical: stand on the highest reachable surface (auto-step), else ground ---
     let floorY = 0;
@@ -334,28 +334,5 @@ export class Player {
     ctx.vfx?.tailSwing?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
     ctx.cameraRig?.addShake?.(0.95);
     ctx?.audio?.melee('tail');
-  }
-
-  // Push the player out of the sides of solid standables (the platform block) when
-  // their body is below the top surface — so they can't walk through it.
-  _resolvePlatformSides(standables, r) {
-    for (const s of standables) {
-      // Margin must clear the gap between the top stair (which lands you just
-      // below the deck's true surface) and this standable's top, or the side
-      // push fires on the last step and walls the player off instead of
-      // letting the vertical auto-step carry them up onto the deck.
-      if (!s.solid || this.position.y >= s.top - 0.3) continue;
-      if (this.position.x <= s.minX - r || this.position.x >= s.maxX + r) continue;
-      if (this.position.z <= s.minZ - r || this.position.z >= s.maxZ + r) continue;
-      const dxL = this.position.x - (s.minX - r);
-      const dxR = (s.maxX + r) - this.position.x;
-      const dzL = this.position.z - (s.minZ - r);
-      const dzR = (s.maxZ + r) - this.position.z;
-      const m = Math.min(dxL, dxR, dzL, dzR);
-      if (m === dxL) this.position.x = s.minX - r;
-      else if (m === dxR) this.position.x = s.maxX + r;
-      else if (m === dzL) this.position.z = s.minZ - r;
-      else this.position.z = s.maxZ + r;
-    }
   }
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { COMBAT, ARENA, elementMultiplier } from '../config/Constants.js';
 import { HealthComponent } from '../combat/HealthComponent.js';
-import { resolveCircleColliders } from '../util/Collision.js';
+import { resolveCircleColliders, resolvePlatformSides } from '../util/Collision.js';
 import { clamp, damp, dampAngle, randRange, randInt } from '../util/MathUtils.js';
 
 const STATE = { PURSUE: 'pursue', ATTACK: 'attack' };
@@ -200,13 +200,15 @@ export class EnemyBase {
 
     this._move(dt, _to, dist, ctx);
 
-    // Integrate + resolve against arena bounds and tree trunks (+ knockback slide).
+    // Integrate + resolve against arena bounds, trees/rocks/props, and the
+    // central platform's sides (+ knockback slide).
     this.position.addScaledVector(this.velocity, dt);
     this._applyKnock(dt);
     const half = COMBAT.ENEMY_RADIUS;
     this.position.x = clamp(this.position.x, -ARENA.WIDTH / 2 + half, ARENA.WIDTH / 2 - half);
     this.position.z = clamp(this.position.z, -ARENA.LENGTH / 2 + half, ARENA.LENGTH / 2 - half);
     resolveCircleColliders(this.position, half, ctx.colliders);
+    if (ctx.standables) resolvePlatformSides(this.position, half, ctx.standables);
 
     // Anti-stuck: little actual movement while pursuing → flip veer side.
     const moved = this.position.distanceTo(this._lastPos);

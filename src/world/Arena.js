@@ -577,7 +577,12 @@ export class Arena {
   _scatterProps() {
     const b = this.biome;
     const scene = this.scene;
-    const place = (key, x, z, s, rot, colliderR = 0) => {
+    // `colliderR` is optional: when omitted, it's derived from the model's own
+    // XZ footprint (correct for solid props like rocks/crates that fill their
+    // whole bounding box). Pass it explicitly for props like tree trunks, where
+    // the visual footprint (full canopy) is much wider than the part that
+    // should actually block movement.
+    const place = (key, x, z, s, rot, colliderR) => {
       const g = clone(key);
       const box = new THREE.Box3().setFromObject(g);
       const size = new THREE.Vector3(); box.getSize(size);
@@ -588,7 +593,8 @@ export class Arena {
       g.userData.arenaOwned = true;
       g.userData.__sharedAsset = true; // clone() shares geometry/materials — see dispose()
       scene.add(g);
-      if (colliderR > 0) this.colliders.push({ type: 'cylinder', x, z, r: colliderR });
+      const r = colliderR ?? Math.max(size.x, size.z) * sc * 0.5;
+      if (r > 0) this.colliders.push({ type: 'cylinder', x, z, r });
       return g;
     };
     // A few overgrown "contained flora" specimens remain for silhouette variety.
