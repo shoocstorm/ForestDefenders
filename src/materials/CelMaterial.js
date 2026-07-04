@@ -164,11 +164,14 @@ function outlineMaterial(color = 0x14140e, thickness = 0.018) {
 }
 
 // Add an outline child to every mesh under `root`. Skips transparent/cutout parts
-// (eyes, glints) so outlines don't ring translucent surfaces. Returns count added.
-export function addOutlines(root, { color = 0x14140e, thickness = 0.018 } = {}) {
+// (eyes, glints) so outlines don't ring translucent surfaces, and any mesh whose
+// name matches `skip` (small facial/detail parts where a fixed hull thickness
+// would dwarf the feature itself — see celifyGLTF's `outlineSkip`). Returns count added.
+export function addOutlines(root, { color = 0x14140e, thickness = 0.018, skip = null } = {}) {
   let n = 0;
   root.traverse((o) => {
     if (!o.isMesh || o.userData.__outline) return;
+    if (skip && o.name && skip.some((s) => o.name.toLowerCase().includes(s))) return;
     const mat = o.material;
     const transparent = mat && (mat.transparent || (mat.alphaTest && mat.alphaTest > 0.5));
     if (transparent) return; // don't outline glass/eyes
@@ -228,7 +231,7 @@ export function celifyGLTF(root, opts = {}) {
     box.expandByObject(o);
   });
 
-  if (outline) addOutlines(root, { color: 0x14140e, thickness: opts.outlineThickness ?? 0.02 });
+  if (outline) addOutlines(root, { color: 0x14140e, thickness: opts.outlineThickness ?? 0.02, skip: opts.outlineSkip });
 
   return { meshes, emissives, box };
 }

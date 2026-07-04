@@ -17,9 +17,12 @@ const _cache = new Map(); // key -> { scene, animations, bounds }
 // Per-model cel + outline config (characters get outlines + boosted rim; foliage
 // gets wind sway; environment is outline-free to hold draw-call budget).
 const _cfg = {
-  woodShroom:  { outline: true, rim: { color: 0xbfe88a, power: 3.0, intensity: 0.55 }, emissiveBoost: 1.2 },
+  // outlineSkip: the face rig's eye/brow/shine/mouth meshes are tiny — a fixed
+  // 0.02-unit inverted-hull outline on them is bigger than the feature itself
+  // and reads as a solid black blob, so they get no outline at all.
+  woodShroom:  { outline: true, rim: { color: 0xbfe88a, power: 3.0, intensity: 0.55 }, emissiveBoost: 1.2, outlineSkip: ['eye', 'brow', 'shine', 'mouth'] },
   // fireShroom & earthShroom are procedural (ProceduralMushroom.js) — no GLB entry.
-  bossShroom:  { outline: true, rim: { color: 0xc89bff, power: 3.0, intensity: 0.8 }, emissiveBoost: 1.5 },
+  bossShroom:  { outline: true, rim: { color: 0xc89bff, power: 3.0, intensity: 0.8 }, emissiveBoost: 1.5, outlineSkip: ['eye', 'brow', 'shine', 'mouth'] },
   glowShroom:  { outline: false, rim: { color: 0x9fff6a, power: 3.0, intensity: 0.9 }, emissiveBoost: 1.8 },
   groveTree:   { outline: false, wind: { base: 0.4, freq: 1.8, amp: 0.06 }, rim: { intensity: 0.35 } },
   pine:        { outline: false, wind: { base: 0.5, freq: 2.0, amp: 0.05 }, rim: { intensity: 0.3 } },

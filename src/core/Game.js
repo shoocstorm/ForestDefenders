@@ -307,6 +307,10 @@ export class Game {
     if (this.input.wasPressed('KeyH')) this._toggleAchievements();
     // Backpack hotkey (I) — inventory
     if (this.input.wasPressed('KeyI')) this._toggleBackpack();
+    // Tab — hide/show the whole combat HUD (for clean screenshots/recording).
+    if (this.input.wasPressed('Tab')) this._toggleHud();
+    // L — hide/show just the debug stats overlay (FPS/cam/pos).
+    if (this.input.wasPressed('KeyL')) this._toggleStats();
 
     // Mouse-look (never time-scaled).
     const md = this.input.consumeMouseDelta();
@@ -465,6 +469,17 @@ export class Game {
     document.exitPointerLock?.();
     this.backpack.open();
     this.audio.ui('click');
+  }
+
+  _toggleHud() {
+    this._hudHidden = !this._hudHidden;
+    this.hud.root.style.display = this._hudHidden ? 'none' : '';
+    document.getElementById('help').style.display = this._hudHidden ? 'none' : '';
+  }
+
+  _toggleStats() {
+    this._statsHidden = !this._statsHidden;
+    this.statsEl.style.display = this._statsHidden ? 'none' : '';
   }
 
   _togglePause() {
@@ -706,6 +721,9 @@ export class Game {
       this._unlockedCache = p.weapons.weapons.map((w) => this.gameManager.isWeaponUnlocked(w.def.id));
       this._unlockedCacheVersion = this.gameManager.weaponUnlockVersion;
     }
+    // Touch builds merge HP/Shield into a ring around the fire button instead
+    // of the HUD's own bars (which it hides on touch) — keep both in lock-step.
+    this.touch?.setVitals(p.hp, p.maxHp, this.gameManager.shield, BUFFS.SHIELD_POWER);
     this.hud.update({
       hp: p.hp,
       maxHp: p.maxHp,

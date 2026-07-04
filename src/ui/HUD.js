@@ -201,35 +201,55 @@ export class HUD {
 
         /* ---- Mobile (touch): minimal HUD that stays clear of the on-screen
            controls. Hide decorative panels (radar, score, badges, weapon slot
-           strip + buffs); keep vitals, wave/enemies, animals and a bare ammo
-           count. Panels move into the safe zones: top-left, top-centre, and
-           just above the bottom-right button cluster. ---- */
+           strip + buffs); keep enemies-remaining, animals and a bare ammo
+           count as lightweight text rather than chrome-heavy panels — the
+           play area is precious on a phone screen. HP/Shield move onto
+           TouchControls' fire-button ring (see TouchControls.setVitals) so
+           the vertical bars are dropped entirely here. ---- */
         @media (pointer:coarse){
           #fd-radar-panel,#fd-badges,#fd-buffs,#fd-wpn-head,
           #fd-ammo-gauge,#fd-slots{display:none!important;}
+          /* merged into the fire-button vitals ring (TouchControls) instead */
+          #fd-hp-bar,#fd-sh-bar{display:none!important;}
           /* score panel keeps only the animals counter on touch */
           #fd-gold-line,#fd-kills-line{display:none!important;}
-          /* vitals → shorter vertical bars hugging the safe-area edges */
-          #fd-hp-bar{left:calc(10px + env(safe-area-inset-left));}
-          #fd-sh-bar{right:calc(10px + env(safe-area-inset-right));}
-          .fd-vtrack{height:34vh;min-height:140px;width:13px;}
-          .fd-vval{font-size:18px;}
-          /* wave/enemies → top-centre, pushed below the 7-button top-right
-             utility row (TouchControls #tc-util-row, ~46px + 14px top offset)
-             so the two never overlap even on narrow landscape widths. */
-          #fd-topright{top:calc(66px + env(safe-area-inset-top));
-            left:50%;right:auto;transform:translateX(-50%);text-align:center;min-width:0;padding:8px 16px;}
-          #fd-wave{font-size:22px;} #fd-wave small{font-size:13px;}
-          /* ammo only → above the bottom-right action cluster, no panel chrome */
-          #fd-weapon-panel{bottom:288px;right:calc(20px + env(safe-area-inset-right));
-            min-width:0;padding:0;background:none;border:none;box-shadow:none;
-            backdrop-filter:none;-webkit-backdrop-filter:none;}
-          #fd-weapon-panel::before{display:none;}
-          #fd-ammo-row{margin-top:0;}#fd-ammo{font-size:26px;}
-          /* score panel (now just the animals counter) → bottom-centre; drop the [E] hint glyph */
+          /* The wave number is redundant on touch — Game.js already pops a
+             big "WAVE N" banner (#fd-banner) on every transition, so a
+             persistent readout just eats screen space between waves. */
+          #fd-wave{display:none!important;}
+          /* Enemies-remaining drops from its own top panel down to sit right
+             above the animals-saved line — one merged status cluster,
+             bottom-centre, instead of two separate readouts. */
+          #fd-topright{top:auto;bottom:calc(46px + env(safe-area-inset-bottom));
+            left:50%;right:auto;transform:translateX(-50%);text-align:center;min-width:0;
+            padding:0 10px;background:none;border:none;box-shadow:none;
+            backdrop-filter:none;-webkit-backdrop-filter:none;opacity:.82;clip-path:none;}
+          #fd-topright::before,#fd-topright::after{display:none;}
+          #fd-enemies-row{font-size:10px;margin-top:0;}
+          /* Ammo readout → top-left. That corner sits clear of every touch
+             control (util row is top-right, joystick bottom-left, fire/
+             action cluster bottom-right) — unlike its old bottom-right spot,
+             which the FREE/WEAPON buttons clipped into. */
+          #fd-weapon-panel{top:calc(18px + env(safe-area-inset-top));
+            left:calc(16px + env(safe-area-inset-left));right:auto;bottom:auto;transform:none;
+            text-align:left;min-width:0;padding:0;background:none;border:none;box-shadow:none;
+            backdrop-filter:none;-webkit-backdrop-filter:none;clip-path:none;}
+          #fd-weapon-panel::before,#fd-weapon-panel::after{display:none;}
+          #fd-ammo-row{margin-top:0;justify-content:flex-start;}#fd-ammo{font-size:20px;}
+          /* score panel (now just the animals counter) → bottom-centre, no
+             chrome, shrunk to a thin text strip; drop the [E] hint glyph.
+             clip-path:none — the sci-fi chamfer is sized for full padded
+             panels; on a bare ~14px-tall text strip it slices straight
+             through the first/last characters instead of just cutting an
+             (invisible, since there's no more background) corner. */
           #fd-score{left:50%;transform:translateX(-50%);text-align:center;
-            bottom:calc(14px + env(safe-area-inset-bottom));}
+            bottom:calc(14px + env(safe-area-inset-bottom));
+            padding:0;background:none;border:none;box-shadow:none;
+            backdrop-filter:none;-webkit-backdrop-filter:none;opacity:.82;clip-path:none;}
+          #fd-score::before,#fd-score::after{display:none;}
           #fd-animals-row{justify-content:center;margin-top:0;}
+          #fd-paw{width:14px;height:14px;}
+          #fd-saved{font-size:13px;} #fd-saved small{font-size:9px;}
           #fd-free b{display:none;}
         }
       </style>

@@ -148,40 +148,60 @@ export const STUN = { TINT: 0x6ad0ff };
 // --- Enemies (ENEMIES_SPEC §2). M2 ships Wood + Fire shrooms. ---
 export const ENEMY_DEFS = {
   WOOD_SHROOM: {
-    type: 'WOOD_SHROOM', element: 'WOOD', role: 'melee',
+    type: 'WOOD_SHROOM', name: 'Wood Shroom', element: 'WOOD', role: 'melee',
+    blurb: 'Melee brute that charges in packs — the forest’s front line.',
     hp: 30, speed: 5.5, attackDamage: 10, attackRange: 2.6, attackCooldown: 1.5,
     detectionRange: 12, hitRadius: 0.7, accent: 0x8fe04a,
   },
   FIRE_SHROOM: {
-    type: 'FIRE_SHROOM', element: 'FIRE', role: 'ranged',
+    type: 'FIRE_SHROOM', name: 'Fire Shroom', element: 'FIRE', role: 'ranged',
+    blurb: 'Ranged lobber that arcs fireballs from a distance.',
     hp: 20, speed: 4.0, attackDamage: 15, attackRange: 10.0, attackCooldown: 3.0,
     detectionRange: 14, hitRadius: 0.65, accent: 0xff7a30, projectileSpeed: 12,
   },
   // Earth Shroom — L1 wave-3 boss/elite (ENEMIES_SPEC §2). Tank, ground-slam AoE.
   EARTH_SHROOM: {
-    type: 'EARTH_SHROOM', element: 'EARTH', role: 'boss',
+    type: 'EARTH_SHROOM', name: 'Earth Shroom', element: 'EARTH', role: 'boss',
+    blurb: 'Level 1’s boss — a lumbering tank with a ground-slam AoE.',
     hp: 80, speed: 3.0, attackDamage: 25, attackRange: 3.2, attackCooldown: 4.0,
     detectionRange: 16, hitRadius: 1.15, accent: 0xe0a83a, scale: 1.7,
   },
   // Water Shroom (L2) — controller: water jet pushes the player/animals back.
   WATER_SHROOM: {
-    type: 'WATER_SHROOM', element: 'WATER', role: 'ranged',
+    type: 'WATER_SHROOM', name: 'Water Shroom', element: 'WATER', role: 'ranged',
+    blurb: 'Ranged controller whose jet blasts knock you back.',
     hp: 25, speed: 3.5, attackDamage: 8, attackRange: 9.0, attackCooldown: 2.5,
     detectionRange: 13, hitRadius: 0.68, accent: 0x4ac8e8, projectileSpeed: 14,
     knockback: 7,
   },
   // Ice Shroom (L2) — ranged icicle shot; FIRE-vulnerable, ICE-resistant.
   ICE_SHROOM: {
-    type: 'ICE_SHROOM', element: 'ICE', role: 'ranged',
+    type: 'ICE_SHROOM', name: 'Ice Shroom', element: 'ICE', role: 'ranged',
+    blurb: 'Ranged shooter — fire melts it, but its icicles bite hard.',
     hp: 22, speed: 3.8, attackDamage: 12, attackRange: 10.0, attackCooldown: 3.0,
     detectionRange: 14, hitRadius: 0.65, accent: 0x9fd8ff, projectileSpeed: 16,
   },
   // Metal Shroom (L3) — tank: resists PHYSICAL (0.5×), high HP, spike shot.
   METAL_SHROOM: {
-    type: 'METAL_SHROOM', element: 'METAL', role: 'melee',
+    type: 'METAL_SHROOM', name: 'Metal Shroom', element: 'METAL', role: 'melee',
+    blurb: 'Armored melee tank, highly resistant to physical hits.',
     hp: 45, speed: 2.5, attackDamage: 14, attackRange: 2.8, attackCooldown: 1.8,
     detectionRange: 11, hitRadius: 0.85, accent: 0xb0b8c0, scale: 1.15,
   },
+};
+
+// Catalog order for the Gallery's Enemies tab (mirrors WEAPON_ORDER).
+export const ENEMY_ORDER = ['WOOD_SHROOM', 'FIRE_SHROOM', 'EARTH_SHROOM', 'WATER_SHROOM', 'ICE_SHROOM', 'METAL_SHROOM'];
+
+// Where each enemy type first appears (LEVEL1/2/3_WAVES below) — shown on its
+// locked Gallery entry until GameManager.markEnemySeen() has fired for it.
+export const ENEMY_FIRST_SEEN_HINTS = {
+  WOOD_SHROOM: 'Level 1',
+  FIRE_SHROOM: 'Level 1',
+  EARTH_SHROOM: 'Level 1 · Wave 3 (Boss)',
+  WATER_SHROOM: 'Level 2',
+  ICE_SHROOM: 'Level 2',
+  METAL_SHROOM: 'Level 2',
 };
 
 // --- Combat / juice tuning (COMBAT_SPEC, ENEMIES_SPEC §5, JUICE_SPEC §12). ---

@@ -25,6 +25,7 @@ export class GameManager {
     this.upgrades = { DAMAGE: 0, HP: 0, SPEED: 0 };
     this.unlockedWeapons = new Set(DEFAULT_WEAPON_UNLOCKS);
     this.weaponUnlockVersion = 0; // bumped by unlockWeapon() — see isWeaponUnlocked cache note below
+    this.seenEnemies = new Set(); // enemy types encountered at least once (Gallery bestiary gating)
     this.clearedLevelsMask = 0;
     this.currentWeapon = 0;
     this.goldenKeys = 0;
@@ -188,6 +189,10 @@ export class GameManager {
     return true;
   }
 
+  // === Enemy bestiary (Gallery) ============================================
+  hasSeenEnemy(type) { return this.seenEnemies.has(type); }
+  markEnemySeen(type) { this.seenEnemies.add(type); }
+
   // === Level-up progression (ECONOMY_SHOP_SPEC §5) =========================
   // Earned when a level is cleared with all animals saved AND HP > 50%.
   tryLevelUp(player, { allRescued }) {
@@ -212,6 +217,7 @@ export class GameManager {
       unlocked_levels: this.clearedLevelsMask,
       current_weapon: this.currentWeapon,
       unlocked_weapons: [...this.unlockedWeapons],
+      seen_enemies: [...this.seenEnemies],
       upg_damage_tier: this.upgrades.DAMAGE,
       upg_hp_tier: this.upgrades.HP,
       upg_speed_tier: this.upgrades.SPEED,
@@ -236,6 +242,7 @@ export class GameManager {
     this.clearedLevelsMask = d.cleared_levels_mask ?? d.unlocked_levels ?? 0;
     this.currentWeapon = d.current_weapon ?? 0;
     this.unlockedWeapons = new Set(d.unlocked_weapons?.length ? d.unlocked_weapons : DEFAULT_WEAPON_UNLOCKS);
+    this.seenEnemies = new Set(d.seen_enemies || []);
     this.upgrades.DAMAGE = d.upg_damage_tier ?? 0;
     this.upgrades.HP = d.upg_hp_tier ?? 0;
     this.upgrades.SPEED = d.upg_speed_tier ?? 0;

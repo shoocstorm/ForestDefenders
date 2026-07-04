@@ -34,8 +34,9 @@ export class Input {
       this.held.add(e.code);
       this.pressed.add(e.code);
       this.simPressed.add(e.code);
-      // Stop the page from scrolling on space/arrows during play.
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      // Stop the page from scrolling on space/arrows during play, and stop Tab
+      // from shifting focus off the canvas (it has no in-page use otherwise).
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     };
     this._onKeyUp = (e) => { this.held.delete(e.code); this.released.add(e.code); };
     this._onMouseDown = (e) => { this.mouseButtons.add(e.button); this.mousePressed.add(e.button); };
@@ -113,6 +114,12 @@ export class Input {
   addLook(dx, dy) { this.mouseDelta.x += dx; this.mouseDelta.y += dy; }
   // Register a one-frame virtual tap for an edge-triggered action (jump, etc.).
   pressVirtual(code) { this.virtualHeld.add(code); this.virtualPressed.add(code); }
+
+  // Continuous virtual mouse button, held for as long as a touch is on the
+  // fire button (mirrors real mouseButtons — set on touchstart, cleared on
+  // touchend/cancel, not auto-cleared per frame like pressVirtual).
+  setVirtualMouseDown(btn = 0) { this.virtualMouse.add(btn); }
+  setVirtualMouseUp(btn = 0) { this.virtualMouse.delete(btn); }
 
   consumeMouseDelta() {
     const d = { x: this.mouseDelta.x, y: this.mouseDelta.y };

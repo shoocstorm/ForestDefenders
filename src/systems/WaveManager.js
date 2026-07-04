@@ -73,6 +73,7 @@ export class WaveManager {
     let i = 0;
     const mult = this.director?.spawnCountMult ?? 1;
     for (const [type, count] of w.enemies) {
+      this.gm.markEnemySeen(type); // first spawn unlocks its Gallery bestiary entry
       // Director scales the crowd, but never trivializes a wave: floor at count-1
       // (and always at least 1), cap at the rounded scaled value.
       const scaled = Math.max(1, count - 1, Math.round(count * mult));

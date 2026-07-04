@@ -50,6 +50,13 @@ export function buildMushroom(type) {
   const capPivot = findNode(group, 'Cap') || null;
   if (capPivot) capPivot.userData.baseY = capPivot.position.y;
 
+  // The GLB ships two overlapping eye node sets (normal round eyes + an
+  // alternate "X-eyes" dizzy variant) at the same spot on the face — nothing
+  // ever toggles between them, so hide the alternate one to avoid a doubled-up
+  // black-circle-plus-X-marks look.
+  const altEyes = findNode(group, 'EyesX');
+  if (altEyes) altEyes.visible = false;
+
   // Collect emissive materials (EnemyBase spikes these white on hit).
   const emissives = [];
   group.traverse((o) => {
