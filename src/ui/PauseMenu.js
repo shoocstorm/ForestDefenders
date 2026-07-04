@@ -37,8 +37,6 @@ export class PauseMenu {
           inset: 0;
           z-index: 43;
           display: none;
-          align-items: center;
-          justify-content: center;
           font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif;
           color: #eaf7df;
         }
@@ -52,17 +50,24 @@ export class PauseMenu {
         }
 
         #pause-panel {
-          position: relative;
-          min-width: 320px;
-          max-width: 90vw;
+          position: absolute;
+          inset: 0;
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 32px 28px 24px;
+          padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+            calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
           background: linear-gradient(160deg, #16281df7, #0b140ef9);
-          border: 1px solid #ffffff22;
-          border-radius: 20px;
-          box-shadow: 0 24px 70px #000b, inset 0 0 50px #00000040;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+
+        #pause-head {
+          flex: none;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          width: 100%;
         }
 
         #pause-title {
@@ -78,7 +83,6 @@ export class PauseMenu {
         #pause-stats {
           display: flex;
           gap: 20px;
-          margin-bottom: 24px;
         }
 
         .pause-stat {
@@ -92,12 +96,25 @@ export class PauseMenu {
           font-weight: 800;
         }
 
-        #pause-buttons {
+        #pause-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          width: 100%;
           display: flex;
           flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          overflow-y: auto;
+          padding: 16px 0;
+          box-sizing: border-box;
+        }
+
+        #pause-buttons {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
           gap: 10px;
           width: 100%;
-          max-width: 280px;
+          max-width: 640px;
         }
 
         .pause-btn {
@@ -131,6 +148,8 @@ export class PauseMenu {
         }
 
         .pause-btn.primary {
+          grid-column: 1 / -1;
+          justify-content: center;
           background: linear-gradient(90deg, #a8e063, #76d35a);
           color: #10240f;
           border: none;
@@ -168,7 +187,8 @@ export class PauseMenu {
         }
 
         #pause-hint {
-          margin-top: 20px;
+          flex: none;
+          margin-top: 16px;
           font-size: 12px;
           color: #9bbf8a;
           opacity: 0.7;
@@ -179,43 +199,78 @@ export class PauseMenu {
             transition: none !important;
           }
         }
+
+        /* Short viewports (landscape phones): compact the chrome so all
+           buttons fit without relying on the #pause-body scroll fallback. */
+        @media (max-height: 520px) {
+          #pause-panel {
+            padding: calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+              calc(12px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+          }
+
+          #pause-title {
+            font-size: 26px;
+            margin-bottom: 2px;
+          }
+
+          #pause-body {
+            padding: 8px 0;
+          }
+
+          #pause-buttons {
+            gap: 6px;
+          }
+
+          .pause-btn {
+            padding: 8px 16px;
+            font-size: 13px;
+          }
+
+          #pause-hint {
+            margin-top: 8px;
+          }
+        }
       </style>
       <div id="pause-bg"></div>
       <div id="pause-panel">
-        <div id="pause-title">PAUSED</div>
-        <div id="pause-stats">
-          <div class="pause-stat">Wave <span id="p-wave">1</span>/3</div>
-          <div class="pause-stat">Gold: <span id="p-gold">0</span></div>
+        <div id="pause-head">
+          <div id="pause-title">PAUSED</div>
+          <div id="pause-stats">
+            <div class="pause-stat">Wave <span id="p-wave">1</span>/3</div>
+            <div class="pause-stat">Gold: <span id="p-gold">0</span></div>
+          </div>
         </div>
-        <div id="pause-buttons">
-          <button class="pause-btn primary" id="p-resume">
-            <span class="pause-btn-icon">▶</span>
-            RESUME
-          </button>
-          <button class="pause-btn" id="p-shop">
-            <span class="pause-btn-icon">🛒</span>
-            SHOP
-          </button>
-          <button class="pause-btn" id="p-gallery">
-            <span class="pause-btn-icon">🖼️</span>
-            GALLERY
-          </button>
-          <button class="pause-btn" id="p-achievements">
-            <span class="pause-btn-icon">🏆</span>
-            ACHIEVEMENTS
-          </button>
-          <button class="pause-btn" id="p-settings">
-            <span class="pause-btn-icon">⚙️</span>
-            SETTINGS
-          </button>
-          <button class="pause-btn" id="p-backpack">
-            <span class="pause-btn-icon">🎒</span>
-            BACKPACK
-          </button>
-          <button class="pause-btn warn" id="p-menu">
-            <span class="pause-btn-icon">🏠</span>
-            MAIN MENU
-          </button>
+        <div id="pause-body">
+          <div id="pause-buttons">
+            <button class="pause-btn primary" id="p-resume">
+              <span class="pause-btn-icon">▶</span>
+              RESUME
+            </button>
+            <button class="pause-btn" id="p-shop">
+              <span class="pause-btn-icon">🛒</span>
+              SHOP
+            </button>
+            <button class="pause-btn" id="p-gallery">
+              <span class="pause-btn-icon">🖼️</span>
+              GALLERY
+            </button>
+            <button class="pause-btn" id="p-achievements">
+              <span class="pause-btn-icon">🏆</span>
+              ACHIEVEMENTS
+            </button>
+            <button class="pause-btn" id="p-settings">
+              <span class="pause-btn-icon">⚙️</span>
+              SETTINGS
+            </button>
+            <button class="pause-btn" id="p-backpack">
+              <span class="pause-btn-icon">🎒</span>
+              BACKPACK
+            </button>
+            <button class="pause-btn warn" id="p-menu">
+              <span class="pause-btn-icon">🏠</span>
+              MAIN MENU
+            </button>
+          </div>
         </div>
         <div id="pause-hint">Press [ESC] to resume</div>
       </div>`;

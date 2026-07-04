@@ -18,7 +18,6 @@ const MODELS = [
   // see src/entities/enemies/ProceduralMushroom.js.
   { key: 'bossShroom',   file: 'mushrooms/boss_mushroom.glb' },
   { key: 'glowShroom',   file: 'mushrooms/glow_mushroom.glb' },
-  { key: 'bunny',        file: 'animals/bunny.glb' },
   { key: 'groveTree',    file: 'trees/grove_tree.glb' },
   { key: 'pine',         file: 'trees/pine.glb' },
   { key: 'lowPolyTree',  file: 'trees/tree-low-poly-shaded.glb' },

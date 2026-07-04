@@ -31,8 +31,6 @@ export class Settings {
           inset: 0;
           z-index: 42;
           display: none;
-          align-items: center;
-          justify-content: center;
           font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif;
           color: #eaf7df;
         }
@@ -46,19 +44,22 @@ export class Settings {
         }
 
         #stg-panel {
-          position: relative;
-          width: min(420px, 90vw);
-          max-height: 85vh;
+          position: absolute;
+          inset: 0;
           display: flex;
           flex-direction: column;
           background: linear-gradient(160deg, #16281df7, #0b140ef9);
-          border: 1px solid #ffffff22;
-          border-radius: 20px;
-          box-shadow: 0 24px 70px #000b, inset 0 0 50px #00000040;
           overflow: hidden;
+          box-sizing: border-box;
+          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
 
         #stg-head {
+          flex: none;
+          width: 100%;
+          max-width: 640px;
+          margin: 0 auto;
+          box-sizing: border-box;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -88,9 +89,14 @@ export class Settings {
         }
 
         #stg-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          width: 100%;
+          max-width: 640px;
+          margin: 0 auto;
+          box-sizing: border-box;
           padding: 20px 26px;
           overflow-y: auto;
-          flex: 1;
         }
 
         .stg-section {
@@ -221,6 +227,11 @@ export class Settings {
         }
 
         #stg-foot {
+          flex: none;
+          width: 100%;
+          max-width: 640px;
+          margin: 0 auto;
+          box-sizing: border-box;
           padding: 16px 26px 20px;
           border-top: 1px solid #ffffff18;
           display: flex;
@@ -257,6 +268,46 @@ export class Settings {
           .stg-slider::-moz-range-thumb, .stg-toggle, #stg-save {
             animation-duration: 0.01ms !important;
             transition: none !important;
+          }
+        }
+
+        /* Short viewports (landscape phones): lay volume/display/graphics
+           sections out side-by-side instead of one long vertical stack. */
+        @media (max-height: 520px) {
+          #stg-head, #stg-body, #stg-foot {
+            max-width: 900px;
+          }
+
+          #stg-head {
+            padding: 10px 20px 8px;
+          }
+
+          #stg-title {
+            font-size: 20px;
+          }
+
+          #stg-body {
+            padding: 10px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 28px;
+            align-content: start;
+          }
+
+          .stg-section {
+            margin-bottom: 10px;
+          }
+
+          .stg-label {
+            margin-bottom: 6px;
+          }
+
+          .stg-row {
+            margin-bottom: 6px;
+          }
+
+          #stg-foot {
+            padding: 8px 20px 10px;
           }
         }
       </style>

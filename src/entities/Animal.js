@@ -32,6 +32,7 @@ export class Animal {
     this.model = built.group;
     this.bob = built.bob;
     this.wings = built.wings;
+    this.ears = built.ears;
     this._mixer = built.mixer;
     this.group.add(this.model);
 
@@ -165,6 +166,7 @@ export class Animal {
     this._mixer?.update(dt);
     if (this.bob) this.bob.position.y = this._restBob() + Math.sin(this._t * 3) * 0.03;
     if (this.wings) for (let i = 0; i < this.wings.length; i++) this.wings[i].rotation.z = (i ? -1 : 1) * (0.3 + Math.sin(this._t * 12) * 0.5);
+    if (this.ears) for (let i = 0; i < this.ears.length; i++) this.ears[i].rotation.x = Math.sin(this._t * 5 + i * 2.1) * 0.18;
     if (this.halo) this.halo.rotation.z = this._t * 1.5;
 
     // Rescue beacon: float, pulse the light, counter-rotate the halos.
@@ -189,10 +191,12 @@ export class Animal {
   _restBob() {
     // Flying bird perches inside its cage: the group is anchored at the platform
     // deck, so lift the bird to the cage interior centre (bars span 0.05–1.05) —
-    // otherwise its body sinks ~0.2 below the deck. Procedural hedgehog is built
-    // feet-at-0 (tiny float so the breathing bob doesn't clip the ground); other
-    // ground animals offset internally.
-    return this.flying ? 0.55 : (this.type === 'HEDGEHOG' ? 0.04 : 0.22);
+    // otherwise its body sinks ~0.2 below the deck. Procedural hedgehog & rabbit
+    // are built feet-at-0 (tiny float so the breathing bob doesn't clip ground).
+    if (this.flying) return 0.55;
+    if (this.type === 'HEDGEHOG') return 0.04;
+    if (this.type === 'RABBIT') return 0.05;
+    return 0.22;
   }
 
   dispose() {

@@ -24,15 +24,16 @@ export class Shop {
     root.id = 'fd-shop';
     root.innerHTML = `
       <style>
-        #fd-shop{position:fixed;inset:0;z-index:45;display:none;align-items:center;justify-content:center;
+        #fd-shop{position:fixed;inset:0;z-index:45;display:none;
           font-family:"Rajdhani","Trebuchet MS",system-ui,sans-serif;color:#eaf7df;}
-        #fd-shop.open{display:flex;}
+        #fd-shop.open{display:block;}
         #shop-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 35%,#0b1612e8,#000000f4);
           backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
-        #shop-panel{position:relative;width:min(860px,94vw);max-height:88vh;display:flex;flex-direction:column;
-          background:linear-gradient(160deg,#16281df7,#0b140ef9);border:1px solid #ffffff22;border-radius:20px;
-          box-shadow:0 24px 70px #000b, inset 0 0 50px #00000040;overflow:hidden;}
-        #shop-head{display:flex;align-items:center;justify-content:space-between;padding:18px 26px 12px;
+        #shop-panel{position:absolute;inset:0;display:flex;flex-direction:column;
+          background:linear-gradient(160deg,#16281df7,#0b140ef9);overflow:hidden;box-sizing:border-box;
+          padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+        #shop-head{flex:none;width:100%;max-width:1100px;margin:0 auto;box-sizing:border-box;
+          display:flex;align-items:center;justify-content:space-between;padding:18px 26px 12px;
           border-bottom:1px solid #ffffff18;}
         #shop-title{font-size:26px;font-weight:800;letter-spacing:1px;color:#ffe08a;
           text-shadow:0 2px 0 #0008,0 0 18px #ffb31a55;}
@@ -46,12 +47,14 @@ export class Shop {
           border:2px solid #f5c542;text-shadow:0 1px 0 #ffdd7fcc;}
         #shop-gold.pulse{animation:shoppulse .35s ease;}
         @keyframes shoppulse{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
-        #shop-tabs{display:flex;gap:8px;padding:12px 26px 0;}
+        #shop-tabs{flex:none;width:100%;max-width:1100px;margin:0 auto;box-sizing:border-box;
+          display:flex;gap:8px;padding:12px 26px 0;}
         .shop-tab{pointer-events:auto;cursor:pointer;font-size:13px;font-weight:800;letter-spacing:1.5px;
           padding:7px 16px;border-radius:10px 10px 0 0;background:#0a160e88;border:1px solid #ffffff14;
           border-bottom:none;color:#9bbf8a;text-transform:uppercase;transition:all .15s;}
         .shop-tab.active{background:#13261a;color:#fff;box-shadow:0 -2px 14px -4px #a8e06388;}
-        #shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;
+        #shop-grid{flex:1 1 auto;min-height:0;width:100%;max-width:1100px;margin:0 auto;box-sizing:border-box;
+          display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;
           padding:18px 26px;overflow-y:auto;}
         .shop-card{position:relative;pointer-events:auto;cursor:pointer;text-align:center;
           background:linear-gradient(160deg,#11201688,#0a130d99);border:1px solid #ffffff1e;border-radius:14px;
@@ -69,13 +72,26 @@ export class Shop {
         .shop-card .price .c{width:15px;height:15px;border-radius:50%;
           background:radial-gradient(circle at 35% 30%,#ffe89a,#e8a81f 70%);}
         .shop-card .price.owned,.shop-card .price.maxed{color:#9fe8c0;}
-        #shop-foot{padding:12px 26px 18px;display:flex;justify-content:flex-end;border-top:1px solid #ffffff18;}
+        #shop-foot{flex:none;width:100%;max-width:1100px;margin:0 auto;box-sizing:border-box;
+          padding:12px 26px 18px;display:flex;justify-content:flex-end;border-top:1px solid #ffffff18;}
         #shop-close{pointer-events:auto;cursor:pointer;padding:10px 26px;font-size:15px;font-weight:800;
           letter-spacing:1px;color:#10240f;border:none;border-radius:24px;
           background:linear-gradient(90deg,#a8e063,#76d35a);box-shadow:0 5px 0 #4a7a2e,0 7px 14px #0006;
           transition:transform .1s,box-shadow .1s,filter .15s;}
         #shop-close:hover{filter:brightness(1.1);transform:translateY(-1px);}
         #shop-close:active{transform:translateY(3px);box-shadow:0 2px 0 #4a7a2e;}
+
+        @media (max-height: 480px) {
+          #shop-head{padding:10px 20px 8px;}
+          #shop-title{font-size:20px;}
+          #shop-title small{font-size:10px;}
+          #shop-gold{font-size:20px;}
+          #shop-gold .coin{width:22px;height:22px;font-size:16px;}
+          #shop-tabs{padding:8px 20px 0;}
+          .shop-tab{padding:5px 12px;font-size:12px;}
+          #shop-grid{padding:12px 20px;gap:10px;}
+          #shop-foot{padding:8px 20px 12px;}
+        }
       </style>
       <div id="shop-bg"></div>
       <div id="shop-panel">

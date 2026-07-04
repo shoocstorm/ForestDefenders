@@ -39,8 +39,6 @@ export class Backpack {
           inset: 0;
           z-index: 39;
           display: none;
-          align-items: center;
-          justify-content: center;
           font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif;
           color: #eaf7df;
         }
@@ -54,19 +52,22 @@ export class Backpack {
         }
 
         #bp-panel {
-          position: relative;
-          width: min(540px, 94vw);
-          max-height: 88vh;
+          position: absolute;
+          inset: 0;
           display: flex;
           flex-direction: column;
           background: linear-gradient(160deg, #16281df7, #0b140ef9);
-          border: 1px solid #ffffff22;
-          border-radius: 20px;
-          box-shadow: 0 24px 70px #000b, inset 0 0 50px #00000040;
           overflow: hidden;
+          box-sizing: border-box;
+          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
 
         #bp-head {
+          flex: none;
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+          box-sizing: border-box;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -96,9 +97,14 @@ export class Backpack {
         }
 
         #bp-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+          box-sizing: border-box;
           padding: 18px 26px;
           overflow-y: auto;
-          flex: 1;
           display: flex;
           flex-direction: column;
           gap: 16px;
@@ -311,6 +317,11 @@ export class Backpack {
         }
 
         #bp-foot {
+          flex: none;
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+          box-sizing: border-box;
           padding: 12px 26px 18px;
           border-top: 1px solid #ffffff18;
           display: flex;
@@ -345,6 +356,42 @@ export class Backpack {
         @media (prefers-reduced-motion: reduce) {
           #bp-close, #bp-close-btn {
             transition: none !important;
+          }
+        }
+
+        /* Short viewports (landscape phones): lay the four sections out as a
+           2-column grid instead of one long vertical stack. */
+        @media (max-height: 520px) {
+          #bp-head, #bp-body, #bp-foot {
+            max-width: 1000px;
+          }
+
+          #bp-head {
+            padding: 10px 20px 8px;
+          }
+
+          #bp-title {
+            font-size: 20px;
+          }
+
+          #bp-body {
+            padding: 10px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            align-content: start;
+          }
+
+          .bp-section {
+            padding: 10px 12px;
+          }
+
+          .bp-section-title {
+            margin-bottom: 8px;
+          }
+
+          #bp-foot {
+            padding: 8px 20px 10px;
           }
         }
       </style>

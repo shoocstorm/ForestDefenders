@@ -69,19 +69,18 @@ body #ach-bg::after,body #bp-bg::after{
   mask-image:radial-gradient(circle at 50% 42%,#000 0,#0000 72%);
   animation:fd-grid-pan 9s linear infinite;}
 
-/* panels: metal-glass + scanlines + cyan rim + inner glow */
+/* panels: metal-glass + scanlines + cyan rim + inner glow.
+   Panels are now full-bleed (position:absolute;inset:0 set by each
+   component) — no border-radius or floating drop-shadow, just the
+   inner glow + hairline edge. */
 body #shop-panel,body #pause-panel,body #stg-panel,
 body #ach-panel,body #bp-panel,body #ov-panel{
   background:var(--fd-panel)!important;
   border:1px solid var(--fd-edge)!important;
-  border-radius:4px!important;
-  box-shadow:0 30px 80px #000d,0 0 0 1px #4fe3ff10,
-    0 0 34px -6px #4fe3ff40,inset 0 0 44px #03111c90,
+  box-shadow:inset 0 0 44px #03111c90,
     inset 0 1px 0 #8fe6ff33!important;}
 
 /* glowing top edge bar */
-body #shop-panel,body #pause-panel,body #stg-panel,
-body #ach-panel,body #bp-panel{position:relative;}
 body #shop-panel::after,body #stg-panel::after,
 body #ach-panel::after,body #bp-panel::after{
   content:"";position:absolute;top:0;left:18%;right:18%;height:2px;pointer-events:none;
@@ -200,8 +199,9 @@ body .bp-upgrade-tier{color:var(--fd-gold)!important;}
 body .bp-stat-value,body .bp-progress-value,body .bp-res-value,
 body .bp-wpn-name{color:#eaffff!important;}
 
-/* --- Overlays (victory / defeat) --- */
-body #ov-panel{padding:30px 38px!important;}
+/* --- Overlays (victory / defeat) ---
+   Padding is left to Overlays.js's own safe-area-aware rules (including its
+   short-viewport media query) rather than a fixed override here. */
 /* recolour the rotating glow ring + button to energy cyan (victory) */
 body .ov-on #ov-wrap::before{
   background:conic-gradient(from 0deg,#4fe3ff,#7defff,#1f8fcf,#4fe3ff)!important;}

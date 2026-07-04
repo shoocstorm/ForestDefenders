@@ -214,8 +214,10 @@ export class HUD {
           #fd-sh-bar{right:calc(10px + env(safe-area-inset-right));}
           .fd-vtrack{height:34vh;min-height:140px;width:13px;}
           .fd-vval{font-size:18px;}
-          /* wave/enemies → top-centre (clear of the cam/shop/gallery buttons) */
-          #fd-topright{top:calc(12px + env(safe-area-inset-top));
+          /* wave/enemies → top-centre, pushed below the 7-button top-right
+             utility row (TouchControls #tc-util-row, ~46px + 14px top offset)
+             so the two never overlap even on narrow landscape widths. */
+          #fd-topright{top:calc(66px + env(safe-area-inset-top));
             left:50%;right:auto;transform:translateX(-50%);text-align:center;min-width:0;padding:8px 16px;}
           #fd-wave{font-size:22px;} #fd-wave small{font-size:13px;}
           /* ammo only → above the bottom-right action cluster, no panel chrome */

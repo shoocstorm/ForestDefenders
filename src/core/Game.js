@@ -750,11 +750,9 @@ export class Game {
     const modeName = { fp: 'First-Person', tp: 'Third-Person', top: 'Top-Down' }[this.cameraRig.mode];
     if (this.statsEl) {
       this.statsEl.textContent =
-        `FPS ${this.fps} frames ${this._fpsFrames}\n` +
-        `CAM ${modeName} pos ${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}\n` +
-        `POS ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
-        `HP  ${this.player.hp}/${this.player.maxHp}\n` +
-        `DT ${dt.toFixed(4)} scene ${this.scene.children.length}`;
+        `FPS ${this.fps}\n` +
+        `CAM ${modeName} ${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}\n` +
+        `POS ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n`;
     }
   }
 

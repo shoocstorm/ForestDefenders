@@ -28,9 +28,11 @@ export class Gallery {
       <style>
         #gal-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,#1a2c44,#070c16 82%);}
         #gal-canvas{position:absolute;inset:0;}
-        #gal-panel{position:absolute;right:0;top:0;bottom:0;width:340px;padding:28px 24px;
+        #gal-panel{position:absolute;right:0;top:0;bottom:0;width:min(340px,42vw);
+          padding:calc(28px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+            calc(28px + env(safe-area-inset-bottom)) 24px;
           background:linear-gradient(160deg,#0e1f1aee,#08120ce8);border-left:1px solid #ffffff1a;
-          display:flex;flex-direction:column;gap:14px;backdrop-filter:blur(8px);}
+          display:flex;flex-direction:column;gap:14px;backdrop-filter:blur(8px);box-sizing:border-box;}
         #gal-title{font-size:24px;font-weight:800;letter-spacing:1px;margin-bottom:2px;}
         #gal-element{font-size:13px;opacity:0.7;letter-spacing:1px;text-transform:uppercase;}
         #gal-stats{font-size:14px;line-height:1.8;}
@@ -52,6 +54,18 @@ export class Gallery {
           font-size:12px;opacity:0.4;text-align:center;}
         #gal-locked{display:none;font-size:42px;text-align:center;letter-spacing:6px;
           color:#ffffff40;pointer-events:none;}
+
+        @media (max-height:480px){
+          #gal-panel{width:min(280px,46vw);padding:calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+            calc(14px + env(safe-area-inset-bottom)) 16px;gap:8px;}
+          #gal-title{font-size:18px;}
+          #gal-element{font-size:11px;}
+          #gal-stats{font-size:12px;line-height:1.5;}
+          #gal-unlock{font-size:11px;padding:6px 8px;}
+          .gal-btn{padding:7px 12px;font-size:12px;}
+          #gal-close{padding:6px 16px;font-size:12px;margin-top:8px;}
+          #gal-hint{bottom:8px;font-size:10px;}
+        }
       </style>
       <div id="gal-bg"></div>
       <canvas id="gal-canvas"></canvas>

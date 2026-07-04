@@ -37,8 +37,6 @@ export class AchievementViewer {
           inset: 0;
           z-index: 41;
           display: none;
-          align-items: center;
-          justify-content: center;
           font-family: "Rajdhani", "Trebuchet MS", system-ui, sans-serif;
           color: #eaf7df;
         }
@@ -52,19 +50,22 @@ export class AchievementViewer {
         }
 
         #ach-panel {
-          position: relative;
-          width: min(720px, 94vw);
-          max-height: 88vh;
+          position: absolute;
+          inset: 0;
           display: flex;
           flex-direction: column;
           background: linear-gradient(160deg, #16281df7, #0b140ef9);
-          border: 1px solid #ffffff22;
-          border-radius: 20px;
-          box-shadow: 0 24px 70px #000b, inset 0 0 50px #00000040;
           overflow: hidden;
+          box-sizing: border-box;
+          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
 
         #ach-head {
+          flex: none;
+          width: 100%;
+          max-width: 1100px;
+          margin: 0 auto;
+          box-sizing: border-box;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -101,6 +102,11 @@ export class AchievementViewer {
         }
 
         #ach-categories {
+          flex: none;
+          width: 100%;
+          max-width: 1100px;
+          margin: 0 auto;
+          box-sizing: border-box;
           display: flex;
           gap: 8px;
           padding: 12px 26px 0;
@@ -133,12 +139,17 @@ export class AchievementViewer {
         }
 
         #ach-grid {
+          flex: 1 1 auto;
+          min-height: 0;
+          width: 100%;
+          max-width: 1100px;
+          margin: 0 auto;
+          box-sizing: border-box;
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
           gap: 14px;
           padding: 18px 26px;
           overflow-y: auto;
-          flex: 1;
         }
 
         .ach-card {
@@ -248,6 +259,11 @@ export class AchievementViewer {
         }
 
         #ach-foot {
+          flex: none;
+          width: 100%;
+          max-width: 1100px;
+          margin: 0 auto;
+          box-sizing: border-box;
           padding: 12px 26px 18px;
           border-top: 1px solid #ffffff18;
           display: flex;
@@ -283,6 +299,16 @@ export class AchievementViewer {
           .ach-card {
             animation-duration: 0.01ms !important;
           }
+        }
+
+        @media (max-height: 480px) {
+          #ach-head { padding: 10px 20px 8px; }
+          #ach-title { font-size: 20px; }
+          #ach-summary { font-size: 12px; margin-left: 10px; }
+          #ach-categories { padding: 8px 20px 0; }
+          .ach-cat { padding: 5px 12px; font-size: 12px; }
+          #ach-grid { padding: 12px 20px; gap: 10px; }
+          #ach-foot { padding: 8px 20px 12px; }
         }
       </style>
       <div id="ach-bg"></div>

@@ -1,29 +1,10 @@
 import * as THREE from 'three';
-import { clone, clips } from '../../core/Assets.js';
 import { toon, addOutlines } from '../../materials/CelMaterial.js';
 
-// Rescue-animal models (ANIMALS_SPEC §2). Rabbit uses the authored bunny.glb (with
-// its idle clip via an AnimationMixer); Hedgehog & Bird are PROCEDURAL (built from
+// Rescue-animal models (ANIMALS_SPEC §2). All three are PROCEDURAL (built from
 // cel-shaded primitives, so they're light + easy to tune/animate). All return
-// { group, bob, wings, mixer } so Animal.js drives them uniformly; GLB animals
-// carry bob=null (their idle clip bobs them), procedural ones bob via `bob`.
-
-const GLB = { RABBIT: { key: 'bunny', height: 0.62 } };
-
-function fromGLB(type) {
-  const cfg = GLB[type];
-  const group = clone(cfg.key);
-  const box = new THREE.Box3().setFromObject(group);
-  const size = new THREE.Vector3(); box.getSize(size);
-  const s = cfg.height / Math.max(0.001, size.y);
-  group.scale.setScalar(s);
-  group.position.y = -box.min.y * s;
-  group.rotation.y = Math.PI;
-
-  const mixer = new THREE.AnimationMixer(group);
-  for (const clip of clips(cfg.key)) mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
-  return { group, bob: null, wings: null, mixer };
-}
+// { group, bob, wings, ears, mixer } so Animal.js drives them uniformly — bob
+// gives a breathing/hop idle, wings flap (bird), ears twitch (rabbit).
 
 // --- Procedural animals (no authored asset). Kept toon-shaded + outlined. ---
 const T = (c, o = {}) => toon({ color: c, ...o });
@@ -99,8 +80,50 @@ function buildBird(color) {
   return { group, bob, wings, mixer: null };
 }
 
+// Rabbit: plump cream body, oversized pink-lined ears, cotton tail, big sparkly
+// eyes. Built feet-at-0 inside `bob` (Animal._restBob lifts it to its resting
+// float, and Animal.update bobs `bob.y` for a breathing/hop idle). The ears are
+// separate pivot groups so Animal.update can twitch them independently.
+function buildRabbit() {
+  const group = new THREE.Group();
+  const bob = new THREE.Group(); group.add(bob);
+  const cream = T(0xf7f1e4);
+
+  // Body — plump oval, facing +Z (snout +Z).
+  const body = mesh(new THREE.SphereGeometry(0.19, 16, 14), cream, bob, [0, 0.21, -0.03]);
+  body.scale.set(1.0, 0.95, 1.2);
+  // Head + muzzle.
+  const head = mesh(new THREE.SphereGeometry(0.135, 16, 14), cream, bob, [0, 0.37, 0.15]);
+  mesh(new THREE.SphereGeometry(0.055, 10, 8), T(0xffffff), head, [0, -0.04, 0.1]); // muzzle
+  mesh(new THREE.SphereGeometry(0.018, 8, 8), T(0xe8879e), head, [0, -0.02, 0.15]); // nose
+  for (const sx of [-1, 1]) {
+    mesh(new THREE.SphereGeometry(0.03, 10, 10), T(0x18130f), head, [sx * 0.065, 0.02, 0.095]); // eye
+    mesh(new THREE.SphereGeometry(0.011, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), head, [sx * 0.073, 0.033, 0.11]); // sparkle
+  }
+  // Ears — pivoted at the base (skull) so they can twitch; long capsule + pink inner.
+  const ears = [];
+  for (const sx of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(sx * 0.06, 0.45, 0.08);
+    pivot.rotation.z = sx * -0.14;
+    bob.add(pivot);
+    mesh(new THREE.CapsuleGeometry(0.045, 0.22, 4, 8), cream, pivot, [0, 0.16, 0]);
+    mesh(new THREE.CapsuleGeometry(0.024, 0.15, 4, 8), T(0xe8a4b4), pivot, [0, 0.145, 0.026]);
+    ears.push(pivot);
+  }
+  // Cotton tail.
+  mesh(new THREE.SphereGeometry(0.075, 12, 10), T(0xffffff), bob, [0, 0.18, -0.24]);
+  // Legs — stubby front paws, bigger hind feet.
+  for (const sx of [-1, 1]) {
+    mesh(new THREE.CapsuleGeometry(0.035, 0.05, 3, 6), cream, bob, [sx * 0.09, 0.055, 0.11]);
+    mesh(new THREE.CapsuleGeometry(0.05, 0.09, 3, 6), cream, bob, [sx * 0.12, 0.055, -0.13]);
+  }
+  addOutlines(group, { thickness: 0.012 });
+  return { group, bob, wings: null, ears, mixer: null };
+}
+
 export function buildAnimal(type, color) {
-  if (type === 'RABBIT') return fromGLB(type);
+  if (type === 'RABBIT') return buildRabbit();
   if (type === 'HEDGEHOG') return buildHedgehog();
   return buildBird(color);
 }

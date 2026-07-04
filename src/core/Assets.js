@@ -21,7 +21,6 @@ const _cfg = {
   // fireShroom & earthShroom are procedural (ProceduralMushroom.js) — no GLB entry.
   bossShroom:  { outline: true, rim: { color: 0xc89bff, power: 3.0, intensity: 0.8 }, emissiveBoost: 1.5 },
   glowShroom:  { outline: false, rim: { color: 0x9fff6a, power: 3.0, intensity: 0.9 }, emissiveBoost: 1.8 },
-  bunny:       { outline: true, rim: { color: 0xffffff, power: 3.0, intensity: 0.6 } },
   groveTree:   { outline: false, wind: { base: 0.4, freq: 1.8, amp: 0.06 }, rim: { intensity: 0.35 } },
   pine:        { outline: false, wind: { base: 0.5, freq: 2.0, amp: 0.05 }, rim: { intensity: 0.3 } },
   lowPolyTree: { outline: false, wind: { base: 0.6, freq: 1.6, amp: 0.07 }, rim: { intensity: 0.3 } },

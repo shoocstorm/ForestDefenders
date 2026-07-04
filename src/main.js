@@ -52,10 +52,13 @@ function showLevelSelect() {
     // Expose for debugging in the console.
     window.__game = game;
 
-    // Hide the loading overlay and let the player pick a level to play directly.
+    // Hide the loading overlay and let the player pick a level. The landing
+    // screen is fully opaque, so nothing behind it is visible — don't call
+    // game.start() here, or the sim (waves, damage, defeat) runs invisibly
+    // behind the menu before the player has chosen anything. Each level card
+    // already calls loadLevel() + start() on click.
     boot?.classList.add('hidden');
     showLevelSelect();
-    game.start();
   } catch (err) {
     console.error('Failed to start Forest Defender:', err);
     console.error(err.stack || err);

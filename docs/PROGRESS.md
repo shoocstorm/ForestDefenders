@@ -194,7 +194,7 @@ src/
       arena spawn rings, next wave starts `delay`s after the previous clears; `onWaveStart`/`onAllCleared`
       drive the HUD banner + victory. Replaced the M2 endless test spawn.
 - [x] **`entities/Animal.js` + cages** — 3 rescuable animals (hedgehog/bird/rabbit), `[E]/[F] FREE` prompt
-      via `AnimalManager` + `WorldLabels`. Hedgehog & bird are procedural; rabbit uses bunny.glb.
+      via `AnimalManager` + `WorldLabels`. All three (hedgehog/bird/rabbit) are procedural.
 - [x] **Rescue reward** — freeing grants the animal's buff (shield/speed/reveal) **plus** an instant
       reward: gold + HP heal (`RESCUE_REWARD`), floating reward numbers + gold pulse, then the animal
       floats away and is removed. (Replaces the earlier "freed animal roams and must survive" model.)

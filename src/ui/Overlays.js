@@ -29,9 +29,9 @@ export class Overlays {
         @keyframes ovrays{to{transform:rotate(360deg);}}
         @keyframes ovrayfade{to{opacity:.5;}}
 
-        /* glow ring wrapping the panel */
-        #ov-wrap{position:relative;}
-        #ov-wrap::before{content:"";position:absolute;inset:-3px;border-radius:21px;z-index:0;
+        /* glow ring wrapping the panel — now an edge-to-edge frame */
+        #ov-wrap{position:absolute;inset:0;}
+        #ov-wrap::before{content:"";position:absolute;inset:0;z-index:0;
           background:conic-gradient(from 0deg,#a8e063,#49e8ff,#ffd24a,#a8e063);
           filter:blur(10px);opacity:0;transition:opacity .4s;}
         .ov-on #ov-wrap::before{opacity:.85;animation:ovspin 6s linear infinite;}
@@ -39,9 +39,13 @@ export class Overlays {
           background:conic-gradient(from 0deg,#ff5a4a,#7a1414,#ff8a3a,#ff5a4a);opacity:.7;}
         @keyframes ovspin{to{transform:rotate(360deg);}}
 
-        #ov-panel{position:relative;z-index:1;min-width:340px;max-width:90vw;padding:28px 36px;text-align:center;
-          background:linear-gradient(160deg,#16281df5,#0c1812f8);border:1px solid #ffffff22;border-radius:18px;
-          box-shadow:0 20px 60px #000a, inset 0 0 40px #00000040;overflow:hidden;}
+        #ov-panel{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;text-align:center;
+          padding:calc(28px + env(safe-area-inset-top)) calc(36px + env(safe-area-inset-right))
+            calc(28px + env(safe-area-inset-bottom)) calc(36px + env(safe-area-inset-left));
+          background:linear-gradient(160deg,#16281df5,#0c1812f8);overflow:hidden;box-sizing:border-box;}
+
+        #ov-inner{width:100%;max-width:640px;}
 
         /* sweeping sheen across the panel */
         #ov-panel::after{content:"";position:absolute;top:0;left:-60%;width:50%;height:100%;
@@ -123,20 +127,34 @@ export class Overlays {
           #ov-bg,#ov-wrap,#ov-panel h1,#ov-stars span,.ov-stat,#ov-rank,#ov-btn,#ov-wrap::before,#ov-rays{
             animation-duration:.01ms!important;animation-iteration-count:1!important;}
         }
+
+        /* Short viewports (landscape phones): tighten vertical rhythm so the
+           title through buttons fit without any scrolling. */
+        @media (max-height:480px){
+          #ov-panel{padding:calc(14px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+            calc(14px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));}
+          #ov-panel h1{font-size:24px;margin-bottom:2px;}
+          #ov-stars{font-size:26px;letter-spacing:5px;margin:2px 0 6px;min-height:30px;}
+          .ov-stat{font-size:13px;margin:1px 0;}
+          #ov-rank{font-size:16px;margin:5px 0;}
+          #ov-shop,#ov-btn{margin-top:8px;padding:8px 18px;font-size:14px;}
+        }
       </style>
       <div id="ov-bg"></div>
       <div id="ov-rays"></div>
       <div id="ov-confetti"></div>
       <div id="ov-wrap">
         <div id="ov-panel">
-          <h1 id="ov-title">LEVEL 1 CLEAR!</h1>
-          <div id="ov-stars"></div>
-          <div id="ov-body"></div>
-          <div id="ov-rank"></div>
-          <div id="ov-levelup"></div>
-          <div id="ov-btns">
-            <button id="ov-shop">🦉 VISIT SHOP</button>
-            <button id="ov-btn">CONTINUE</button>
+          <div id="ov-inner">
+            <h1 id="ov-title">LEVEL 1 CLEAR!</h1>
+            <div id="ov-stars"></div>
+            <div id="ov-body"></div>
+            <div id="ov-rank"></div>
+            <div id="ov-levelup"></div>
+            <div id="ov-btns">
+              <button id="ov-shop">🦉 VISIT SHOP</button>
+              <button id="ov-btn">CONTINUE</button>
+            </div>
           </div>
         </div>
       </div>`;
