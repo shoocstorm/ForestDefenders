@@ -30,17 +30,18 @@ const SWITCH_DUR = 0.4;      // weapon-swap dip
 const KICK_DUR = 0.6;        // kick one-shot (extended for jump kick)
 const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
-// Palette — "Frost Ranger": cool slate-blue fur, frost-white belly, teal mids,
-// glowing cyan accents + warm amber eyes for contrast, dark gunmetal rifle.
-const FUR      = 0x4a6c8f;   // slate blue
-const FUR_DARK = 0x2f4a66;   // deep navy (shadow fur / boots / forearms)
-const CREAM    = 0xe7f1f7;   // frost-white belly
-const PINK     = 0x9fd8e6;   // icy ear inner
-const DARK     = 0x10161d;   // near-black detailing
+// Palette — "Woodland Ranger": russet-brown fur with a gray-tan undercoat,
+// warm cream belly, dark brown boots/forearms, glowing amber energy accents
+// (a natural squirrel read instead of the old sci-fi frost-blue scheme).
+const FUR      = 0x9c7a54;   // russet-tan fur
+const FUR_DARK = 0x5f4530;   // deep brown (shadow fur / boots / forearms)
+const CREAM    = 0xf2e6cf;   // warm cream belly
+const PINK     = 0xe8b4a8;   // warm pink ear inner
+const DARK     = 0x1c1410;   // near-black detailing
 const METAL    = 0x3a3d44;
 const WOOD     = 0x6e4a26;
-const GLOW     = 0x5fe6ff;   // cyan energy glow (eyes, gem, tail tip)
-const AMBER    = 0xffb347;   // warm amber iris (pops against the cool fur)
+const GLOW     = 0xffb347;   // warm amber energy glow (eyes, gem, tail tip)
+const AMBER    = 0xffb347;   // warm amber iris (pops against the warm fur)
 
 const T = (c, o = {}) => toon({ color: c, ...o });
 // Self-lit glow material (emissive cel) for energy accents.

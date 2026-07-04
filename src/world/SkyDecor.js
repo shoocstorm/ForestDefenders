@@ -270,7 +270,7 @@ export class SkyDecor {
       new THREE.Vector2(0, 1.5),
     ];
     const tex = this._stripeTexture(c1, c2, randInt(8, 12));
-    const envMat = this._m(new THREE.MeshLambertMaterial({ map: tex, fog: false }));
+    const envMat = this._m(new THREE.MeshLambertMaterial({ map: tex, emissive: c1, emissiveIntensity: 0.35, fog: false }));
     const envelope = new THREE.Mesh(this._g(new THREE.LatheGeometry(pts, 20)), envMat);
     g.add(envelope);
 
@@ -282,7 +282,7 @@ export class SkyDecor {
     g.add(flame);
 
     // Basket + ropes hanging below.
-    const basketMat = this._m(new THREE.MeshLambertMaterial({ color: 0x5a3a20, fog: false }));
+    const basketMat = this._m(new THREE.MeshLambertMaterial({ color: 0x5a3a20, emissive: 0x3a2412, emissiveIntensity: 0.5, fog: false }));
     const basket = new THREE.Mesh(this._g(new THREE.BoxGeometry(0.34, 0.24, 0.34)), basketMat);
     basket.position.y = -0.45;
     g.add(basket);

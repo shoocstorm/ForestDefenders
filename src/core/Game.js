@@ -92,13 +92,11 @@ export class Game {
     this.director = new Director();
     this.hud = new HUD();
     this.hud.initWeapons(this.player.weapons.weapons.map((w) => ({ name: w.name, element: w.element })));
-    // On-screen controls for phones/tablets (null on non-touch devices).
+    // On-screen controls for phones/tablets (null on non-touch devices). Shop/
+    // Gallery/Settings/Achievements/Backpack are reached via the Pause menu on
+    // touch, so only Pause needs a callback here (Camera/Weapon are virtual
+    // key taps handled inside TouchControls itself).
     this.touch = TouchControls.maybeCreate(this.input, {
-      toggleShop: () => this._toggleShop(),
-      toggleGallery: () => this._toggleGallery(),
-      toggleSettings: () => this._toggleSettings(),
-      toggleAchievements: () => this._toggleAchievements(),
-      toggleBackpack: () => this._toggleBackpack(),
       togglePause: () => this._togglePause(),
     });
     this.damageNumbers = new DamageNumbers(this.cameraRig.camera);
@@ -724,6 +722,7 @@ export class Game {
     // Touch builds merge HP/Shield into a ring around the fire button instead
     // of the HUD's own bars (which it hides on touch) — keep both in lock-step.
     this.touch?.setVitals(p.hp, p.maxHp, this.gameManager.shield, BUFFS.SHIELD_POWER);
+    this.touch?.setFreePrompt(!!this.animals.nearestCaged);
     this.hud.update({
       hp: p.hp,
       maxHp: p.maxHp,
