@@ -1,6 +1,8 @@
 // Lightweight toast queue for achievement unlocks + weapon unlocks (HUD_SPEC).
 // Stacks cards top-centre that slide in, glow, and auto-dismiss. Pointer-none so
 // it never eats clicks. Kept separate from the combat HUD to avoid bloating it.
+import { icon as ico } from './Icon.js';
+
 export class Toasts {
   constructor() {
     const root = document.createElement('div');
@@ -20,7 +22,7 @@ export class Toasts {
         .fd-toast.out{animation:fdtout .35s ease forwards;}
         @keyframes fdtin{to{opacity:1;transform:none;}}
         @keyframes fdtout{to{opacity:0;transform:translateY(-12px) scale(.94);}}
-        .fd-toast .ic{font-size:28px;filter:drop-shadow(0 0 8px var(--tc,#ffd24a));flex:none;}
+        .fd-toast .ic{font-size:28px;color:var(--tc,#ffd24a);filter:drop-shadow(0 0 8px var(--tc,#ffd24a));flex:none;}
         .fd-toast .tx{display:flex;flex-direction:column;line-height:1.2;}
         .fd-toast .kicker{font-size:10px;letter-spacing:2.5px;font-weight:800;text-transform:uppercase;
           color:var(--tc,#ffd24a);opacity:.95;}
@@ -33,12 +35,12 @@ export class Toasts {
   }
 
   // kind: { kicker, name, desc, icon, color }
-  show({ kicker = 'UNLOCKED', name, desc = '', icon = '⭐', color = '#ffd24a', ttl = 4200 }) {
+  show({ kicker = 'UNLOCKED', name, desc = '', icon = 'moebius-star', color = '#ffd24a', ttl = 4200 }) {
     const el = document.createElement('div');
     el.className = 'fd-toast';
     el.style.setProperty('--tc', color);
     el.innerHTML =
-      `<span class="ic">${icon}</span>` +
+      `<span class="ic">${ico(icon)}</span>` +
       `<span class="tx"><span class="kicker">${kicker}</span>` +
       `<span class="name">${name}</span>${desc ? `<span class="desc">${desc}</span>` : ''}</span>`;
     this.root.appendChild(el);
@@ -52,9 +54,9 @@ export class Toasts {
     this.show({ kicker: 'Achievement', name: a.name, desc: a.desc, icon: a.icon, color: a.color });
   }
   weapon(name, hint = '') {
-    this.show({ kicker: 'Weapon Unlocked', name, desc: hint, icon: '🔫', color: '#9fe35a' });
+    this.show({ kicker: 'Weapon Unlocked', name, desc: hint, icon: 'pistol-gun', color: '#9fe35a' });
   }
   levelUp(level) {
-    this.show({ kicker: 'Level Up', name: `Level ${level}`, desc: '+20 max HP · +15% damage · full heal', icon: '⬆', color: '#49e8ff' });
+    this.show({ kicker: 'Level Up', name: `Level ${level}`, desc: '+20 max HP · +15% damage · full heal', icon: 'upgrade', color: '#49e8ff' });
   }
 }

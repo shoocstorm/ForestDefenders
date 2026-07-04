@@ -43,7 +43,11 @@ const WOOD     = 0x6e4a26;
 const GLOW     = 0xffb347;   // warm amber energy glow (eyes, gem, tail tip)
 const AMBER    = 0xffb347;   // warm amber iris (pops against the warm fur)
 
-const T = (c, o = {}) => toon({ color: c, ...o });
+// Self-emissive floor so the hero's shadow-band cel shading (~31% of lit color,
+// see CelMaterial's 3-step gradient) doesn't collapse to near-black — unlike flat
+// ground/props, this many-sphere pivot rig always has ~half its surface facing
+// away from the sun. Mirrors the emissive floor already used for ships/balloons.
+const T = (c, o = {}) => toon({ color: c, emissive: c, emissiveIntensity: 0.3, ...o });
 // Self-lit glow material (emissive cel) for energy accents.
 const GLOWMAT = (c = GLOW, i = 1.6) =>
   toon({ color: c, emissive: c, emissiveIntensity: i, rim: { color: c, intensity: 0.9 } });

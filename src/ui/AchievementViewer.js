@@ -1,4 +1,5 @@
 import { ACHIEVEMENTS } from '../config/Constants.js';
+import { icon } from './Icon.js';
 
 // Achievement Viewer screen (UI_SPEC §5). Displays all achievements with
 // progress indicators, unlock status, and category filtering. Named
@@ -315,10 +316,10 @@ export class AchievementViewer {
       <div id="ach-panel">
         <div id="ach-head">
           <div style="display: flex; align-items: center;">
-            <div id="ach-title">🏆 Achievements</div>
+            <div id="ach-title">${icon('ribbon')} Achievements</div>
             <div id="ach-summary">3/9 Unlocked</div>
           </div>
-          <div id="ach-close">✕</div>
+          <div id="ach-close">${icon('cancel')}</div>
         </div>
         <div id="ach-categories">
           <div class="ach-cat active" data-cat="all">All</div>
@@ -421,7 +422,7 @@ export class AchievementViewer {
       card.style.animationDelay = `${index * 0.05}s`;
 
       card.innerHTML = `
-        <div class="ach-icon" style="background: ${ach.color}33; box-shadow: 0 0 12px ${ach.color}66;">${ach.icon}</div>
+        <div class="ach-icon" style="background: ${ach.color}33; box-shadow: 0 0 12px ${ach.color}66; color: ${ach.color};">${icon(ach.icon)}</div>
         <div class="ach-name">${ach.name}</div>
         <div class="ach-desc">${ach.desc}</div>
         <div class="ach-progress">
@@ -430,7 +431,7 @@ export class AchievementViewer {
           </div>
           <span class="ach-text">${current}/${goal}</span>
         </div>
-        ${isUnlocked ? '<div class="ach-check">✓</div>' : '<div class="ach-lock">🔒</div>'}
+        ${isUnlocked ? `<div class="ach-check">${icon('check-mark')}</div>` : '<div class="ach-lock">🔒</div>'}
       `;
 
       this.gridEl.appendChild(card);

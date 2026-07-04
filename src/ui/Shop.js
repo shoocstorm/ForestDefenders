@@ -1,6 +1,7 @@
 import {
   UPGRADES, UPGRADE_ORDER, UPGRADE_MAX_TIER, CONSUMABLES, SHOP_WEAPONS,
 } from '../config/Constants.js';
+import { icon } from './Icon.js';
 
 // "Old Owl's Outfitters" — the shop (ECONOMY_SHOP_SPEC §2). A glass overlay opened
 // from the victory screen or the P hotkey; freezes the game while up. Category tabs
@@ -174,13 +175,13 @@ export class Shop {
       const card = document.createElement('div');
       card.className = 'shop-card' + (disabled ? ' disabled' : '');
       const priceHtml = owned
-        ? `<div class="price owned">✓ OWNED</div>`
+        ? `<div class="price owned">${icon('check-mark')} OWNED</div>`
         : maxed
           ? `<div class="price maxed">MAXED</div>`
           : `<div class="price"><span class="c"></span>${it.price}</div>`;
       card.innerHTML =
         `${it.tier ? `<span class="tier">${it.tier}</span>` : ''}` +
-        `<div class="ic">${it.icon}</div><div class="nm">${it.name}</div>` +
+        `<div class="ic">${icon(it.icon)}</div><div class="nm">${it.name}</div>` +
         `<div class="ds">${it.desc}</div>` +
         `<div class="prev">${it.preview || ''}</div>${priceHtml}`;
       if (!disabled) card.addEventListener('click', () => this._buy(it));

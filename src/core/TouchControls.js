@@ -36,7 +36,7 @@ export class TouchControls {
   constructor(input, callbacks = {}) {
     this.input = input;
     this.callbacks = callbacks;
-    this.input.autoFire = true;
+    this.input.autoFire = false;
 
     this._stickId = null;     // touch id steering the joystick
     this._stickOrigin = { x: 0, y: 0 };

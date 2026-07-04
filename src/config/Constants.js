@@ -330,9 +330,9 @@ export const ECONOMY = {
 // Permanent upgrades (ECONOMY_SHOP_SPEC §2.1) — max 5 tiers each, escalating prices.
 export const UPGRADE_MAX_TIER = 5;
 export const UPGRADES = {
-  DAMAGE: { id: 'DAMAGE', name: 'Sharpened Tips', desc: '+12% damage', icon: '🗡', per: 0.12, prices: [40, 70, 110, 160, 230] },
-  HP:     { id: 'HP', name: 'Tough Hide', desc: '+25 max HP', icon: '🛡', per: 25, prices: [35, 60, 95, 140, 200] },
-  SPEED:  { id: 'SPEED', name: 'Fleet Footed', desc: '+7% move speed', icon: '👟', per: 0.07, prices: [45, 80, 120, 175, 250] },
+  DAMAGE: { id: 'DAMAGE', name: 'Sharpened Tips', desc: '+12% damage', icon: 'crossed-swords', per: 0.12, prices: [40, 70, 110, 160, 230] },
+  HP:     { id: 'HP', name: 'Tough Hide', desc: '+25 max HP', icon: 'bell-shield', per: 25, prices: [35, 60, 95, 140, 200] },
+  SPEED:  { id: 'SPEED', name: 'Fleet Footed', desc: '+7% move speed', icon: 'run', per: 0.07, prices: [45, 80, 120, 175, 250] },
 };
 export const UPGRADE_ORDER = ['DAMAGE', 'HP', 'SPEED'];
 
@@ -340,14 +340,14 @@ export const UPGRADE_ORDER = ['DAMAGE', 'HP', 'SPEED'];
 // GameManager.applyConsumable: heal / shield / speedStep / tailGuard / fireRounds /
 // ammo:{weapon,amount}.
 export const CONSUMABLES = [
-  { id: 'HEALTH_PACK', name: 'Health Pack', icon: '❤', price: 20, desc: 'Heal 40 HP', cat: 'Supplies', effect: { heal: 40 } },
-  { id: 'SHIELD_CHARGE', name: 'Shield Charge', icon: '🛡', price: 25, desc: '+30 shield power', cat: 'Supplies', effect: { shield: 30 } },
-  { id: 'AMMO_PACK', name: 'Ammo Pack', icon: '🔋', price: 15, desc: '+5 Ganon ammo', cat: 'Supplies', effect: { ammo: { weapon: 'GANON', amount: 5 } } },
-  { id: 'BOOM_AMMO', name: 'Boom Ammo', icon: '💥', price: 30, desc: '+3 Boomstick ammo', cat: 'Supplies', effect: { ammo: { weapon: 'BOOM', amount: 3 } } },
-  { id: 'FIRE_BULLET_PACK', name: 'Fire Bullet Pack', icon: '🔥', price: 90, desc: '+3 Fire Bullet ammo', cat: 'Supplies', effect: { ammo: { weapon: 'FIRE_BULLET', amount: 3 } } },
-  { id: 'FIRE_ROUNDS', name: 'Fire Rounds', icon: '🔥', price: 25, desc: '10 shots with fire element', cat: 'Supplies', effect: { fireRounds: 10 } },
-  { id: 'TAIL_GUARD', name: 'Tail Guard Fruit', icon: '🌀', price: 55, desc: '60s auto tail-swing', cat: 'Hero', effect: { tailGuard: 60 } },
-  { id: 'SPEED_BOOST', name: 'Speed Boost', icon: '⚡', price: 45, desc: '+15% move speed (run)', cat: 'Hero', effect: { speedStep: 0.15 } },
+  { id: 'HEALTH_PACK', name: 'Health Pack', icon: 'hearts', price: 20, desc: 'Heal 40 HP', cat: 'Supplies', effect: { heal: 40 } },
+  { id: 'SHIELD_CHARGE', name: 'Shield Charge', icon: 'bell-shield', price: 25, desc: '+30 shield power', cat: 'Supplies', effect: { shield: 30 } },
+  { id: 'AMMO_PACK', name: 'Ammo Pack', icon: 'ammo-box', price: 15, desc: '+5 Ganon ammo', cat: 'Supplies', effect: { ammo: { weapon: 'GANON', amount: 5 } } },
+  { id: 'BOOM_AMMO', name: 'Boom Ammo', icon: 'spiky-explosion', price: 30, desc: '+3 Boomstick ammo', cat: 'Supplies', effect: { ammo: { weapon: 'BOOM', amount: 3 } } },
+  { id: 'FIRE_BULLET_PACK', name: 'Fire Bullet Pack', icon: 'fire-silhouette', price: 90, desc: '+3 Fire Bullet ammo', cat: 'Supplies', effect: { ammo: { weapon: 'FIRE_BULLET', amount: 3 } } },
+  { id: 'FIRE_ROUNDS', name: 'Fire Rounds', icon: 'fire-silhouette', price: 25, desc: '10 shots with fire element', cat: 'Supplies', effect: { fireRounds: 10 } },
+  { id: 'TAIL_GUARD', name: 'Tail Guard Fruit', icon: 'fox-tail', price: 55, desc: '60s auto tail-swing', cat: 'Hero', effect: { tailGuard: 60 } },
+  { id: 'SPEED_BOOST', name: 'Speed Boost', icon: 'run', price: 45, desc: '+15% move speed (run)', cat: 'Hero', effect: { speedStep: 0.15 } },
 ];
 
 // Weapons available from the start; the rest are gated (ECONOMY_SHOP_SPEC §3).
@@ -367,21 +367,21 @@ export const WEAPON_UNLOCK_HINTS = {
 
 // Laser is the only shop-purchasable weapon unlock (ECONOMY_SHOP_SPEC §3).
 export const SHOP_WEAPONS = [
-  { id: 'LASER', name: 'Laser Rifle', icon: '🔺', price: 180, desc: 'Penetrating energy beam', cat: 'Weapons' },
+  { id: 'LASER', name: 'Laser Rifle', icon: 'pistol-gun', price: 180, desc: 'Penetrating energy beam', cat: 'Weapons' },
 ];
 
 // Achievement catalog (ECONOMY_SHOP_SPEC §4). `metric` + `goal` drive evaluation
 // against GameManager counters; multi/boss are event-driven.
 export const ACHIEVEMENTS = [
-  { id: 'pest_control', name: 'Pest Control', desc: 'Defeat 50 enemies', icon: '🍄', color: '#9fe35a', metric: 'enemiesDefeatedTotal', goal: 50 },
-  { id: 'menagerie', name: 'Menagerie', desc: 'Rescue 10 animals', icon: '🐾', color: '#7fe0a0', metric: 'rescuedAnimalsTotal', goal: 10 },
-  { id: 'treasure', name: 'Treasure Hunter', desc: 'Collect 300 gold', icon: '💰', color: '#ffd24a', metric: 'goldCollectedTotal', goal: 300 },
-  { id: 'sharpshooter', name: 'Sharpshooter', desc: '200 accurate shots', icon: '🎯', color: '#ff7a4a', metric: 'accurateShots', goal: 200 },
-  { id: 'sanctuary', name: 'Sanctuary', desc: 'Rescue 25 animals', icon: '🏵', color: '#9fe8c0', metric: 'rescuedAnimalsTotal', goal: 25 },
-  { id: 'big_spender', name: 'Big Spender', desc: 'Spend 500 gold', icon: '🛒', color: '#ffb13a', metric: 'goldSpentTotal', goal: 500 },
-  { id: 'dragons_hoard', name: "Dragon's Hoard", desc: 'Collect 600 gold', icon: '🐉', color: '#ffd24a', metric: 'goldCollectedTotal', goal: 600 },
-  { id: 'boss_hunter', name: 'Boss Hunter', desc: 'Defeat 3 bosses', icon: '👹', color: '#ff5a4a', metric: 'bossesDefeated', goal: 3 },
-  { id: 'combo_king', name: 'Combo King', desc: '5 multi-kills', icon: '💫', color: '#b48aff', metric: 'multiKills', goal: 5 },
+  { id: 'pest_control', name: 'Pest Control', desc: 'Defeat 50 enemies', icon: 'mushroom', color: '#9fe35a', metric: 'enemiesDefeatedTotal', goal: 50 },
+  { id: 'menagerie', name: 'Menagerie', desc: 'Rescue 10 animals', icon: 'paw-print', color: '#7fe0a0', metric: 'rescuedAnimalsTotal', goal: 10 },
+  { id: 'treasure', name: 'Treasure Hunter', desc: 'Collect 300 gold', icon: 'credits-currency', color: '#ffd24a', metric: 'goldCollectedTotal', goal: 300 },
+  { id: 'sharpshooter', name: 'Sharpshooter', desc: '200 accurate shots', icon: 'archery-target', color: '#ff7a4a', metric: 'accurateShots', goal: 200 },
+  { id: 'sanctuary', name: 'Sanctuary', desc: 'Rescue 25 animals', icon: 'flower-emblem', color: '#9fe8c0', metric: 'rescuedAnimalsTotal', goal: 25 },
+  { id: 'big_spender', name: 'Big Spender', desc: 'Spend 500 gold', icon: 'shopping-cart', color: '#ffb13a', metric: 'goldSpentTotal', goal: 500 },
+  { id: 'dragons_hoard', name: "Dragon's Hoard", desc: 'Collect 600 gold', icon: 'credits-currency', color: '#ffd24a', metric: 'goldCollectedTotal', goal: 600 },
+  { id: 'boss_hunter', name: 'Boss Hunter', desc: 'Defeat 3 bosses', icon: 'minotaur', color: '#ff5a4a', metric: 'bossesDefeated', goal: 3 },
+  { id: 'combo_king', name: 'Combo King', desc: '5 multi-kills', icon: 'moebius-star', color: '#b48aff', metric: 'multiKills', goal: 5 },
 ];
 
 // Level-up gates (ECONOMY_SHOP_SPEC §5): earned on a flawless rescue clear.

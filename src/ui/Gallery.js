@@ -6,6 +6,7 @@ import {
   ENEMY_DEFS, ENEMY_ORDER, ENEMY_FIRST_SEEN_HINTS,
   ATTACK_ELEMENTS, elementMultiplier,
 } from '../config/Constants.js';
+import { icon } from './Icon.js';
 
 // Per-element accent colours for the badge — union of every weapon + enemy
 // element (mirrors the smaller per-file copies in HUD.js/Backpack.js).
@@ -14,7 +15,7 @@ const ELEMENT_COLORS = {
   FIRE: '#ff7a30', WOOD: '#8fe04a', EARTH: '#e0a83a',
   ICE: '#7ab3ff', WATER: '#4ea8ff', METAL: '#b0b8c0',
 };
-const ROLE_LABEL = { melee: '⚔ Melee', ranged: '🏹 Ranged', boss: '👑 Boss' };
+const ROLE_LABEL = { melee: `${icon('crossed-swords')} Melee`, ranged: `${icon('bow-arrow')} Ranged`, boss: `${icon('king')} Boss` };
 const LOCKED_COLOR = 0x1a2230;
 
 // Gallery (GALLERY_SPEC) — a 3D model viewer accessible via hotkey G, with two
@@ -145,10 +146,10 @@ export class Gallery {
         <div id="gal-tags"></div>
         <div id="gal-note"></div>
         <div id="gal-nav">
-          <button class="gal-btn" id="gal-prev">◀ PREV</button>
-          <button class="gal-btn" id="gal-next">NEXT ▶</button>
+          <button class="gal-btn" id="gal-prev">${icon('plain-arrow', { style: 'transform:rotate(90deg);' })} PREV</button>
+          <button class="gal-btn" id="gal-next">NEXT ${icon('plain-arrow', { style: 'transform:rotate(-90deg);' })}</button>
         </div>
-        <div id="gal-close">✕ Close</div>
+        <div id="gal-close">${icon('cancel')} Close</div>
       </div>
       <div id="gal-hint">A / D or arrows to cycle · G to close</div>`;
     document.body.appendChild(this.root);
@@ -358,7 +359,7 @@ export class Gallery {
     const seen = this.gm.hasSeenEnemy(type);
     this.titleEl.textContent = seen ? def.name : '???';
     this._setElementBadge(def.element);
-    this.roleEl.textContent = ROLE_LABEL[def.role] || def.role;
+    this.roleEl.innerHTML = ROLE_LABEL[def.role] || def.role;
     this.roleEl.style.display = 'inline-block';
 
     // Same model-building path the game itself uses — feet normalized to

@@ -121,6 +121,10 @@ export class Game {
       gameManager: this.gameManager,
       onGfxChange: (preset) => this.setGraphics(preset),
       onGTAOChange: (on) => this.postfx?.setGTAOEnabled(on),
+      onShowStatsChange: (on) => {
+        this._statsHidden = !on;
+        this.statsEl.style.display = this._statsHidden ? 'none' : '';
+      },
       onClose: () => this._persist(),
     });
 
@@ -213,6 +217,8 @@ export class Game {
     this._fpsAccum = 0;
     this._fpsFrames = 0;
     this.statsEl = document.getElementById('stats');
+    this._statsHidden = this.gameManager.settings.showStats === false;
+    this.statsEl.style.display = this._statsHidden ? 'none' : '';
 
     this._onResizeRef = () => this._onResize();
     window.addEventListener('resize', this._onResizeRef);

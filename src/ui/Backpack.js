@@ -1,4 +1,5 @@
 import { WEAPONS, WEAPON_ORDER, UPGRADES, UPGRADE_ORDER } from '../config/Constants.js';
+import { icon } from './Icon.js';
 
 // Element colors from HUD.js
 const ELEMENT_COLORS = {
@@ -398,8 +399,8 @@ export class Backpack {
       <div id="bp-bg"></div>
       <div id="bp-panel">
         <div id="bp-head">
-          <div id="bp-title">🎒 Backpack</div>
-          <div id="bp-close">✕</div>
+          <div id="bp-title">${icon('cage')} Backpack</div>
+          <div id="bp-close">${icon('cancel')}</div>
         </div>
         <div id="bp-body">
           <!-- Hero Stats Section -->
@@ -407,22 +408,22 @@ export class Backpack {
             <div class="bp-section-title">HERO STATS</div>
             <div class="bp-stats-grid">
               <div class="bp-stat">
-                <span class="bp-stat-icon hp">❤️</span>
+                <span class="bp-stat-icon hp">${icon('hearts')}</span>
                 <span class="bp-stat-label">Health</span>
                 <span class="bp-stat-value" id="bp-hp">100/100</span>
               </div>
               <div class="bp-stat">
-                <span class="bp-stat-icon dmg">⚔️</span>
+                <span class="bp-stat-icon dmg">${icon('crossed-swords')}</span>
                 <span class="bp-stat-label">Damage</span>
                 <span class="bp-stat-value" id="bp-dmg">×1.00</span>
               </div>
               <div class="bp-stat">
-                <span class="bp-stat-icon spd">👟</span>
+                <span class="bp-stat-icon spd">${icon('run')}</span>
                 <span class="bp-stat-label">Speed</span>
                 <span class="bp-stat-value" id="bp-spd">100%</span>
               </div>
               <div class="bp-stat">
-                <span class="bp-stat-icon">⬆️</span>
+                <span class="bp-stat-icon">${icon('upgrade')}</span>
                 <span class="bp-stat-label">Level</span>
                 <span class="bp-stat-value" id="bp-level">1</span>
               </div>
@@ -454,7 +455,7 @@ export class Backpack {
             <div class="bp-section-title">RESOURCES</div>
             <div class="bp-resources-grid">
               <div class="bp-resource">
-                <span class="bp-res-icon gold">🪙</span>
+                <span class="bp-res-icon gold">${icon('credits-currency')}</span>
                 <span class="bp-res-value" id="bp-gold">0</span>
                 <span class="bp-res-label">GOLD</span>
               </div>
@@ -565,8 +566,8 @@ export class Backpack {
       const color = elColor(weapon.element);
 
       wpnEl.innerHTML = `
-        ${unlocked ? '<div class="bp-wpn-check">✓</div>' : '<div class="bp-wpn-lock">🔒</div>'}
-        <div class="bp-wpn-icon" style="filter: drop-shadow(0 0 6px ${color});">🔫</div>
+        ${unlocked ? `<div class="bp-wpn-check">${icon('check-mark')}</div>` : '<div class="bp-wpn-lock">🔒</div>'}
+        <div class="bp-wpn-icon" style="filter: drop-shadow(0 0 6px ${color});">${icon('pistol-gun')}</div>
         <div class="bp-wpn-name">${weapon.name}</div>
         <div class="bp-wpn-element" style="color: ${color}; background: ${color}22;">${weapon.element}</div>
       `;

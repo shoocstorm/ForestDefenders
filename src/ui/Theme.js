@@ -46,6 +46,18 @@ const CSS = `
   --fd-glow:#4fe3ff;
 }
 
+/* ---- shared icon tinting: mask-image + currentColor so every icon inherits
+   the font-size/color already set by its holding element ---- */
+.fd-icon{
+  display:inline-block;
+  width:1em;height:1em;
+  vertical-align:-0.125em;
+  background-color:currentColor;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  -webkit-mask-size:contain;mask-size:contain;
+}
+
 /* ---- holographic grid + scan, reusable by any screen ---- */
 @keyframes fd-grid-pan{to{background-position:0 44px,44px 0;}}
 @keyframes fd-scan{to{transform:translateY(100%);}}

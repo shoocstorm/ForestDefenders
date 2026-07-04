@@ -30,7 +30,7 @@ export class GameManager {
     this.currentWeapon = 0;
     this.goldenKeys = 0;
     // Audio settings (AUDIO_SPEC §5).
-    this.settings = { vol_master: 0.9, vol_sfx: 0.9, vol_music: 0.6, vol_ambient: 0.65 };
+    this.settings = { vol_master: 0.9, vol_sfx: 0.9, vol_music: 0.6, vol_ambient: 0.65, showStats: true };
     // Achievement counters (ECONOMY_SHOP_SPEC §4.2).
     this.enemiesDefeatedTotal = 0;
     this.rescuedAnimalsTotal = 0;

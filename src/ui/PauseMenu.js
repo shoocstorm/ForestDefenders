@@ -1,6 +1,8 @@
 // Pause Menu screen (UI_SPEC). Central navigation hub during gameplay.
 // Shows current run state and provides quick access to all other screens.
 
+import { icon } from './Icon.js';
+
 export class PauseMenu {
   constructor({
     gameManager,
@@ -243,31 +245,31 @@ export class PauseMenu {
         <div id="pause-body">
           <div id="pause-buttons">
             <button class="pause-btn primary" id="p-resume">
-              <span class="pause-btn-icon">▶</span>
+              <span class="pause-btn-icon">${icon('play-button')}</span>
               RESUME
             </button>
             <button class="pause-btn" id="p-shop">
-              <span class="pause-btn-icon">🛒</span>
+              <span class="pause-btn-icon">${icon('shopping-cart')}</span>
               SHOP
             </button>
             <button class="pause-btn" id="p-gallery">
-              <span class="pause-btn-icon">🖼️</span>
+              <span class="pause-btn-icon">${icon('photo-camera')}</span>
               GALLERY
             </button>
             <button class="pause-btn" id="p-achievements">
-              <span class="pause-btn-icon">🏆</span>
+              <span class="pause-btn-icon">${icon('ribbon')}</span>
               ACHIEVEMENTS
             </button>
             <button class="pause-btn" id="p-settings">
-              <span class="pause-btn-icon">⚙️</span>
+              <span class="pause-btn-icon">${icon('cog')}</span>
               SETTINGS
             </button>
             <button class="pause-btn" id="p-backpack">
-              <span class="pause-btn-icon">🎒</span>
+              <span class="pause-btn-icon">${icon('cage')}</span>
               BACKPACK
             </button>
             <button class="pause-btn warn" id="p-menu">
-              <span class="pause-btn-icon">🏠</span>
+              <span class="pause-btn-icon">${icon('house')}</span>
               MAIN MENU
             </button>
           </div>

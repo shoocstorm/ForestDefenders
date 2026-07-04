@@ -6,6 +6,8 @@
 // and buff pills (bottom-right). Plus the world-projected reticle, a damage
 // vignette and a wave banner.
 
+import { icon as ico } from './Icon.js';
+
 // Per-element accent colours — shared by weapon panel, slot strip and badges.
 const ELEMENT_COLORS = {
   NATURE: '#b6e36a', ENERGY: '#49e8ff', PHYSICAL: '#ffd27a',
@@ -518,12 +520,12 @@ export class HUD {
       L.buffs = buffKey;
       const warn = tg > 0 && tg <= 5;
       const label = {
-        SHIELD: '🛡 SHIELD', SPEED: '⚡ SPEED', REVEAL: '👁 REVEAL',
-        TAIL_GUARD: `🌀 TAIL ${tg}s`, OAKSHIELD: `🛡 GUARD ×${hs}`,
+        SHIELD: `${ico('bell-shield')} SHIELD`, SPEED: `${ico('run')} SPEED`, REVEAL: `${ico('warlock-eye')} REVEAL`,
+        TAIL_GUARD: `${ico('fox-tail')} TAIL ${tg}s`, OAKSHIELD: `${ico('bell-shield')} GUARD ×${hs}`,
       };
       const pills = [...(state.buffs || [])].map((b) =>
         `<span class="fd-buff"${b === 'TAIL_GUARD' && warn ? ' style="color:#ff7a6a;border-color:#ff7a6a;"' : ''}>${label[b] || b}</span>`);
-      if (fr > 0) pills.push(`<span class="fd-buff" style="color:#ff9a6a;border-color:#ff7a4a;">🔥 FIRE ×${fr}</span>`);
+      if (fr > 0) pills.push(`<span class="fd-buff" style="color:#ff9a6a;border-color:#ff7a4a;">${ico('fire-silhouette')} FIRE ×${fr}</span>`);
       this.buffsEl.innerHTML = pills.join('');
     }
 

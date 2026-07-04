@@ -4,6 +4,8 @@
 // bursts, staggered stat rows and a breathing call-to-action. Victory rains
 // confetti; defeat shakes with a red ember pulse. Both offer a Retry/Continue
 // that calls back into Game.resetLevel.
+import { icon } from './Icon.js';
+
 export class Overlays {
   constructor(onRestart, onShop, onNext) {
     this.onRestart = onRestart;
@@ -152,7 +154,7 @@ export class Overlays {
             <div id="ov-rank"></div>
             <div id="ov-levelup"></div>
             <div id="ov-btns">
-              <button id="ov-shop">🦉 VISIT SHOP</button>
+              <button id="ov-shop">${icon('owl')} VISIT SHOP</button>
               <button id="ov-btn">CONTINUE</button>
             </div>
           </div>
@@ -249,7 +251,7 @@ export class Overlays {
 
   showVictory(s) {
     const isFinal = s.isFinal;
-    this.title.textContent = isFinal ? '🏆 CAMPAIGN COMPLETE!' : `LEVEL ${s.levelNum} CLEAR!`;
+    this.title.innerHTML = isFinal ? `${icon('ribbon')} CAMPAIGN COMPLETE!` : `LEVEL ${s.levelNum} CLEAR!`;
     this.title.style.color = isFinal ? '#ffd24a' : '#4fe3ff';
     this._renderStars(s.stars);
     this.body.innerHTML =
@@ -258,7 +260,7 @@ export class Overlays {
       `<div class="ov-stat">Gold <b>${s.gold}</b> &nbsp;(+${s.bonus} rescue bonus)</div>`;
     this._staggerBody();
     this.rankEl.innerHTML = `RANK <span style="color:#ffd24a">${s.rank}</span>`;
-    this.levelupEl.textContent = s.leveledUp ? `⬆ LEVEL UP! You are now level ${s.playerLevel}` : '';
+    this.levelupEl.innerHTML = s.leveledUp ? `${icon('upgrade')} LEVEL UP! You are now level ${s.playerLevel}` : '';
     this.levelupEl.classList.toggle('show', !!s.leveledUp);
     // Final level: "Play Again" restarts; mid-campaign: "Continue" advances.
     this.btn.textContent = isFinal ? 'PLAY AGAIN' : 'CONTINUE ▶';
@@ -269,7 +271,7 @@ export class Overlays {
   }
 
   showDefeat(s) {
-    this.title.textContent = '💀 DEFEATED';
+    this.title.innerHTML = `${icon('skull-crossed-bones')} DEFEATED`;
     this.title.style.color = '#ff6a5a';
     this.stars.innerHTML = '';
     this.body.innerHTML =

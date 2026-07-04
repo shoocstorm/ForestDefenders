@@ -3,17 +3,20 @@
 // via GameManager.settings.
 
 import { GRAPHICS } from '../config/Constants.js';
+import { icon } from './Icon.js';
 
 export class Settings {
-  constructor({ audioSystem, gameManager, onGfxChange, onGTAOChange, onClose }) {
+  constructor({ audioSystem, gameManager, onGfxChange, onGTAOChange, onShowStatsChange, onClose }) {
     this.audio = audioSystem;
     this.gm = gameManager;
     this.onGfxChange = onGfxChange; // live-preview the graphics preset in Game
     this.onGTAOChange = onGTAOChange; // live-preview the GTAO override in Game
+    this.onShowStatsChange = onShowStatsChange; // live-preview the stats overlay toggle in Game
     this.onClose = onClose;
     this.isOpen = false;
     this._gtaoOn = gameManager.settings.gtao === true; // defaults off — big FPS win
     this._gfx = gameManager.settings.gfx || GRAPHICS.DEFAULT;
+    this._showStatsOn = gameManager.settings.showStats !== false; // defaults on
 
     // Working copy of settings (committed on save)
     this.settings = { ...audioSystem.settings };
@@ -314,8 +317,8 @@ export class Settings {
       <div id="stg-bg"></div>
       <div id="stg-panel">
         <div id="stg-head">
-          <div id="stg-title">⚙ Settings</div>
-          <div id="stg-close">✕</div>
+          <div id="stg-title">${icon('cog')} Settings</div>
+          <div id="stg-close">${icon('cancel')}</div>
         </div>
         <div id="stg-body">
           <div class="stg-section">
@@ -355,6 +358,10 @@ export class Settings {
               <span class="stg-row-name">Reduce Motion</span>
               <button class="stg-toggle" id="stg-motion">OFF</button>
             </div>
+            <div class="stg-row">
+              <span class="stg-row-name">Show Stats (FPS)</span>
+              <button class="stg-toggle" id="stg-showstats">ON</button>
+            </div>
           </div>
           <div class="stg-section">
             <div class="stg-label">GRAPHICS</div>
@@ -380,6 +387,7 @@ export class Settings {
     this.closeBtn = this.root.querySelector('#stg-close');
     this.saveBtn = this.root.querySelector('#stg-save');
     this.motionBtn = this.root.querySelector('#stg-motion');
+    this.showStatsBtn = this.root.querySelector('#stg-showstats');
     this.gfxBtn = this.root.querySelector('#stg-gfx');
     this.gtaoBtn = this.root.querySelector('#stg-gtao');
 
@@ -408,11 +416,25 @@ export class Settings {
     // Motion toggle
     this.motionBtn.addEventListener('click', () => this._toggleMotion());
 
+    // Stats overlay toggle (live preview)
+    this.showStatsBtn.addEventListener('click', () => this._toggleShowStats());
+
     // Graphics quality preset (cycles High → Balanced → Performance, live preview)
     this.gfxBtn.addEventListener('click', () => this._cycleGfx());
 
     // GTAO on/off override (live preview)
     this.gtaoBtn.addEventListener('click', () => this._toggleGTAO());
+  }
+
+  _renderShowStats() {
+    this.showStatsBtn.classList.toggle('on', this._showStatsOn);
+    this.showStatsBtn.textContent = this._showStatsOn ? 'ON' : 'OFF';
+  }
+
+  _toggleShowStats() {
+    this._showStatsOn = !this._showStatsOn;
+    this._renderShowStats();
+    this.onShowStatsChange?.(this._showStatsOn); // live preview
   }
 
   _renderGTAO() {
@@ -469,6 +491,8 @@ export class Settings {
     this._renderGfx();
     this._gtaoOn = this.gm.settings.gtao === true;
     this._renderGTAO();
+    this._showStatsOn = this.gm.settings.showStats !== false;
+    this._renderShowStats();
   }
 
   close() {
@@ -479,7 +503,7 @@ export class Settings {
   _saveAndClose() {
     // Commit settings to both audio system and game manager
     this.audio.setVolumes(this.settings);
-    this.gm.settings = { ...this.gm.settings, ...this.settings, gfx: this._gfx, gtao: this._gtaoOn };
+    this.gm.settings = { ...this.gm.settings, ...this.settings, gfx: this._gfx, gtao: this._gtaoOn, showStats: this._showStatsOn };
 
     // Apply reduce motion setting
     if (this._motionOn) {
