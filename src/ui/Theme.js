@@ -195,11 +195,39 @@ body .stg-val{color:var(--fd-gold)!important;}
 body .ach-cat{background:#0a1622aa!important;border-color:#4fe3ff14!important;color:#7fa6c8!important;}
 body .ach-cat.active{background:#10283a!important;color:#fff!important;
   box-shadow:0 -2px 14px -4px #4fe3ff88!important;}
+body .ach-card{background:var(--fd-panel-2)!important;border-color:#4fe3ff20!important;}
+body .ach-card:hover{border-color:#4fe3ff88!important;}
 body .ach-card.unlocked{border-color:#4fe3ff55!important;box-shadow:0 0 18px -6px #4fe3ff44!important;}
+body .ach-card.unlocked:hover{box-shadow:0 12px 28px -8px #000b,0 0 30px -4px #4fe3ffaa!important;}
+body .ach-icon{
+  background:
+    radial-gradient(circle at 30% 24%,#ffffff66 0 9%,#0000 24%),
+    radial-gradient(circle at 50% 50%,color-mix(in srgb,var(--ach-rarity,#4fe3ff) 34%,#0000) 0%,#0000 64%),
+    linear-gradient(145deg,#10253a 0%,#07111c 62%,#02070d 100%)!important;
+  box-shadow:
+    0 12px 26px #0009,
+    inset 0 1px 0 #ffffff66,
+    inset 0 -10px 18px #0007,
+    0 0 0 2px color-mix(in srgb,var(--ach-rarity,#4fe3ff) 70%,#ffffff 12%),
+    0 0 28px color-mix(in srgb,var(--ach-glow,#4fe3ff) 45%,#0000)!important;}
+body .ach-card.unlocked .ach-icon{
+  box-shadow:
+    0 14px 30px #000b,
+    inset 0 1px 0 #ffffff88,
+    inset 0 -10px 18px #0007,
+    0 0 0 3px color-mix(in srgb,var(--ach-rarity,#4fe3ff) 90%,#ffffff 16%),
+    0 0 38px color-mix(in srgb,var(--ach-glow,#4fe3ff) 72%,#0000),
+    0 0 58px color-mix(in srgb,var(--ach-glow,#4fe3ff) 32%,#0000)!important;}
+body .ach-icon .fd-icon{
+  filter:drop-shadow(0 2px 0 #001018aa)
+    drop-shadow(0 0 10px color-mix(in srgb,var(--ach-color,#4fe3ff) 72%,#0000))!important;}
 body .ach-bar{background:var(--fd-sunk)!important;}
 body .ach-fill{background:linear-gradient(90deg,#4fe3ff,#1f8fcf)!important;}
-body .ach-check{color:var(--fd-cyan)!important;}
 body .ach-text{color:var(--fd-gold)!important;}
+body .ach-ring-fill{stroke:url(#achRingGrad)!important;filter:drop-shadow(0 0 6px #4fe3ffaa)!important;}
+body .ach-ring-text{color:var(--fd-cyan)!important;}
+body .ach-stats{color:var(--fd-ink-dim)!important;}
+body .ach-stat-value{color:var(--fd-cyan)!important;}
 
 /* --- Backpack --- */
 body .bp-stat,body .bp-upgrade,body .bp-weapon,
