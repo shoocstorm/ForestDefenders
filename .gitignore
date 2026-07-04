@@ -1,7 +1,8 @@
 node_modules/
 dist/
 models.bundle
-icons.bundle
+src/models.bundle
+src/icons.bundle
 src/ui/Icon.bundle.js
 *.log
 .DS_Store
