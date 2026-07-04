@@ -11,6 +11,17 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Cuter squirrel hero model
+
+**Date:** 2026-07-04 · **Files:** `src/entities/HeroModel.js`
+
+Redesigned the procedural squirrel hero toward a softer storybook/chibi read: warmer
+honey-russet palette, oversized rounded head, larger glossy eyes with catchlights,
+plumper cream cheeks and muzzle, pink blush, whiskers, rounded ears, chunkier paws and
+feet, a softer belly, and a bigger curled tail with cream inner puffs. The existing
+rig, weapon pivots, muzzle position contract, and locomotion/recoil animation hooks
+remain intact.
+
 ## Side-placed sun and moon
 
 **Date:** 2026-07-04 · **Files:** `src/config/Constants.js`
