@@ -217,7 +217,7 @@ export class Game {
     this._fpsAccum = 0;
     this._fpsFrames = 0;
     this.statsEl = document.getElementById('stats');
-    this._statsHidden = this.gameManager.settings.showStats === false;
+    this._statsHidden = this.gameManager.settings.showStats !== true;
     this.statsEl.style.display = this._statsHidden ? 'none' : '';
 
     this._onResizeRef = () => this._onResize();

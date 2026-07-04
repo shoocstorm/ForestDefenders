@@ -16,7 +16,7 @@ export class Settings {
     this.isOpen = false;
     this._gtaoOn = gameManager.settings.gtao === true; // defaults off — big FPS win
     this._gfx = gameManager.settings.gfx || GRAPHICS.DEFAULT;
-    this._showStatsOn = gameManager.settings.showStats !== false; // defaults on
+    this._showStatsOn = gameManager.settings.showStats === true; // defaults off
 
     // Working copy of settings (committed on save)
     this.settings = { ...audioSystem.settings };
@@ -360,7 +360,7 @@ export class Settings {
             </div>
             <div class="stg-row">
               <span class="stg-row-name">Show Stats (FPS)</span>
-              <button class="stg-toggle" id="stg-showstats">ON</button>
+              <button class="stg-toggle" id="stg-showstats">OFF</button>
             </div>
           </div>
           <div class="stg-section">
@@ -491,7 +491,7 @@ export class Settings {
     this._renderGfx();
     this._gtaoOn = this.gm.settings.gtao === true;
     this._renderGTAO();
-    this._showStatsOn = this.gm.settings.showStats !== false;
+    this._showStatsOn = this.gm.settings.showStats === true;
     this._renderShowStats();
   }
 

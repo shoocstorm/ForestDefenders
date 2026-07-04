@@ -11,6 +11,23 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Brighter sky clouds
+
+**Date:** 2026-07-04 · **Files:** `src/world/SkyDecor.js`
+
+Clouds now use the same Lambert-plus-emissive readability treatment as hot air
+balloon envelopes, with a slight lift toward white so each biome keeps its tint while
+the cloud clusters read brighter against the sky.
+
+## Stats overlay defaults off
+
+**Date:** 2026-07-04 · **Files:** `src/systems/GameManager.js`,
+`src/ui/Settings.js`, `src/core/Game.js`
+
+Changed the Show Stats (FPS) preference to default off for new and migrated saves.
+The settings screen now treats only an explicit `showStats: true` as enabled, and the
+in-game stats overlay starts hidden unless the player has opted in.
+
 ## Taller trees + redesigned road lanterns
 
 **Date:** 2026-06-28 · **Files:** `src/world/Vegetation.js`, `src/world/Lanterns.js`
