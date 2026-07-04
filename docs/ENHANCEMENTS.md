@@ -11,6 +11,14 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Side-placed sun and moon
+
+**Date:** 2026-07-04 · **Files:** `src/config/Constants.js`
+
+Moved each biome's sky body away from the forward +Z play direction and into a high
+side position, so the sun or moon remains part of the atmosphere without sitting in
+the player's main sightline during normal combat.
+
 ## Brighter sky clouds
 
 **Date:** 2026-07-04 · **Files:** `src/world/SkyDecor.js`

@@ -6,11 +6,10 @@ import { randRange, randInt } from '../util/MathUtils.js';
 // a sun (L1/L2) or moon (L3) disc with a soft glow halo, drifting low-poly cloud
 // puffs, streaking comets with fading trails, slow low-poly spaceships with engine
 // glow, and a far star field. Everything is placed far out (well beyond fog) with
-// `fog: false` so it reads as a crisp painted backdrop. Small accent lights join
-// BLOOM_LAYER so the post pipeline lights them up; the sun/moon body intentionally
-// stays out of bloom so foreground trees occlude it correctly. Discs/clouds are
-// oriented once toward the play area (objects are ~300u away, so the angular error
-// as the player roams the 60×140 arena is negligible — no per-frame billboarding needed).
+// `fog: false` so it reads as a crisp painted backdrop, and glowing parts join
+// BLOOM_LAYER so the post pipeline lights them up. Discs/clouds are oriented once
+// toward the play area (objects are ~300u away, so the angular error as the player
+// roams the 60×140 arena is negligible — no per-frame billboarding needed).
 export class SkyDecor {
   constructor(scene, biome) {
     this.scene = scene;
@@ -54,18 +53,16 @@ export class SkyDecor {
     const g = new THREE.Group();
     g.position.set(...pos);
 
-    const bodyColor = new THREE.Color(cfg.bodyColor || 0xfff4d8).lerp(new THREE.Color(0xffffff), 0.18);
-    const bodyGlow = new THREE.Color(cfg.bodyGlow || cfg.bodyColor || 0xffe2a0).lerp(new THREE.Color(0xffffff), 0.12);
-    const disc = new THREE.Mesh(this._g(new THREE.CircleGeometry(R, 48)),
-      this._basic(bodyColor, { toneMapped: false }));
+    const disc = new THREE.Mesh(this._g(new THREE.CircleGeometry(R, 48)), this._basic(cfg.bodyColor || 0xfff4d8));
+    disc.layers.enable(BLOOM_LAYER);
     g.add(disc);
 
-    // Single soft outer glow halo (additive, fades outward). Keep this out of the
-    // selective bloom pass; otherwise the glow is composited over foreground trees.
-    const haloMat = this._basic(bodyGlow,
-      { transparent: true, opacity: 0.52, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    // Single soft outer glow halo (additive, fades outward).
+    const haloMat = this._basic(cfg.bodyGlow || cfg.bodyColor || 0xffe2a0,
+      { transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
     const halo = new THREE.Mesh(this._g(new THREE.CircleGeometry(R * 1.7, 48)), haloMat);
     halo.position.z = -0.3;
+    halo.layers.enable(BLOOM_LAYER);
     g.add(halo);
 
     if (cfg.body === 'moon') {

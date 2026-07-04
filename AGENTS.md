@@ -10,30 +10,6 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
-## Sun/moon glow renders through foreground trees
-
-**Date:** 2026-07-04 · **Files:** `src/world/SkyDecor.js`
-
-**Symptom:** The sun stayed visibly glowing even when the player/camera moved behind a
-foreground tree that should have occluded it.
-
-**Root cause:** The sky body disc and halo were both on `BLOOM_LAYER`. `PostFX` renders
-that layer alone on a black background, so normal tree meshes are absent from the bloom
-pass and cannot write depth there. The resulting unobstructed sun glow is then added
-back over the full beauty pass, making it appear through trees.
-
-**Fix:** Keep the sun/moon disc and halo out of the selective bloom layer. They render
-as bright, un-tonemapped, fogless sky geometry in the normal pass, where foreground
-depth occludes them correctly. Small sky accents such as stars, comet trails, ship
-lights, and balloon burners can remain on `BLOOM_LAYER` because their
-through-foreground glow is less visually disruptive. Important visual follow-up:
-without `toneMapped: false` and a stronger normal-pass halo, the sun looked dull after
-leaving bloom because ACES/exposure compressed it like ordinary scenery.
-
-**Gotcha to remember:** Selective bloom that renders only glowing layers is not
-depth-aware against non-bloom occluders. Do not put large background discs or halos on
-that layer unless you also render foreground occluders into the bloom pass depth.
-
 ## Enemy boids separation + projectile hit-tests independently O(n²)-scan the enemy list
 
 **Date:** 2026-07-02 · **Files:** `src/util/SpatialGrid.js` (new), `src/systems/EnemyManager.js`,
