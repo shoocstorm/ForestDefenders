@@ -153,7 +153,18 @@ export class PostFX {
   }
 
   setSize(w, h) {
+    // EffectComposer snapshots the renderer's pixel ratio at construction and
+    // never sees later changes — setGraphics lowers it for Balanced/Performance
+    // *after* this object exists. Sync both composers here (setSize runs on
+    // resize and preset changes) or the bloom chain keeps rendering at the
+    // construction-time ratio: up to 4x the intended pixels on high-DPR screens.
+    const pr = this.renderer.getPixelRatio();
+    this.bloomComposer.setPixelRatio(pr);
+    this.finalComposer.setPixelRatio(pr);
     this.bloomComposer.setSize(w, h);
+    // Bloom blur mips deliberately capped at CSS resolution (not effective
+    // pixels): the glow is heavily blurred, so a lower-res mip chain looks
+    // identical and saves ratio² of fill on retina displays.
     this.bloom.setSize(w, h);
     this.finalComposer.setSize(w, h);
     this.gtao?.setSize(Math.max(1, Math.round(w * this.aoScale)), Math.max(1, Math.round(h * this.aoScale)));

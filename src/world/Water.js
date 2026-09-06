@@ -36,18 +36,29 @@ export class Water {
     this.surface.layers.enable(BLOOM_LAYER);
     this.group.add(this.surface);
 
-    // Flagstone rim rocks.
+    // Flagstone rim rocks — one shared unit geometry + one InstancedMesh (was
+    // 14 unique DodecahedronGeometry allocations and 14 separate draws).
     const rockMat = new THREE.MeshToonMaterial({ color: rockC });
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+    const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+    const rockCount = 14;
+    const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
+    const rm = new THREE.Matrix4();
+    const rq = new THREE.Quaternion();
+    const rpos = new THREE.Vector3();
+    const rscl = new THREE.Vector3();
+    for (let i = 0; i < rockCount; i++) {
+      const a = (i / rockCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
       const rr = radius + 0.2 + Math.random() * 0.3;
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.3, 0), rockMat);
-      rock.position.set(Math.cos(a) * rr, 0.05 + Math.random() * 0.1, Math.sin(a) * rr * 0.78);
-      rock.rotation.set(Math.random(), Math.random(), Math.random());
-      rock.scale.y = 0.7;
-      rock.castShadow = true; rock.receiveShadow = true;
-      this.group.add(rock);
+      const s = 0.3 + Math.random() * 0.3;
+      rpos.set(Math.cos(a) * rr, 0.05 + Math.random() * 0.1, Math.sin(a) * rr * 0.78);
+      rq.setFromEuler(new THREE.Euler(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2));
+      rscl.set(s, s * 0.7, s);
+      rocks.setMatrixAt(i, rm.compose(rpos, rq, rscl));
     }
+    rocks.castShadow = true; rocks.receiveShadow = true;
+    rocks.instanceMatrix.needsUpdate = true;
+    this.rocks = rocks;
+    this.group.add(rocks);
     this.group.scale.z = 0.78; // elliptical glade pool
     scene.add(this.group);
   }
@@ -62,11 +73,12 @@ export class Water {
     this.scene.remove(this.group);
     this.surface.geometry.dispose();
     this.surface.material.dispose();
-    // Dispose rock materials
+    // Dispose rock materials + free the InstancedMesh's instance-matrix buffer.
     this.group.traverse((c) => {
       if (c.isMesh) {
         c.geometry?.dispose?.();
         c.material?.dispose?.();
+        c.dispose?.();
       }
     });
   }

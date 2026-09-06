@@ -97,6 +97,9 @@ export class Arena {
         if (!c.isMesh && !c.isPoints) return;
         c.geometry?.dispose?.();
         c.material?.dispose?.();
+        // InstancedMesh only: frees its instance-matrix GPU buffer (plain
+        // Mesh/Points have no dispose — the optional call no-ops).
+        c.dispose?.();
       });
     }
     this.colliders.length = 0;
@@ -222,6 +225,13 @@ export class Arena {
     // Shared field geometry per axis (different spans for X vs Z walls).
     const ffMatTemplate = () => { const m = forceFieldMaterial(t.accent); this._techMats.push(m); return m; };
 
+    // Emissive posts + caps are collected as transforms and rendered as two
+    // InstancedMeshes for the whole perimeter (52 posts + 52 caps here) — was
+    // ~104 individual meshes, each also drawn separately in the shadow pass,
+    // and each allocating its own identical Cylinder/Sphere geometry.
+    const posts = [];
+    const postH = fieldH + 0.6;
+
     // Build one wall along a side. `axis` = 'x' (wall runs along X) or 'z'.
     const wall = (axis, sign) => {
       const len = axis === 'x' ? ARENA.WIDTH : ARENA.LENGTH;
@@ -246,26 +256,34 @@ export class Arena {
       field.userData.arenaOwned = true;
       this.scene.add(field);
 
-      // Emissive posts at intervals along the wall.
+      // Emissive posts at intervals along the wall (transform only — see above).
       const step = 8;
       const n = Math.floor(len / step);
       for (let i = 0; i <= n; i++) {
         const o = -len / 2 + (i * len) / n;
-        const px = axis === 'x' ? o : cx;
-        const pz = axis === 'x' ? cz : o;
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, fieldH + 0.6, 8), postMat);
-        post.position.set(px, (fieldH + 0.6) / 2, pz);
-        post.castShadow = true;
-        post.userData.arenaOwned = true;
-        this.scene.add(post);
-        // Glowing cap.
-        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), postMat);
-        cap.position.set(px, fieldH + 0.9, pz);
-        cap.userData.arenaOwned = true;
-        this.scene.add(cap);
+        posts.push(axis === 'x' ? o : cx, axis === 'x' ? cz : o);
       }
     };
     wall('x', -1); wall('x', 1); wall('z', -1); wall('z', 1);
+
+    const count = posts.length / 2;
+    const m = new THREE.Matrix4();
+    const postIM = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.16, 0.2, postH, 8), postMat, count);
+    const capIM = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.22, 10, 8), postMat, count);
+    for (let i = 0; i < count; i++) {
+      const px = posts[i * 2], pz = posts[i * 2 + 1];
+      m.makeTranslation(px, postH / 2, pz);
+      postIM.setMatrixAt(i, m);
+      m.makeTranslation(px, fieldH + 0.9, pz); // glowing cap
+      capIM.setMatrixAt(i, m);
+    }
+    postIM.castShadow = true;
+    postIM.instanceMatrix.needsUpdate = true;
+    capIM.instanceMatrix.needsUpdate = true;
+    this._add(postIM);
+    this._add(capIM);
   }
 
   _platform() {
@@ -634,9 +652,15 @@ export class Arena {
   _techProp(kind, x, z) {
     const t = this.tech;
     const g = new THREE.Group();
-    const metalMat = toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.5 } });
-    const panelMat = toon({ color: t.panel, rim: { color: t.metalRim, intensity: 0.4 } });
-    const glowMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 1.0 });
+    // Materials shared by every tech prop (identical params → one shader
+    // program; was 3 fresh materials per prop, ~177 unique materials per level,
+    // each defeating batching and carrying its own uniform block).
+    this._propMats ||= {
+      metal: toon({ color: t.metal, rim: { color: t.metalRim, intensity: 0.5 } }),
+      panel: toon({ color: t.panel, rim: { color: t.metalRim, intensity: 0.4 } }),
+      glow: new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 1.0 }),
+    };
+    const { metal: metalMat, panel: panelMat, glow: glowMat } = this._propMats;
 
     if (kind === 'shard') {
       const s = randRange(0.6, 1.2);

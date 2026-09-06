@@ -764,19 +764,19 @@ export class Game {
 
   _updateStats(dt) {
     this._fpsAccum += dt; this._fpsFrames++;
-    if (this._fpsAccum >= 0.25) {
-      this.fps = Math.round(this._fpsFrames / this._fpsAccum);
-      this._fpsAccum = 0; this._fpsFrames = 0;
-    }
+    if (this._fpsAccum < 0.25) return;
+    this.fps = Math.round(this._fpsFrames / this._fpsAccum);
+    this._fpsAccum = 0; this._fpsFrames = 0;
+    // Overlay is hidden by default — building the string and writing textContent
+    // (a DOM write) 4x/sec for nobody is pure waste; skip unless it's on screen.
+    if (this._statsHidden || !this.statsEl) return;
     const p = this.player.position;
     const c = this.cameraRig.camera.position;
     const modeName = { fp: 'First-Person', tp: 'Third-Person', top: 'Top-Down' }[this.cameraRig.mode];
-    if (this.statsEl) {
-      this.statsEl.textContent =
-        `FPS ${this.fps}\n` +
-        `CAM ${modeName} ${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}\n` +
-        `POS ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n`;
-    }
+    this.statsEl.textContent =
+      `FPS ${this.fps}\n` +
+      `CAM ${modeName} ${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}\n` +
+      `POS ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n`;
   }
 
   _onResize() {

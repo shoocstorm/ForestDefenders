@@ -36,7 +36,7 @@ export class PlantManager {
         for (const p of ctx.projectiles.items) {
           if (!p.active || p.team !== 'player') continue;
           if (p.pos.distanceToSquared(_v) < r * r) {
-            p.active = false; p.mesh.visible = false; p.light.intensity = 0;
+            ctx.projectiles.despawn(p); // consume the bullet (frees its light slot)
             this._trigger(plant, ctx);
             break;
           }

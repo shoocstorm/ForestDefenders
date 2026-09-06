@@ -176,8 +176,11 @@ export class HUD {
         .fd-slot.locked .key{text-decoration:line-through;}
 
         /* ---- reticle ---- */
-        #fd-reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-          transition:transform .12s ease;will-change:left,top;}
+        /* Positioned via transform (translate3d) each frame from JS — compositor
+           only, no document layout (left/top writes invalidated layout every
+           frame; see DamageNumbers for the same fix). The lock scale is baked
+           into that JS transform, so .locked only owns colours. */
+        #fd-reticle{position:absolute;left:0;top:0;will-change:transform;}
         #fd-cross{position:absolute;left:-11px;top:-11px;width:22px;height:22px;}
         #fd-cross::before,#fd-cross::after{content:"";position:absolute;background:#eaf7dfd9;
           box-shadow:0 0 3px #000a;transition:background .12s;}
@@ -185,7 +188,6 @@ export class HUD {
         #fd-cross::after{top:10px;left:0;height:2px;width:22px;}
         #fd-dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;
           background:#ff5a5a;box-shadow:0 0 4px #000;transition:background .12s;}
-        #fd-reticle.locked{transform:translate(-50%,-50%) scale(1.35);}
         #fd-reticle.locked #fd-cross::before,#fd-reticle.locked #fd-cross::after{
           background:#ff7a4a;box-shadow:0 0 7px #ff3a1acc;}
         #fd-reticle.locked #fd-dot{background:#ffe04a;box-shadow:0 0 6px #ffae00;}
@@ -353,7 +355,14 @@ export class HUD {
     this.rctx = this.radarCanvas.getContext('2d');
     this.rctx.scale(dpr, dpr);
     this._sweep = 0;
+    this._radarLast = 0;
     this._radarRange = 42; // world units shown to the rim
+    // Sweep gradient is constant (canvas interprets gradient coordinates in the
+    // user space active at *paint* time, so one cached object rotates with the
+    // wedge) — create it once instead of every frame.
+    this._sweepGrad = this.rctx.createLinearGradient(0, 0, 0, -(this._radarSize / 2 - 8));
+    this._sweepGrad.addColorStop(0, '#3effc000');
+    this._sweepGrad.addColorStop(1, '#3effc055');
     // Grid rings + crosshair never change frame to frame — pre-render them once
     // to an offscreen canvas and blit it every frame instead of re-stroking two
     // arcs + a cross every single frame (only the sweep wedge + blips actually
@@ -387,13 +396,18 @@ export class HUD {
   }
 
   // Position the reticle at a screen pixel; `locked` highlights it on a target;
-  // hidden when the aim point is behind the camera / off-screen.
+  // hidden when the aim point is behind the camera / off-screen. Position is a
+  // transform write (compositor-only); every other property is change-gated so
+  // the steady state writes exactly one string per frame.
   setCrosshair(x, y, locked, visible) {
     const r = this.reticle;
-    if (!visible) { r.style.display = 'none'; return; }
-    r.style.display = '';
-    r.style.left = x + 'px';
-    r.style.top = y + 'px';
+    if (visible !== this._retVisible) {
+      r.style.display = visible ? '' : 'none';
+      this._retVisible = visible;
+    }
+    if (!visible) return;
+    r.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)` +
+      (locked ? ' scale(1.35)' : '');
     if (locked !== this._last.lock) {
       r.classList.toggle('locked', locked);
       this._last.lock = locked;
@@ -545,19 +559,24 @@ export class HUD {
 
   // Canvas sweep radar: player-centred, rotated so the player's facing is "up".
   // Enemies = red blips (boss bigger), caged animals = amber, freed/safe = green.
+  // Redrawn at ~30 Hz — blips and the sweep tolerate 33 ms of staleness, and on
+  // 60 Hz+ displays that halves the canvas work. The sweep advances by elapsed
+  // time (not per-draw), so it spins at the same rate on every refresh rate.
   _drawRadar(r) {
+    const now = performance.now();
+    const elapsed = now - this._radarLast;
+    if (elapsed < 33) return;
+    this._radarLast = now;
     const ctx = this.rctx, s = this._radarSize, c = s / 2;
     const range = this._radarRange, scale = (c - 8) / range;
     ctx.clearRect(0, 0, s, s);
     ctx.drawImage(this._radarBg, 0, 0, s, s);
 
     // Rotating sweep wedge.
-    this._sweep = (this._sweep + 0.045) % (Math.PI * 2);
+    this._sweep = (this._sweep + (elapsed / 1000) * 2.7) % (Math.PI * 2);
     ctx.save();
     ctx.translate(c, c); ctx.rotate(this._sweep);
-    const g = ctx.createLinearGradient(0, 0, 0, -(c - 8));
-    g.addColorStop(0, '#3effc000'); g.addColorStop(1, '#3effc055');
-    ctx.fillStyle = g;
+    ctx.fillStyle = this._sweepGrad;
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, c - 8, -Math.PI / 2 - 0.35, -Math.PI / 2 + 0.02); ctx.closePath();
     ctx.fill();
     ctx.restore();

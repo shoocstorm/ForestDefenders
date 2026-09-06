@@ -7,11 +7,15 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 //
 // Spawn opts: { team:'player'|'enemy', speed, damage, element, color, radius,
 //               lifetime, gravity }.
-// Cap on simultaneously-lit projectiles. Every active PointLight raises the
-// per-fragment cost of every lit material on screen, so an uncapped machine gun
-// (many bullets alive at once, especially vs the tankier L2/L3 waves) drags FPS
-// the more of the arena is lit. Bullets past the budget still render — they glow
-// via the bloom layer — they just don't cast dynamic light.
+// Bullet lights live in a FIXED pool of LIGHT_BUDGET PointLights owned by this
+// pool and added to the scene once at construction — bullets never own lights.
+// (The old design attached one PointLight per pooled mesh, so the pool's light
+// count grew with the sustained-fire high-water mark: each growth step changed
+// the scene light count and forced a recompile of every lit material — the
+// exact freeze class documented in AGENTS.md — and every dead-but-pooled light
+// kept burning uniform slots in all lit shaders.) The first LIGHT_BUDGET live
+// bullets each borrow a light and drag it along; bullets past the budget still
+// render — they glow via the bloom layer — they just don't cast dynamic light.
 const LIGHT_BUDGET = 6;
 
 // Per-weapon bullet looks. Each shot is a single pooled mesh; `geo` selects the
@@ -40,7 +44,6 @@ export class ProjectilePool {
   constructor(scene) {
     this.scene = scene;
     this.items = [];
-    this._litActive = 0;
     this._geos = new Map(); // geo key -> shared BufferGeometry (built on demand)
     this._up = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
@@ -48,6 +51,15 @@ export class ProjectilePool {
     this._q = new THREE.Quaternion();
     this._spin = new THREE.Quaternion();
     this._hitBuf = []; // reused SpatialGrid query results (player-team hit-test)
+    // Fixed bullet-light pool: added to the scene ONCE, never removed — only
+    // intensity is toggled and the light repositioned to its borrowing bullet
+    // (same pattern as the VFX flash-light pool; see comment above).
+    this._lightSlots = [];
+    for (let i = 0; i < LIGHT_BUDGET; i++) {
+      const light = new THREE.PointLight(0xffffff, 0, 6, 2);
+      scene.add(light);
+      this._lightSlots.push({ light, owner: null });
+    }
   }
 
   // Lazily build & cache the unit geometry for a style. Elongated shapes are baked
@@ -72,10 +84,8 @@ export class ProjectilePool {
     const mesh = new THREE.Mesh(this._geoFor('sphere'), mat);
     mesh.castShadow = false;
     mesh.layers.enable(BLOOM_LAYER); // projectiles glow in the post pipeline
-    const light = new THREE.PointLight(0xffffff, 0, 6, 2);
-    mesh.add(light);
     const p = {
-      active: false, mesh, light, mat,
+      active: false, mesh, mat, slot: null,
       pos: new THREE.Vector3(), vel: new THREE.Vector3(),
       damage: 0, element: 'PHYSICAL', team: 'player',
       radius: 0.16, life: 0, gravity: 0,
@@ -105,11 +115,19 @@ export class ProjectilePool {
     p.vel.copy(dir).normalize().multiplyScalar(opts.speed ?? 20);
     const color = opts.color ?? 0xffffff;
     p.mat.color.setHex(color);
-    p.light.color.setHex(color);
-    // Light only while under the global budget; over it the bullet stays unlit.
-    p.lit = this._litActive < LIGHT_BUDGET;
-    p.light.intensity = p.lit ? 5 : 0;
-    if (p.lit) this._litActive++;
+    // Borrow a light from the fixed pool if one is free; over budget the bullet
+    // stays unlit (it still glows via the bloom layer). Fixed 6-entry scan.
+    p.slot = null;
+    for (const s of this._lightSlots) {
+      if (!s.owner) {
+        s.owner = p;
+        p.slot = s;
+        s.light.color.setHex(color);
+        s.light.intensity = 5;
+        s.light.position.copy(p.pos);
+        break;
+      }
+    }
 
     // Resolve the bullet look: swap geometry only when the style's shape changes
     // (keeps the pool allocation-free on repeat fire), then bake the per-axis scale.
@@ -198,10 +216,10 @@ export class ProjectilePool {
         if (aoe && p.team === 'player') this._detonate(p, ctx);
         p.active = false;
         p.mesh.visible = false;
-        p.light.intensity = 0;
-        if (p.lit) { p.lit = false; this._litActive--; } // free a light-budget slot
+        if (p.slot) { p.slot.light.intensity = 0; p.slot.owner = null; p.slot = null; } // return the light
       } else {
         p.mesh.position.copy(p.pos);
+        if (p.slot) p.slot.light.position.copy(p.pos); // borrowed light rides along
         const s = p.style;
         if (s.spin) p.spinPhase += s.spin * dt;
         if (s.orient) this._orient(p); // re-aim (arrows tip with their arc) + roll
@@ -242,15 +260,22 @@ export class ProjectilePool {
     else ctx.audio?.explosion();
   }
 
+  // Deactivate a live projectile from outside the pool (e.g. PlantManager's
+  // shoot-trigger consumes the bullet). Handles the borrowed-light bookkeeping
+  // callers shouldn't need to know about.
+  despawn(p) {
+    p.active = false;
+    p.mesh.visible = false;
+    if (p.slot) { p.slot.light.intensity = 0; p.slot.owner = null; p.slot = null; }
+  }
+
   // Clear all active projectiles (called on level restart to prevent accumulation).
   clear() {
     for (const p of this.items) {
-      if (p.active) {
-        p.active = false;
-        p.mesh.visible = false;
-        p.light.intensity = 0;
-        if (p.lit) { p.lit = false; this._litActive--; }
-      }
+      if (!p.active) continue;
+      p.active = false;
+      p.mesh.visible = false;
     }
+    for (const s of this._lightSlots) { s.light.intensity = 0; s.owner = null; }
   }
 }

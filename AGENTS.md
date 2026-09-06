@@ -10,6 +10,55 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
+## Two GPU-cost bugs: per-bullet PointLights that grow the scene's light count, and a stale pixel ratio on the bloom composer
+
+**Date:** 2026-09-06 · **Files:** `src/weapons/Projectile.js`, `src/systems/PlantManager.js`,
+`src/core/PostFX.js` (+ perf polish across `Arena.js`/`Water.js`/`Lanterns.js`/`CelMaterial.js`/
+`HUD.js`/`WorldLabels.js`/`Game.js`, logged in `docs/ENHANCEMENTS.md`)
+
+**Symptom:** (Found via perf audit.) Mid-combat stutter under sustained fire plus an
+ever-rising per-fragment lighting cost — and on high-DPR displays running a
+below-construction-ratio graphics preset, the entire bloom chain rendering at up to
+4× the intended pixels.
+
+**Root causes:**
+1. `ProjectilePool._acquire()` attached one `PointLight` to every pooled bullet mesh.
+   `LIGHT_BUDGET = 6` capped *intensity* but not *count*: every time sustained fire grew
+   the pool to a new high-water mark, a new light was **added to the scene**, changing
+   the scene light count → full shader recompile of every lit material (the exact freeze
+   class logged above). All dead-but-pooled bullets also kept burning uniform slots in
+   every lit shader (three.js processes visible lights regardless of intensity —
+   intensity-0 is not free).
+2. `EffectComposer` snapshots the renderer's `_pixelRatio` at construction.
+   `PostFX.bloomComposer` is constructed **once** (before `setGraphics` lowers the
+   renderer ratio for Balanced/Performance) and `setSize()` never called
+   `setPixelRatio` — so the bloom RenderPass + composite targets kept rendering at
+   the construction-time ratio (min(DPR,2)) forever. The rebuilt `finalComposer` was
+   immune (each rebuild re-snapshots).
+
+**Fix:**
+- Bullets no longer own lights. The pool owns a **fixed** set of `LIGHT_BUDGET`
+  `PointLight`s added to the scene once at construction (intensity toggled, never
+  added/removed — same pattern as the VFX flash-light pool). Live bullets borrow a free
+  slot; the light rides the bullet's position each tick and is returned on death.
+  `PlantManager`'s shoot-trigger, which previously killed bullets by hand
+  (`p.light.intensity = 0`), now calls the new `ProjectilePool.despawn(p)` — any future
+  external consumer must do the same or the borrowed slot leaks.
+- `PostFX.setSize()` now calls `bloomComposer/finalComposer.setPixelRatio(renderer
+  .getPixelRatio())` before sizing (setSize runs on resize and preset changes, covering
+  every ratio change). The explicit `bloom.setSize(w, h)` in CSS px is intentional and
+  now documented: it caps the blur mip chain below the effective pixel size (visually
+  identical for a blurred glow, cheaper fill).
+
+**Gotcha to remember:** A "budget" on lights must bound the **light count in the scene**,
+not just intensity — three.js compiles the visible-light count into every lit shader, so
+any lazily-growing pool of light-carrying objects (bullets, pickups, projectiles) is a
+recompile storm plus a permanent uniform cost per pooled instance even when "off". And
+anything that snapshots renderer state at construction (`EffectComposer._pixelRatio`,
+`WebGLRenderTarget` sizing) must be explicitly re-synced when that state changes later —
+grep for construction-order vs `setGraphics`/`setPixelRatio` call sites when adding
+render targets.
+
 ## Enemy boids separation + projectile hit-tests independently O(n²)-scan the enemy list
 
 **Date:** 2026-07-02 · **Files:** `src/util/SpatialGrid.js` (new), `src/systems/EnemyManager.js`,

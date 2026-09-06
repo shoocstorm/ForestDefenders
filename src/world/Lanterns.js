@@ -3,9 +3,14 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 
 // Light pylons alternating along the central runway (sci-fi reskin of the old
 // fairy lanterns). Each is a sleek beacon: a metal base, a slim post, a few
-// stacked emissive accent rings, and a glowing beacon orb on top. Every pylon is
-// lit (emissive orb + point light + bloom layer) and pulses gently — the orbs
+// stacked emissive accent rings, and a glowing beacon orb on top. Every pylon
+// is emissive (orb + rings on the bloom layer) and pulses gently — the orbs
 // and rings are the runway's main bloom accents.
+//
+// Dynamic point lights are thinned to every OTHER pylon (brighter, slightly
+// wider): ~20 always-on PointLights tax every lit fragment on screen, and with
+// decay-2 falloff each light only pools a few units around its own base — the
+// unlit pylons still read as lit via their pulsing emissive + bloom.
 export class Lanterns {
   constructor(scene, pal) {
     this.scene = scene;
@@ -72,13 +77,21 @@ export class Lanterns {
       const fin = new THREE.Mesh(finGeo, ringMat); fin.position.y = 2.65;
       fin.layers.enable(BLOOM_LAYER); g.add(fin);
 
-      const light = new THREE.PointLight(lightColor, lightI, 8, 2);
-      light.position.y = 2.35;
-      g.add(light);
+      // Dynamic light on alternating pylons only (see class comment) — kept
+      // ones run brighter/wider so their pool reads the same as before.
+      const keepLight = this.lit.length % 2 === 0;
+      const baseI = keepLight ? lightI * 1.35 : 0;
+      if (keepLight) {
+        const light = new THREE.PointLight(lightColor, baseI, 9, 2);
+        light.position.y = 2.35;
+        g.add(light);
+        this.lit.push({ orb, light, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI });
+      } else {
+        this.lit.push({ orb, light: null, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI: 0 });
+      }
 
       scene.add(g);
       this.groups.push(g);
-      this.lit.push({ orb, light, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI: lightI });
     }
   }
 
@@ -87,7 +100,7 @@ export class Lanterns {
     for (const l of this.lit) {
       const p = 0.85 + Math.sin(this._t * 2.2 + l.phase) * 0.15;
       l.orb.material.emissiveIntensity = l.baseE * p;
-      l.light.intensity = l.baseI * p;
+      if (l.light) l.light.intensity = l.baseI * p;
     }
   }
 

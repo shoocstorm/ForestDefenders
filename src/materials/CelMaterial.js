@@ -177,7 +177,10 @@ export function addOutlines(root, { color = 0x14140e, thickness = 0.018, skip = 
     if (transparent) return; // don't outline glass/eyes
     const outline = new THREE.Mesh(o.geometry, outlineMaterial(color, thickness));
     outline.renderOrder = -1;
-    outline.frustumCulled = false;
+    // Outlines share the source mesh's geometry, so their bounding sphere (and
+    // thus frustum culling) matches the parent exactly — they're culled WITH
+    // their mesh. (frustumCulled=false used to force every outline behind the
+    // camera to still submit a draw call, doubling enemy/prop mesh count.)
     // Mark BOTH flags so this outline isn't given its own outline when traverse
     // reaches it as a newly-added child of o (avoids infinite recursion).
     outline.userData.__isOutline = true;
@@ -224,12 +227,25 @@ export function celifyGLTF(root, opts = {}) {
       transparent: src.transparent || false, alphaTest: src.alphaTest || 0,
     });
     o.material = mat;
-    o.castShadow = true;
     o.receiveShadow = true;
     meshes.push(o);
     if (emInt > 0.01 || emMap) emissives.push(mat);
     box.expandByObject(o);
   });
+
+  // Shadow casters are size-gated: parts tiny relative to the model (eyes,
+  // glints, facial detail, thin trims) can't produce a readable shadow, but
+  // each still costs a full draw in the sun's shadow pass — and this scene has
+  // several hundred GLB meshes across enemies/props/landmarks.
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const partBox = new THREE.Box3();
+  const partSize = new THREE.Vector3();
+  for (const o of meshes) {
+    partBox.makeEmpty().expandByObject(o);
+    partBox.getSize(partSize);
+    o.castShadow = Math.max(partSize.x, partSize.y, partSize.z) > maxDim * 0.12;
+  }
 
   if (outline) addOutlines(root, { color: 0x14140e, thickness: opts.outlineThickness ?? 0.02, skip: opts.outlineSkip });
 

@@ -11,6 +11,40 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Performance pass: instancing, light thinning, shadow gating, DOM gating
+
+**Date:** 2026-09-06 · **Files:** `src/world/Arena.js`, `src/world/Water.js`,
+`src/world/Lanterns.js`, `src/materials/CelMaterial.js`, `src/ui/HUD.js`,
+`src/ui/WorldLabels.js`, `src/core/Game.js`
+
+A broad render/CPU performance pass (paired with the bug fixes logged in
+`AGENTS.md` the same date). Visual intent is preserved throughout:
+
+- **Boundary posts + caps instanced** — the containment perimeter's 52 posts +
+  52 caps (previously ~104 individual meshes, each with an identical fresh
+  `CylinderGeometry`/`SphereGeometry` and each drawn separately in the shadow
+  pass) now render as two `InstancedMesh`es. Same for the pond's 14 rim rocks
+  (one shared unit dodecahedron + one `InstancedMesh`).
+- **Tech-prop materials shared** — `_techProp`'s metal/panel/glow materials are
+  built once per level instead of three fresh (identical-param) materials per
+  prop (~177 unique materials per level before; each defeated batching and
+  carried its own uniform block).
+- **Lantern dynamic lights thinned** — every other runway pylon keeps its point
+  light (brighter, slightly wider); all 20 pylons still pulse via emissive orb +
+  bloom. Cuts ~10 always-on point lights from every lit fragment.
+- **Size-gated GLB shadow casters** — `celifyGLTF` no longer marks every mesh
+  (eyes, glints, tiny trims) as a shadow caster; parts smaller than ~12% of the
+  model's largest dimension skip the sun's shadow pass (161 of 607 painted GLB
+  meshes on L1).
+- **Outlines frustum-culled** — inverted-hull outlines share their source
+  mesh's geometry, so their bounding sphere (and culling) matches the parent;
+  they no longer force-render when behind the camera.
+- **HUD radar throttled to ~30 Hz** with a cached sweep gradient, and the sweep
+  now advances by elapsed time (it used to spin faster on high-refresh
+  displays). Stats overlay string/DOM writes are gated on visibility (4 Hz when
+  shown). WorldLabels' HP-bar width/background/prompt writes are change-gated
+  instead of per-frame.
+
 ## Cuter squirrel hero model
 
 **Date:** 2026-07-04 · **Files:** `src/entities/HeroModel.js`
