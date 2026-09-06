@@ -28,6 +28,34 @@ const COMBINE = {
     'void main(){ vec4 b=texture2D(tDiffuse,vUv); vec4 g=texture2D(tBloom,vUv); gl_FragColor=b+g*uStrength; }',
 };
 
+// Final image polish (production-visual pass): gentle saturation/contrast
+// grade, a soft vignette, and luminance-weighted animated film grain. Runs
+// AFTER OutputPass, i.e. on the tone-mapped sRGB image, as the last quad to
+// screen. All strengths are tiny by design — this is the "expensive game"
+// sheen, not a filter. Bypassed entirely on the Performance preset (post off).
+const POLISH = {
+  uniforms: {
+    tDiffuse: { value: null }, uVignette: { value: 0.32 }, uGrain: { value: 0.045 },
+    uSaturation: { value: 1.06 }, uContrast: { value: 1.04 }, uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:
+    'uniform sampler2D tDiffuse; uniform float uVignette,uGrain,uSaturation,uContrast,uTime;' +
+    'uniform vec2 uRes; varying vec2 vUv;\n' +
+    'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\n' +
+    'void main(){\n' +
+    '  vec3 c = texture2D(tDiffuse, vUv).rgb;\n' +
+    '  float lum = dot(c, vec3(0.2126,0.7152,0.0722));\n' +
+    '  c = mix(vec3(lum), c, uSaturation);\n' +
+    '  c = (c - 0.5) * uContrast + 0.5;\n' +
+    '  float d = distance(vUv, vec2(0.5));\n' +
+    '  c *= 1.0 - uVignette * smoothstep(0.32, 0.75, d);\n' +
+    '  c += (hash(vUv * uRes + vec2(mod(uTime, 10.0) * 43.7)) - 0.5) * uGrain * (1.0 - 0.5 * lum);\n' +
+    '  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);\n' +
+    '}',
+};
+
 export class PostFX {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
@@ -63,11 +91,19 @@ export class PostFX {
     this.gtao?.dispose();
     this.combine?.dispose();
     this.outputPass?.dispose();
+    this.polishPass?.dispose();
 
     const q = QUALITY[this.quality];
     const ao = AO_QUALITY[this.aoLevel] || AO_QUALITY[AO_QUALITY.DEFAULT];
     this.aoScale = ao.scale;
-    this.finalComposer = new EffectComposer(this.renderer);
+    // MSAA lives on the composer's render targets: the renderer's canvas
+    // antialias never applies while the post stack is active (geometry renders
+    // into these targets, not the canvas), so without samples every crisp cel
+    // edge aliases. WebGL2 resolves the multisampled buffer automatically when
+    // the following passes sample it.
+    this.finalComposer = new EffectComposer(this.renderer, new THREE.WebGLRenderTarget(w, h, {
+      type: THREE.HalfFloatType, samples: q.msaa || 0,
+    }));
 
     // AO runs only when the global quality tier allows it AND the player hasn't
     // turned it off. LOW renders GTAO at a fraction of screen resolution (aoScale)
@@ -99,6 +135,20 @@ export class PostFX {
 
     this.outputPass = new OutputPass();
     this.finalComposer.addPass(this.outputPass);
+
+    // Final polish quad — after OutputPass (sRGB image), before the screen.
+    const pz = q.polish || QUALITY.HIGH.polish;
+    this.polishPass = new ShaderPass(new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.clone(POLISH.uniforms),
+      vertexShader: POLISH.vertexShader, fragmentShader: POLISH.fragmentShader,
+    }), 'tDiffuse');
+    const pu = this.polishPass.material.uniforms;
+    pu.uVignette.value = pz.vignette;
+    pu.uGrain.value = pz.grain;
+    pu.uSaturation.value = pz.saturation;
+    pu.uContrast.value = pz.contrast;
+    this.finalComposer.addPass(this.polishPass);
+
     this.finalComposer.setSize(w, h);
   }
 
@@ -133,6 +183,9 @@ export class PostFX {
 
   render() {
     if (!this.postEnabled || this.mode === 'nopost') { this.renderer.render(this.scene, this.camera); return; }
+
+    // Animated grain (wrapped to keep float precision inside the hash).
+    if (this.polishPass) this.polishPass.material.uniforms.uTime.value = (performance.now() * 0.001) % 10;
 
     // Bloom pass: isolate the bloom layer on a black background.
     const bg = this.scene.background;
@@ -169,5 +222,7 @@ export class PostFX {
     this.finalComposer.setSize(w, h);
     this.gtao?.setSize(Math.max(1, Math.round(w * this.aoScale)), Math.max(1, Math.round(h * this.aoScale)));
     this.combine.material.uniforms.tBloom.value = this.bloomComposer.renderTarget2.texture;
+    // Grain is per-screen-pixel — scale the hash domain with the drawing buffer.
+    this.polishPass?.material.uniforms.uRes.value.set(w * pr, h * pr);
   }
 }

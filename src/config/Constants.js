@@ -422,8 +422,14 @@ export const TAIL_GUARD = { RANGE: 3.4, WARN_TIME: 5 };
 // HIGH = full stack (bloom + GTAO + god-rays); LOW drops the heavy passes for 60fps.
 export const QUALITY = {
   DEFAULT: 'HIGH',
-  HIGH: { bloom: true, ao: true, godrays: true, bloomScale: 1.0 },
-  LOW:  { bloom: true, ao: false, godrays: false, bloomScale: 0.5 },
+  // msaa: multisample count for the final composer's render targets. The
+  // renderer's canvas antialias is dead while the post stack is active (all
+  // geometry renders into composer targets, not the canvas), so MSAA has to be
+  // set on the targets themselves — without it every crisp cel edge aliases.
+  HIGH: { bloom: true, ao: true, godrays: true, bloomScale: 1.0, msaa: 4,
+          polish: { vignette: 0.32, grain: 0.045, saturation: 1.06, contrast: 1.04 } },
+  LOW:  { bloom: true, ao: false, godrays: false, bloomScale: 0.5, msaa: 0,
+          polish: { vignette: 0.28, grain: 0.030, saturation: 1.04, contrast: 1.02 } },
 };
 export const POST = {
   BLOOM_STRENGTH: 0.9, BLOOM_RADIUS: 0.5, BLOOM_THRESHOLD: 0.0, // selective: threshold 0 (bloom layer only)
@@ -473,11 +479,17 @@ export const BIOMES = {
     id: 'L1', name: 'Misty Forest',
     music: 'L1', ambient: 'L1',
     sky: 0xaed2dc, fog: 0xc2dbe0, fogNear: 30, fogFar: 200,
+    // Sky-dome gradient (SkyDome.js) — soft spring morning: pale cyan horizon
+    // matched to the fog color so distant geometry dissolves into the sky.
+    skyGrad: { zenith: 0x6f9cc2, horizon: 0xc7dde2, bottom: 0x93a8ae,
+      sunGlow: 0xffe9c4, sunPow: 24, sunGlowI: 0.4, stars: 0 },
     sun: { color: 0xfff2d6, intensity: 1.9, pos: [-25, 40, -10] },
     hemi: { sky: 0xcfe8ff, ground: 0x3a4a2a, intensity: 0.75 },
     fill: { color: 0xa0d8ff, intensity: 0.25 },
     tech: { accent: 0x7fff9f, accentEmissive: 0x39ff88, metal: 0x161922, metalRim: 0x7fff9f, panel: 0x232834 },
-    ground: 0x1b1f28, groundRim: 0x7fff9f, groundRimI: 0.4,
+    ground: 0x1b1f28, groundRim: 0x7fff9f, groundRimI: 0.4, groundAlt: 0x27313c,
+    // Low drifting mist banks (GroundFog.js) — the biome's namesake.
+    mist: { count: 14, opacity: 0.11, color: 0xd9e9ed, size: [16, 30], speed: 0.35 },
     path: 0x222a30, pathRim: 0x7fff9f,
     boundary: 0x14171e, boundaryRim: 0x39ff88,
     trees: { broadleaf: 0x46962f, broadleaf2: 0x3a7d28, pine: 0x2f7a3a, pine2: 0x276633, bark: 0x6e4a2a, barkRim: 0x7fff9f },
@@ -497,11 +509,16 @@ export const BIOMES = {
     id: 'L2', name: 'Ember Hollow',
     music: 'L2', ambient: 'L2',
     sky: 0x4a2820, fog: 0x6a3018, fogNear: 26, fogFar: 175,
+    // Volcanic dusk: deep maroon zenith into a hot ember horizon.
+    skyGrad: { zenith: 0x2a1220, horizon: 0xb04a20, bottom: 0x552016,
+      sunGlow: 0xff5a1a, sunPow: 12, sunGlowI: 0.85, stars: 0 },
     sun: { color: 0xff8a3a, intensity: 1.7, pos: [-18, 30, -8] },
     hemi: { sky: 0xff6a2a, ground: 0x2a1410, intensity: 0.7 },
     fill: { color: 0xff4a1a, intensity: 0.3 },
     tech: { accent: 0xff5a2a, accentEmissive: 0xff3a00, metal: 0x1c1512, metalRim: 0xff7a3a, panel: 0x2c211c },
-    ground: 0x1c1512, groundRim: 0xff5a2a, groundRimI: 0.45,
+    ground: 0x1c1512, groundRim: 0xff5a2a, groundRimI: 0.45, groundAlt: 0x2e2018,
+    // Thin smouldering haze drifting low over the char.
+    mist: { count: 9, opacity: 0.085, color: 0x59301c, size: [14, 26], speed: 0.5 },
     path: 0x2c211c, pathRim: 0xff7a3a,
     boundary: 0x17110e, boundaryRim: 0xff3a00,
     trees: { broadleaf: 0xcc5500, broadleaf2: 0x990000, pine: 0x556b2f, pine2: 0x3a4a1f, bark: 0x232b2b, barkRim: 0xff7a3a },
@@ -521,11 +538,16 @@ export const BIOMES = {
     id: 'L3', name: 'Ancient Grove',
     music: 'L3', ambient: 'L3',
     sky: 0x1a1a3a, fog: 0x2a2a5a, fogNear: 28, fogFar: 185,
+    // Moonlit night: indigo zenith, cool violet horizon, faint shader stars.
+    skyGrad: { zenith: 0x0c1030, horizon: 0x33457e, bottom: 0x1c2140,
+      sunGlow: 0xaebfff, sunPow: 36, sunGlowI: 0.5, stars: 0.4 },
     sun: { color: 0x8aa0ff, intensity: 1.45, pos: [-20, 45, -12] },
     hemi: { sky: 0x6080ff, ground: 0x1a1a3a, intensity: 0.7 },
     fill: { color: 0x6040ff, intensity: 0.3 },
     tech: { accent: 0x6ad0ff, accentEmissive: 0x4080ff, metal: 0x14172a, metalRim: 0x6ad0ff, panel: 0x1e2440 },
-    ground: 0x14172a, groundRim: 0x6ad0ff, groundRimI: 0.5,
+    ground: 0x14172a, groundRim: 0x6ad0ff, groundRimI: 0.5, groundAlt: 0x1e2648,
+    // Faint ethereal haze catching the moonlight.
+    mist: { count: 7, opacity: 0.07, color: 0x3a4670, size: [15, 28], speed: 0.28 },
     path: 0x1e2440, pathRim: 0x6ad0ff,
     boundary: 0x101324, boundaryRim: 0x4080ff,
     trees: { broadleaf: 0x4a6b6c, broadleaf2: 0x3a5a6c, pine: 0x4a6b6c, pine2: 0x3a5a5c, bark: 0x232b2b, barkRim: 0x6ad0ff },

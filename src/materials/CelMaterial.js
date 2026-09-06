@@ -123,8 +123,9 @@ function injectExtras(mat, { rim, wind } = {}) {
 // Cel-toon material for procedural geometry (hard bands).
 export function toon(opts = {}) {
   const { color = 0xffffff, emissive = 0x000000, emissiveIntensity = 0, map = null,
-          rim, transparent = false, wind, side } = opts;
-  const params = { color, emissive, emissiveIntensity, map, transparent, gradientMap: gradientMap() };
+          rim, transparent = false, wind, side, vertexColors = false } = opts;
+  const params = { color, emissive, emissiveIntensity, map, transparent, vertexColors,
+    gradientMap: gradientMap() };
   if (side !== undefined) params.side = side;
   const m = new THREE.MeshToonMaterial(params);
   return injectExtras(m, { rim, wind });
@@ -153,8 +154,15 @@ function outlineMaterial(color = 0x14140e, thickness = 0.018) {
       uniforms: { uColor: { value: new THREE.Color(color) }, uThick: { value: thickness } },
       vertexShader:
         `uniform float uThick;\n` +
-        `void main(){ vec3 p = position + normal * uThick; ` +
-        `gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+        `void main(){\n` +
+        `  vec4 mv = modelViewMatrix * vec4(position, 1.0);\n` +
+        // Inflate the hull with view distance so the projected line weight stays
+        // roughly constant in pixels — hand-inked consistency — instead of
+        // hairline-thin at range and heavy up close. Capped so distant objects
+        // don't balloon (and poke through fog/far geometry).
+        `  float f = clamp(-mv.z * 0.5, 1.0, 5.0);\n` +
+        `  vec3 p = position + normal * (uThick * f);\n` +
+        `  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }\n`,
       fragmentShader: `uniform vec3 uColor; void main(){ gl_FragColor = vec4(uColor, 1.0); }`,
       side: THREE.BackSide,
     });

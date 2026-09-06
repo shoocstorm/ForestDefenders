@@ -6,9 +6,30 @@ import { clone } from '../core/Assets.js';
 import { Vegetation } from './Vegetation.js';
 import { Water } from './Water.js';
 import { Lanterns } from './Lanterns.js';
-import { SkyDecor } from './SkyDecor.js'; 
+import { SkyDecor } from './SkyDecor.js';
+import { SkyDome } from './SkyDome.js';
+import { GroundFog } from './GroundFog.js';
 import { gridMaterial, forceFieldMaterial } from './TechFX.js';
 import { fireflyMaterial } from '../materials/DriftParticles.js';
+
+// --- Deterministic value noise for the ground's vertex-painted variation ---
+function _hash2(x, z) {
+  const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function _vnoise(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const xf = x - xi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+  const a = _hash2(xi, zi), b = _hash2(xi + 1, zi);
+  const c = _hash2(xi, zi + 1), d = _hash2(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function _fbm2(x, z) {
+  return _vnoise(x, z) * 0.62 + _vnoise(x * 2.7 + 13.1, z * 2.7 + 7.7) * 0.26 +
+    _vnoise(x * 6.3 + 41.3, z * 6.3 + 29.1) * 0.12;
+}
+const _gc = new THREE.Color(); // scratch for ground vertex painting
 
 // Biome-driven arena (LEVELS_SPEC). M1–M5 hard-coded L1 Misty Forest; M6 adds L2
 // Ember Hollow + L3 Ancient Grove by re-skinning all 7 set pieces from a BIOMES
@@ -32,6 +53,8 @@ export class Arena {
     this.water?.update(dt);
     this.lanterns?.update(dt);
     this.sky?.update(dt);
+    this.skyDome?.update(dt);
+    this.mist?.update(dt, this._t);
     // Advance every tech shader (grid + force-field panels).
     if (this._techMats) for (const m of this._techMats) {
       if (m.userData.__uTime) m.userData.__uTime.value = this._t;
@@ -115,10 +138,14 @@ export class Arena {
     this.water?.dispose();
     this.lanterns?.dispose();
     this.sky?.dispose();
+    this.skyDome?.dispose();
+    this.mist?.dispose();
     this.vegetation = null;
     this.water = null;
     this.lanterns = null;
     this.sky = null;
+    this.skyDome = null;
+    this.mist = null;
   }
 
   // Tag objects so dispose() can find and remove them on a biome switch.
@@ -152,6 +179,11 @@ export class Arena {
     sun.shadow.camera.left = -s; sun.shadow.camera.right = s;
     sun.shadow.camera.top = s; sun.shadow.camera.bottom = -s;
     sun.shadow.bias = -0.0004;
+    // Lift shadow samples along the surface normal by ~1 texel — kills the
+    // self-shadow stripe acne that PCF filtering picks up on curved toon-shaded
+    // surfaces (mushroom caps, tree canopies) without the peter-panning a
+    // bigger depth bias would introduce.
+    sun.shadow.normalBias = 0.05;
     this._add(sun);
     this.sun = sun;
 
@@ -165,9 +197,44 @@ export class Arena {
     this.scene.add(fill);
 
     // --- Ground ---
-    const groundGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH, 1, 1);
+    // Subdivided + vertex-painted instead of one flat colour: value-noise
+    // patches blend ground -> groundAlt, plus fine luminance grain, a worn
+    // track beside the runway, contact darkening under the dais, and a soft
+    // falloff toward the boundary walls. Reads as hand-drawn terrain rather
+    // than a fill polygon, for ~15k verts built once per level.
+    const groundGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH, 96, 160);
     groundGeo.rotateX(-Math.PI / 2);
-    const groundMat = toon({ color: b.ground, rim: { color: b.groundRim, intensity: b.groundRimI } });
+    {
+      const pos = groundGeo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const base = new THREE.Color(b.ground);
+      const alt = new THREE.Color(b.groundAlt ?? b.ground);
+      const ss = THREE.MathUtils.smoothstep;
+      const hx = ARENA.WIDTH / 2, hz = ARENA.LENGTH / 2;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        const n = _fbm2(x * 0.09, z * 0.09); // broad biome-colour patches
+        const fine = _vnoise(x * 0.45, z * 0.45); // fine grain
+        _gc.copy(base).lerp(alt, ss(n, 0.38, 0.72));
+        let lum = 0.93 + fine * 0.14;
+        // Worn ground beside the runway path (broken up by the fine noise).
+        lum *= 1 - 0.12 * (1 - ss(Math.abs(x), 2.0, 4.2)) * (0.55 + 0.45 * fine);
+        // Contact shading that grounds the central dais.
+        const dd = Math.hypot(x, z - 4);
+        lum *= 1 - 0.16 * (1 - ss(dd, 4.5, 8.0));
+        // Soft falloff toward the containment walls.
+        const edge = Math.max(Math.abs(x) / hx, Math.abs(z) / hz);
+        lum *= 1 - 0.14 * ss(edge, 0.72, 1.0);
+        colors[i * 3] = _gc.r * lum;
+        colors[i * 3 + 1] = _gc.g * lum;
+        colors[i * 3 + 2] = _gc.b * lum;
+      }
+      groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+    const groundMat = toon({
+      color: 0xffffff, vertexColors: true,
+      rim: { color: b.groundRim, intensity: b.groundRimI },
+    });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.receiveShadow = true;
     ground.userData.arenaOwned = true;
@@ -202,6 +269,8 @@ export class Arena {
     this.water = new Water(this.scene, ...b.water.pos, b.water.radius, b.water);
     this.lanterns = new Lanterns(this.scene, b.lantern);
     this.sky = new SkyDecor(this.scene, b);
+    this.skyDome = new SkyDome(this.scene, b, b.skyDecor?.bodyPos);
+    this.mist = new GroundFog(this.scene, b.mist);
     this._platform();
     this._scatterProps();
     this._bossLandmark();

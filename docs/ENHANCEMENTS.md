@@ -11,6 +11,43 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Production visual pass: MSAA, sky gradients, ground painting, mist, film polish
+
+**Date:** 2026-09-06 · **Files:** `src/core/PostFX.js`, `src/world/SkyDome.js` (new),
+`src/world/GroundFog.js` (new), `src/world/Arena.js`, `src/materials/CelMaterial.js`,
+`src/config/Constants.js`
+
+A retail-quality rendering pass. Every biome keeps its identity; each layer was
+tuned against headless screenshots of L1/L2/L3.
+
+- **Real anti-aliasing in post mode** — the renderer's canvas `antialias` never
+  applied while the composer stack was active (geometry renders into composer
+  targets, not the canvas), so every crisp cel edge aliased on High/Balanced.
+  The final composer now renders into 4×-MSAA HalfFloat targets (0 on the LOW
+  tier; Performance preset bypasses post and keeps canvas AA).
+- **Gradient sky domes** (`SkyDome.js`) — the flat `scene.background` colour is
+  replaced by a three-stop gradient (zenith/horizon/bottom) with a directional
+  sun/moon glow aligned to SkyDecor's sky body, a fine twinkling star field on
+  L3, and per-pixel dithering to kill gradient banding. Horizon colours are
+  chosen per biome to sit near the fog colour so distant geometry dissolves
+  into the sky. Works in the Performance preset too (it's plain scene geometry).
+- **Painted ground** — the floor is now a subdivided plane with value-noise
+  vertex painting: biome ground→alt-colour patches, fine luminance grain, a
+  worn track beside the runway, contact shading grounding the central dais,
+  and a soft falloff toward the containment walls.
+- **Drifting mist banks** (`GroundFog.js`) — layered soft alpha cards floating
+  low over the ground, biome-tinted and drifting; the volumetric-haze look
+  (heavy in Misty Forest, smouldering in Ember Hollow, faint moonglow haze in
+  Ancient Grove).
+- **Final image polish quad** — after the OutputPass: gentle saturation/
+  contrast grade, soft vignette, and luminance-weighted animated film grain
+  (lighter strengths on the LOW tier).
+- **Consistent outline ink weight** — inverted-hull outlines now inflate with
+  view distance (capped), so projected line weight stays roughly constant in
+  pixels instead of hairline-thin at range — a hand-inked look.
+- **Shadow stability** — sun `normalBias` (~1 texel) removes PCF self-shadow
+  stripes on curved toon surfaces.
+
 ## Performance pass: instancing, light thinning, shadow gating, DOM gating
 
 **Date:** 2026-09-06 · **Files:** `src/world/Arena.js`, `src/world/Water.js`,
