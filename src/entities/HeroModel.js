@@ -30,20 +30,20 @@ const SWITCH_DUR = 0.4;      // weapon-swap dip
 const KICK_DUR = 0.6;        // kick one-shot (extended for jump kick)
 const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
-// Palette — "storybook squirrel": honey-russet fur, soft cream belly/cheeks,
-// strawberry-pink inner ears/blush and warm amber accents. The warmer, lighter
-// values keep the tiny hero readable and cuddly from the over-shoulder camera.
-const FUR      = 0xb9824f;   // honey-russet fur
-const FUR_DARK = 0x6b472b;   // soft walnut fur / boots / forearms
-const FUR_LIGHT = 0xd6a36b;  // lighter face/ear rim highlights
-const CREAM    = 0xffefd2;   // warm cream belly
-const PINK     = 0xf2aaa6;   // warm pink ear inner
-const BLUSH    = 0xff8f9c;   // cheek blush
-const DARK     = 0x241612;   // near-black detailing
+// Palette — "confectionery lilac": soft lilac fur with plum shading, warm
+// vanilla cream, rose cheeks and a honey-gold energy accent. The violet family
+// pops in every biome (mint L1, complementary to L2's ember, bright against
+// L3's dark indigo) where the old honey-orange blended into Ember Hollow.
+const FUR      = 0xc5b3e6;   // soft lilac fur
+const FUR_DARK = 0x8d6fae;   // plum fur / boots / forearms
+const FUR_LIGHT = 0xdcccf2;  // pale lilac highlights (tail tip)
+const CREAM    = 0xfff6e0;   // warm vanilla belly
+const PINK     = 0xffc9d6;   // rose ear inner
+const BLUSH    = 0xffaebf;   // rosy cheek blush
+const DARK     = 0x35243d;   // deep plum detailing (eyes, smile)
 const METAL    = 0x3a3d44;
 const WOOD     = 0x6e4a26;
-const GLOW     = 0xffb347;   // warm amber energy glow (eyes, gem, tail tip)
-const AMBER    = 0xffb347;   // warm amber iris (pops against the warm fur)
+const GLOW     = 0xffd166;   // honey-gold energy glow (gem, tail tip)
 const GLINT = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
 // Self-emissive floor so the hero's shadow-band cel shading (~31% of lit color,
@@ -112,6 +112,12 @@ export class HeroModel {
     this._switchT = 0;  // weapon-swap dip timer
     this._kickT = 0;    // kick one-shot timer
     this._tailT = 0;    // tail-swing one-shot timer
+    // Cuteness one-shots: periodic blink + random ear twitch (pure charm, no
+    // gameplay coupling — safe to fire any time).
+    this._blinkNext = 2 + Math.random() * 3.5;
+    this._blinkT = 0;
+    this._twitchNext = 3 + Math.random() * 4;
+    this._twitchT = 0;
 
     this._build();
   }
@@ -122,18 +128,18 @@ export class HeroModel {
     root.rotation.y = Math.PI;
 
     // --- Legs (hip pivots under root so the feet stay planted while the body
-    // bobs). Each leg points down; the foot reaches the ground at y≈0. ---
+    // bobs). Chibi stubs: fat short capsules + oversized plush feet. ---
     for (const side of [-1, 1]) {
       const hip = new THREE.Group();
-      hip.position.set(side * 0.115, HIP_Y, 0);
+      hip.position.set(side * 0.105, HIP_Y, 0);
       root.add(hip);
-      mesh(new THREE.CapsuleGeometry(0.085, 0.16, 4, 8), T(FUR), hip, [0, -0.145, 0]);
-      mesh(new THREE.CapsuleGeometry(0.066, 0.105, 4, 8), T(FUR_DARK), hip, [0, -0.285, 0.01]);
+      mesh(new THREE.CapsuleGeometry(0.095, 0.13, 4, 8), T(FUR), hip, [0, -0.115, 0]);
+      mesh(new THREE.CapsuleGeometry(0.075, 0.085, 4, 8), T(FUR_DARK), hip, [0, -0.235, 0.01]);
       // Big rounded feet make the tiny ranger feel plush and toy-like.
-      const foot = mesh(new THREE.SphereGeometry(0.095, 12, 9), T(FUR_DARK), hip, [side * 0.008, -0.375, -0.06]);
-      foot.scale.set(1.18, 0.58, 1.78);
-      const toe = mesh(new THREE.SphereGeometry(0.035, 8, 6), T(CREAM), hip, [side * 0.008, -0.365, -0.145]);
-      toe.scale.set(1.4, 0.45, 0.8);
+      const foot = mesh(new THREE.SphereGeometry(0.105, 12, 9), T(FUR_DARK), hip, [side * 0.01, -0.325, -0.07]);
+      foot.scale.set(1.25, 0.6, 1.85);
+      const toe = mesh(new THREE.SphereGeometry(0.038, 8, 6), T(CREAM), hip, [side * 0.01, -0.315, -0.16]);
+      toe.scale.set(1.5, 0.5, 0.85);
       this.rig[side < 0 ? 'legL' : 'legR'] = hip;
     }
 
@@ -143,104 +149,110 @@ export class HeroModel {
     root.add(body);
     this.rig.body = body;
 
-    // Torso: smaller pear body under an oversized head for a chibi silhouette.
-    const torso = mesh(new THREE.SphereGeometry(0.215, 16, 12), T(FUR), body, [0, 0.145, 0]);
-    torso.scale.set(1.04, 1.16, 0.96);
-    const belly = mesh(new THREE.SphereGeometry(0.175, 16, 12), T(CREAM), body, [0, 0.115, -0.08]);
-    belly.scale.set(0.92, 1.12, 0.58);
-    const bellySpot = mesh(new THREE.SphereGeometry(0.045, 8, 6), T(0xfff7e5), body, [0, 0.185, -0.18]);
-    bellySpot.scale.set(1.15, 0.9, 0.35);
+    // Torso: small round pear under the oversized head — the chibi silhouette
+    // lives in the head:torso ratio (head Ø ≈ 1.3× torso Ø here).
+    const torso = mesh(new THREE.SphereGeometry(0.19, 16, 12), T(FUR), body, [0, 0.135, 0]);
+    torso.name = 'torso';
+    torso.scale.set(1.02, 1.1, 0.95);
+    const belly = mesh(new THREE.SphereGeometry(0.155, 16, 12), T(CREAM), body, [0, 0.105, -0.075]);
+    belly.scale.set(0.95, 1.15, 0.6);
+    const bellySpot = mesh(new THREE.SphereGeometry(0.04, 8, 6), T(0xfff7e5), body, [0, 0.17, -0.165]);
+    bellySpot.scale.set(1.2, 0.95, 0.35);
 
-    // Ranger scarf — a soft walnut collar ring that breaks the neck silhouette,
+    // Ranger scarf — a chunky soft collar that breaks the neck silhouette,
     // with a glowing energy gem set at the throat (the hero's "core").
-    const scarf = mesh(new THREE.TorusGeometry(0.13, 0.045, 8, 16), T(FUR_DARK), body, [0, 0.34, -0.02], [Math.PI / 2, 0, 0]);
+    const scarf = mesh(new THREE.TorusGeometry(0.115, 0.055, 8, 16), T(FUR_DARK), body, [0, 0.32, -0.015], [Math.PI / 2, 0, 0]);
     scarf.scale.set(1, 1, 0.8);
-    const gem = mesh(new THREE.OctahedronGeometry(0.05, 0), GLOWMAT(GLOW, 1.8), body, [0, 0.30, -0.16]);
+    const gem = mesh(new THREE.OctahedronGeometry(0.048, 0), GLOWMAT(GLOW, 1.8), body, [0, 0.285, -0.165]);
     gem.scale.set(1, 1.4, 0.7);
     gem.userData.__outline = true; // keep the gem reading as pure light
     this.rig.gem = gem;
 
-    // --- Head pivot. ---
+    // --- Head pivot. Minimal cartoon face: an oversized round head, cream
+    // cheek puffs, a round muzzle, solid bean eyes with a single big
+    // catchlight, one soft blush dot per cheek, simple bubble ears and the
+    // buck-teeth signature. Deliberately spare — every part left earns its
+    // silhouette. ---
     const head = new THREE.Group();
-    head.position.set(0, 0.435, -0.035);
+    head.position.set(0, 0.415, -0.03);
     body.add(head);
     this.rig.head = head;
-    const headBall = mesh(new THREE.SphereGeometry(0.205, 18, 14), T(FUR), head, [0, 0.005, 0]);
-    headBall.scale.set(1.03, 1.02, 0.97);
-    const forehead = mesh(new THREE.SphereGeometry(0.12, 12, 10), T(FUR_LIGHT), head, [0, 0.08, -0.095]);
-    forehead.scale.set(1.05, 0.75, 0.45);
-    // Chubby cream cheeks — the chipmunk/squirrel "stuffed" look, framing a short
-    // rounded muzzle with a small dark nose. Kept simple and extra soft.
+    const headBall = mesh(new THREE.SphereGeometry(0.24, 20, 15), T(FUR), head, [0, 0.005, 0]);
+    headBall.name = 'headBall';
+    headBall.scale.set(1.02, 1.0, 0.96);
+    // Chubby cream cheeks — the chipmunk/squirrel "stuffed" look.
     for (const sx of [-1, 1]) {
-      const cheek = mesh(new THREE.SphereGeometry(0.09, 12, 9), T(CREAM), head, [sx * 0.078, -0.052, -0.122]);
-      cheek.scale.set(1.13, 0.9, 0.9);
-      const blush = mesh(new THREE.SphereGeometry(0.028, 8, 6), T(BLUSH), head, [sx * 0.118, -0.035, -0.188]);
-      blush.scale.set(1.35, 0.52, 0.28);
+      const cheek = mesh(new THREE.SphereGeometry(0.11, 12, 9), T(CREAM), head, [sx * 0.085, -0.07, -0.14]);
+      cheek.scale.set(1.25, 1.0, 0.95);
+      // One soft blush dot per cheek — a cartoon sticker blush. Pushed far
+      // enough out of the cheek puff to clearly poke through its surface
+      // (an embedded blush sphere renders invisible behind the cheek shell),
+      // and strongly self-lit so it stays a flat bright rose in every light
+      // band instead of shading dim on backlit faces.
+      const blush = mesh(new THREE.SphereGeometry(0.042, 8, 6), T(BLUSH, { emissiveIntensity: 0.8 }), head, [sx * 0.138, -0.055, -0.242]);
+      blush.name = sx < 0 ? 'blushL' : 'blushR';
+      blush.scale.set(1.05, 0.85, 0.5);
     }
-    const snout = mesh(new THREE.SphereGeometry(0.075, 12, 10), T(CREAM), head, [0, -0.05, -0.165]);
-    snout.scale.set(1.18, 0.78, 0.88);
-    const nose = mesh(new THREE.SphereGeometry(0.027, 9, 8), T(0x3a2a2e), head, [0, -0.032, -0.228]);
-    nose.scale.set(1.24, 0.78, 0.85);
+    const snout = mesh(new THREE.SphereGeometry(0.085, 12, 10), T(CREAM), head, [0, -0.065, -0.185]);
+    snout.scale.set(1.3, 0.85, 0.95);
+    const nose = mesh(new THREE.SphereGeometry(0.034, 9, 8), T(DARK), head, [0, -0.042, -0.262]);
+    nose.scale.set(1.3, 0.9, 0.8);
+    // Simple "w" smile from two small capsules.
     for (const sx of [-1, 1]) {
-      const smile = mesh(new THREE.CapsuleGeometry(0.006, 0.042, 3, 6), T(DARK), head,
-        [sx * 0.025, -0.075, -0.226], [0, 0, sx * 0.72]);
+      const smile = mesh(new THREE.CapsuleGeometry(0.008, 0.052, 3, 6), T(DARK), head,
+        [sx * 0.03, -0.105, -0.252], [0, 0, sx * 0.72]);
       smile.userData.__outline = true;
-      for (const wy of [-0.055, -0.085]) {
-        const whisker = mesh(new THREE.CapsuleGeometry(0.004, 0.115, 3, 5), T(FUR_DARK), head,
-          [sx * 0.112, wy, -0.21], [0, 0, sx * 1.26 + (wy > -0.07 ? -sx * 0.18 : sx * 0.08)]);
-        whisker.userData.__outline = true;
-      }
     }
+    // Eyes: solid deep-plum beans with ONE big white catchlight — the classic
+    // minimal cartoon eye. Each in a named group (scale.y = blink).
+    this.eyes = [];
     for (const sx of [-1, 1]) {
-      // Large glossy eyes with amber lower glints: the strongest cuteness read.
-      const eye = mesh(new THREE.SphereGeometry(0.055, 14, 12), T(DARK), head, [sx * 0.082, 0.058, -0.172]);
-      eye.scale.set(0.95, 1.18, 0.72);
-      const iris = mesh(new THREE.SphereGeometry(0.026, 10, 8), GLOWMAT(AMBER, 0.7), head, [sx * 0.086, 0.047, -0.207]);
-      iris.scale.set(0.88, 1.1, 0.35);
-      const bigGlint = mesh(new THREE.SphereGeometry(0.016, 6, 6), GLINT, head, [sx * 0.068, 0.088, -0.211]);
-      bigGlint.userData.__outline = true;
-      bigGlint.castShadow = false;
-      const smallGlint = mesh(new THREE.SphereGeometry(0.008, 5, 5), GLINT, head, [sx * 0.101, 0.054, -0.215]);
-      smallGlint.userData.__outline = true;
-      smallGlint.castShadow = false;
-      const brow = mesh(new THREE.CapsuleGeometry(0.006, 0.046, 3, 6), T(FUR_DARK), head,
-        [sx * 0.08, 0.122, -0.181], [0, 0, -sx * 0.55]);
-      brow.userData.__outline = true;
-      // Rounded ears with small tufts, less sharp than the old cone ears.
+      const eye = new THREE.Group();
+      eye.name = sx < 0 ? 'eyeL' : 'eyeR';
+      eye.position.set(sx * 0.095, 0.015, -0.185);
+      head.add(eye);
+      this.eyes.push(eye);
+      const ball = mesh(new THREE.SphereGeometry(0.072, 14, 12), T(DARK), eye, [0, 0, 0]);
+      ball.scale.set(0.98, 1.28, 0.75);
+      const glint = mesh(new THREE.SphereGeometry(0.026, 6, 6), GLINT, eye, [-sx * 0.022, 0.04, -0.045]);
+      glint.userData.__outline = true;
+      glint.castShadow = false;
+      // Round bubble ears — lilac shell + rose inner, nothing else.
       const ear = new THREE.Group();
-      ear.position.set(sx * 0.125, 0.19, 0.012);
-      ear.rotation.set(0.1, 0, sx * 0.28);
+      ear.position.set(sx * 0.135, 0.225, 0.01);
+      ear.rotation.set(0.08, 0, sx * 0.22);
       head.add(ear);
-      const earOuter = mesh(new THREE.SphereGeometry(0.07, 12, 9), T(FUR), ear, [0, 0.02, 0]);
-      earOuter.scale.set(0.82, 1.28, 0.52);
-      const earInner = mesh(new THREE.SphereGeometry(0.043, 10, 8), T(PINK), ear, [0, 0.01, -0.018]);
-      earInner.scale.set(0.72, 1.05, 0.3);
-      mesh(new THREE.ConeGeometry(0.026, 0.065, 6), T(FUR_LIGHT), ear, [0, 0.105, 0.004], [0, 0, sx * 0.12]);
-      mesh(new THREE.SphereGeometry(0.014, 6, 6), GLOWMAT(GLOW, 0.9), ear, [0, 0.13, -0.004]);
+      const earOuter = mesh(new THREE.SphereGeometry(0.09, 12, 9), T(FUR), ear, [0, 0.02, 0]);
+      earOuter.scale.set(0.92, 1.1, 0.55);
+      const earInner = mesh(new THREE.SphereGeometry(0.058, 10, 8), T(PINK), ear, [0, 0.012, -0.02]);
+      earInner.scale.set(0.82, 1.0, 0.35);
+      if (sx < 0) { this.rig.earL = ear; this._earLz = ear.rotation.z; }
+      else { this.rig.earR = ear; this._earRz = ear.rotation.z; }
     }
     // Prominent buck teeth — the squirrel signature, two front incisors.
     for (const sx of [-1, 1]) {
-      const tooth = mesh(new THREE.BoxGeometry(0.022, 0.046, 0.015), T(0xfffef2), head, [sx * 0.013, -0.105, -0.219]);
+      const tooth = mesh(new THREE.BoxGeometry(0.026, 0.042, 0.016), T(0xfffef2), head, [sx * 0.015, -0.135, -0.248]);
       tooth.rotation.z = sx * 0.04;
     }
 
     // --- Arms: real two-bone chains (shoulder → elbow → paw). Built straight,
     // hanging down -Y; update() solves IK each frame so the paws land on the
     // gun's grip pivots and follow it through bob/recoil (genuine grip, not a
-    // fixed pose). l1/l2 are the upper/forearm bone lengths the solver uses. ---
-    const L1 = 0.19, L2 = 0.19; // bone lengths → total reach 0.38
+    // fixed pose). Chibi-short bones with chunky mitts. l1/l2 are the upper/
+    // forearm bone lengths the solver uses. ---
+    const L1 = 0.175, L2 = 0.175; // bone lengths → total reach 0.35
     for (const side of [-1, 1]) {
       const sh = new THREE.Group();
-      sh.position.set(side * 0.168, 0.285, -0.025);
+      sh.position.set(side * 0.155, 0.27, -0.02);
       body.add(sh);
       // Upper arm hangs along -Y; elbow pivot sits at its far end.
-      mesh(new THREE.CapsuleGeometry(0.06, L1 - 0.06, 4, 8), T(FUR), sh, [0, -L1 / 2, 0]);
+      mesh(new THREE.CapsuleGeometry(0.064, L1 - 0.064, 4, 8), T(FUR), sh, [0, -L1 / 2, 0]);
       const elbow = new THREE.Group();
       elbow.position.set(0, -L1, 0);
       sh.add(elbow);
-      mesh(new THREE.CapsuleGeometry(0.054, L2 - 0.06, 4, 8), T(FUR_DARK), elbow, [0, -L2 / 2, 0]);
-      const paw = mesh(new THREE.SphereGeometry(0.067, 12, 8), T(CREAM), elbow, [0, -L2, 0]);
-      paw.scale.set(1.12, 0.92, 1.0);
+      mesh(new THREE.CapsuleGeometry(0.058, L2 - 0.058, 4, 8), T(FUR_DARK), elbow, [0, -L2 / 2, 0]);
+      const paw = mesh(new THREE.SphereGeometry(0.075, 12, 8), T(CREAM), elbow, [0, -L2, 0]);
+      paw.scale.set(1.2, 0.95, 1.05);
       this.rig[side < 0 ? 'armL' : 'armR'] = sh;
       // side<0 (left) takes the forward fore-grip; side>0 (right) the rear trigger grip.
       this.arms.push({ shoulder: sh, elbow, l1: L1, l2: L2, side, grip: side < 0 ? 'gripFore' : 'gripRear' });
@@ -248,7 +260,7 @@ export class HeroModel {
 
     // --- Rifle (held under the body pivot so it tracks chest pose). Barrel -Z. ---
     const gun = new THREE.Group();
-    gun.position.set(0.02, 0.26, -0.18);
+    gun.position.set(0.02, 0.26, -0.17);
     body.add(gun);
     this.rig.gun = gun;
     // Disposable visual shell — rebuilt per selected weapon by setWeapon(). The
@@ -267,7 +279,7 @@ export class HeroModel {
     gun.add(gripRear);
     this.pivots.gripRear = gripRear;
     const gripFore = new THREE.Object3D();    // left support hand, on the forestock
-    gripFore.position.set(-0.02, -0.04, -0.16);
+    gripFore.position.set(-0.02, -0.04, -0.15);
     gun.add(gripFore);
     this.pivots.gripFore = gripFore;
     // Muzzle origin at the barrel tip (non-mesh → no outline). Repositioned per
@@ -287,28 +299,29 @@ export class HeroModel {
     // Build the default silhouette; Player calls setWeapon() with the real def.
     this._buildGunMeshes(null);
 
-    // --- Bushy tail: oversized curled plume with cream puffs along the inner arc. ---
+    // --- Bushy tail: oversized curled plume with cream puffs along the inner
+    // arc. Even bigger relative to the body — the signature squirrel sweep. ---
     const tail = new THREE.Group();
     tail.position.set(0, 0.08, 0.155);
     body.add(tail);
     this.rig.tail = tail;
     const segs = [
-      { p: [0, 0.00, 0.05], r: 0.105, c: FUR_DARK, s: [1.0, 0.9, 1.0] },
-      { p: [0.015, 0.12, 0.14], r: 0.155, c: FUR, s: [1.12, 1.0, 0.95] },
-      { p: [0.005, 0.29, 0.17], r: 0.205, c: FUR_DARK, s: [1.15, 1.05, 1.0] },
-      { p: [-0.01, 0.47, 0.105], r: 0.215, c: FUR, s: [1.2, 1.0, 0.95] },
-      { p: [-0.005, 0.61, -0.035], r: 0.17, c: FUR_LIGHT, s: [1.1, 0.95, 0.92] },
+      { p: [0, 0.00, 0.05], r: 0.115, c: FUR_DARK, s: [1.0, 0.9, 1.0] },
+      { p: [0.015, 0.12, 0.14], r: 0.175, c: FUR, s: [1.12, 1.0, 0.95] },
+      { p: [0.005, 0.30, 0.17], r: 0.235, c: FUR_DARK, s: [1.15, 1.05, 1.0] },
+      { p: [-0.01, 0.49, 0.105], r: 0.245, c: FUR, s: [1.2, 1.0, 0.95] },
+      { p: [-0.005, 0.63, -0.035], r: 0.19, c: FUR_LIGHT, s: [1.1, 0.95, 0.92] },
     ];
     for (const s of segs) {
       const puff = mesh(new THREE.SphereGeometry(s.r, 14, 10), T(s.c), tail, s.p);
       puff.scale.set(...s.s);
     }
-    for (const p of [[0, 0.23, 0.035], [0, 0.41, -0.005], [0, 0.55, -0.095]]) {
-      const stripe = mesh(new THREE.SphereGeometry(0.065, 10, 8), T(CREAM), tail, p);
-      stripe.scale.set(1.35, 0.8, 0.45);
+    for (const p of [[0, 0.23, 0.035], [0, 0.43, -0.005], [0, 0.57, -0.095]]) {
+      const stripe = mesh(new THREE.SphereGeometry(0.075, 10, 8), T(CREAM), tail, p);
+      stripe.scale.set(1.4, 0.8, 0.45);
     }
     // Warm glow tip caps the tail with a magical firefly-like accent.
-    mesh(new THREE.SphereGeometry(0.062, 10, 8), GLOWMAT(GLOW, 0.9), tail, [0, 0.69, -0.085]);
+    mesh(new THREE.SphereGeometry(0.07, 10, 8), GLOWMAT(GLOW, 0.9), tail, [0, 0.71, -0.085]);
 
     addOutlines(root, { thickness: 0.014 });
 
@@ -429,6 +442,12 @@ export class HeroModel {
     if (this._switchT > 0) this._switchT = Math.max(0, this._switchT - dt);
     if (this._kickT > 0) this._kickT = Math.max(0, this._kickT - dt);
     if (this._tailT > 0) this._tailT = Math.max(0, this._tailT - dt);
+    this._blinkNext -= dt;
+    if (this._blinkNext <= 0) { this._blinkT = 0.22; this._blinkNext = 2 + Math.random() * 3.5; }
+    if (this._blinkT > 0) this._blinkT = Math.max(0, this._blinkT - dt);
+    this._twitchNext -= dt;
+    if (this._twitchNext <= 0) { this._twitchT = 0.26; this._twitchNext = 2.5 + Math.random() * 4.5; }
+    if (this._twitchT > 0) this._twitchT = Math.max(0, this._twitchT - dt);
 
     // Blend locomotion weights smoothly.
     const moveTarget = this.moving && this.grounded ? 1 : 0;
@@ -457,9 +476,10 @@ export class HeroModel {
     this.rig.legL.rotation.x = lerp(swingL, tuck, air);
     this.rig.legR.rotation.x = lerp(swingR, tuck, air * 0.85);
 
-    // Body: bob + forward lean (− on recoil it rocks back), small idle breathing.
+    // Body: bob + forward lean (− on recoil it rocks back), calm deep idle
+    // breathing (bouncier than before — a plush-toy "alive" read).
     const walkBob = Math.abs(Math.sin(ph)) * lerp(0.02, 0.045, sp) * m;
-    const breathe = Math.sin(this._t * 1.7) * 0.012 * (1 - m);
+    const breathe = Math.sin(this._t * 1.35) * 0.02 * (1 - m);
     this.rig.body.position.y = this._bodyRestY + walkBob + breathe - air * 0.04;
     this.rig.body.rotation.x = lean + air * 0.15 - recoil * 0.12;
     this.rig.body.rotation.z = Math.sin(ph) * 0.04 * m;
@@ -500,8 +520,33 @@ export class HeroModel {
     // Solve the arm IK last so the paws lock onto the (now-posed) gun grips.
     for (const arm of this.arms) this._solveArm(arm);
 
-    // Head: subtle counter-bob + look-into-run.
+    // Head: subtle counter-bob + look-into-run, plus a gentle curious head
+    // tilt while idling (symmetric bobbing heads read robotic; a slow tilt
+    // reads alive and sweet).
     this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m;
+    this.rig.head.rotation.z = Math.sin(this._t * 0.85) * 0.06 * (1 - m);
+
+    // Blink: squash the whole eye group (ball + catchlight together) in a
+    // quick close/open. Periodic and random — the single cheapest "alive" cue.
+    let lid = 1;
+    if (this._blinkT > 0) {
+      const bp = 1 - this._blinkT / 0.22; // 0→1 across the blink
+      lid = bp < 0.35 ? 1 - (bp / 0.35) * 0.94
+        : bp < 0.5 ? 0.06
+        : 0.06 + ((bp - 0.5) / 0.5) * 0.94;
+    }
+    for (const e of this.eyes) e.scale.y = lid;
+
+    // Ear twitch: a quick wiggling flick of one ear on a random slow cadence.
+    if (this._twitchT > 0) {
+      const tp = 1 - this._twitchT / 0.26;
+      const w = Math.sin(tp * Math.PI * 2.5) * 0.2 * (1 - tp);
+      this.rig.earL.rotation.z = this._earLz - w;
+      this.rig.earR.rotation.z = this._earRz + w;
+    } else {
+      this.rig.earL.rotation.z = this._earLz;
+      this.rig.earR.rotation.z = this._earRz;
+    }
 
     // Energy gem: gentle breathing pulse, brighter while moving/firing.
     if (this.rig.gem) {
@@ -509,9 +554,11 @@ export class HeroModel {
         1.4 + Math.sin(this._t * 3.2) * 0.3 + recoil * 1.2 + m * 0.4;
     }
 
-    // Tail: lazy idle sway, streams up/out at speed, flares on jump.
-    const tailSway = Math.sin(this._t * 2.2 + ph) * lerp(0.12, 0.28, m);
+    // Tail: lazy oversized idle sway with a secondary curl, streams up/out at
+    // speed, flares on jump.
+    const tailSway = Math.sin(this._t * 1.8 + ph) * lerp(0.18, 0.32, m);
     this.rig.tail.rotation.z = tailSway;
+    this.rig.tail.rotation.y = Math.sin(this._t * 1.3) * 0.08 * (1 - m * 0.5);
     this.rig.tail.rotation.x = -lean * 0.6 - air * 0.4 + Math.sin(this._t * 1.4) * 0.05;
 
     // Tail swing (R): 3 fast full-body spins with the tail flared huge (JUICE §12).

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
+import { ARENA, BLOOM_LAYER, CAMERA } from '../config/Constants.js';
 
 // Team-aware projectile pool. Player-team shots test against enemies; enemy-team
 // shots (e.g. Fire Shroom fireballs) test against the player. Meshes are pooled
@@ -16,29 +16,88 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 // kept burning uniform slots in all lit shaders.) The first LIGHT_BUDGET live
 // bullets each borrow a light and drag it along; bullets past the budget still
 // render — they glow via the bloom layer — they just don't cast dynamic light.
+//
+// --- Visual redesign (retention pass) ---
+// Each bullet layers THREE reads: (1) the bright core mesh (toneMapped=false so
+// the color pops pre-ACES), (2) an additive billboard halo sprite for energy
+// shots, and (3) a comet trail rendered as ONE global Points cloud — a fixed
+// 64-bullet × 16-point ring buffer, zero allocation per frame, one draw call.
+// Trails linger ~0.3s after a bullet dies, so kills/expiry leave a fading streak.
 const LIGHT_BUDGET = 6;
+const MAX_BULLETS = 64;   // trail-slice capacity (bullets past this skip trails)
+const TRAIL_LEN = 16;     // points per bullet's trail
+const TRAIL_FADE = 1 / 0.3; // alpha decay rate → ~0.3s visible tail
 
 // Per-weapon bullet looks. Each shot is a single pooled mesh; `geo` selects the
 // cached geometry (built unit-sized, then scaled by the shot radius * `scale`),
 // `orient` aligns local +Z to the flight direction (so streaks/arrows/rings point
 // where they travel and the bow arrow tips down as its arc falls), `spin` rolls it
 // about the travel axis (rad/s) and `flicker` pulses the scale for a fiery shimmer.
+// `trail` = comet-trail length in points (0 = none); `halo` = additive glow-sprite
+// scale multiplier (0 = none — solid physical shots stay unhaloed).
 // `orb` is the default fallback used by enemy shots and anything without a style.
 const BULLET_STYLES = {
-  orb:    { geo: 'sphere',  scale: [1, 1, 1] },
-  acorn:  { geo: 'sphere',  scale: [0.8, 0.8, 1.35], orient: true },        // little nut, long axis forward
-  shard:  { geo: 'octa',    scale: [0.7, 0.7, 1.6], orient: true, spin: 9 }, // spinning energy crystal
-  tracer: { geo: 'capsule', scale: [0.45, 0.45, 2.6], orient: true },        // thin high-speed streak
-  pellet: { geo: 'sphere',  scale: [0.85, 0.85, 0.85] },                     // small buckshot
-  fire:   { geo: 'sphere',  scale: [1.15, 1.15, 1.15], flicker: true },      // throbbing fireball
-  arrow:  { geo: 'cone',    scale: [0.5, 0.5, 1.7], orient: true, spin: 3 }, // dart pointing forward
-  ring:   { geo: 'torus',   scale: [1, 1, 1], orient: true, spin: 13 },      // spinning EMP halo
+  orb:    { geo: 'sphere',  scale: [1, 1, 1], trail: 10, halo: 4.2 },
+  acorn:  { geo: 'sphere',  scale: [0.8, 0.8, 1.35], orient: true, trail: 6 },     // little nut, long axis forward
+  shard:  { geo: 'octa',    scale: [0.7, 0.7, 1.6], orient: true, spin: 9, trail: 14, halo: 3.6 }, // spinning energy crystal
+  tracer: { geo: 'capsule', scale: [0.45, 0.45, 2.6], orient: true, trail: 16 },   // thin high-speed streak
+  pellet: { geo: 'sphere',  scale: [0.85, 0.85, 0.85], trail: 5 },                 // small buckshot
+  fire:   { geo: 'sphere',  scale: [1.15, 1.15, 1.15], flicker: true, trail: 12, halo: 4.6 }, // throbbing fireball
+  arrow:  { geo: 'cone',    scale: [0.5, 0.5, 1.7], orient: true, spin: 3, trail: 8 }, // dart pointing forward
+  ring:   { geo: 'torus',   scale: [1, 1, 1], orient: true, spin: 13, halo: 3.2 }, // spinning EMP halo
 };
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 // Largest hitRadius across ENEMY_DEFS (Constants.js), rounded up. Used to size the
 // SpatialGrid query margin for the player-team hit-test below — generous enough to
 // never miss a real hit, still narrow enough to keep the query to a handful of cells.
 const MAX_ENEMY_HIT_RADIUS = 1.2;
+
+// Shared soft-glow texture for the halo sprites (module-level: built once).
+let _haloTex;
+function haloTexture() {
+  if (_haloTex) return _haloTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 2, 64, 64, 63);
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.16)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  _haloTex = new THREE.CanvasTexture(c);
+  return _haloTex;
+}
+
+// One additive Points cloud renders every bullet's comet trail. Per-point color,
+// fade and size; the vertex shader tapers point size by fade so tails shrink
+// toward their end. Custom shader → no tone-mapping → the trail core stays hot.
+const TRAIL_VERT = /* glsl */`
+  attribute vec3 aColor;
+  attribute float aFade;
+  attribute float aSize;
+  uniform float uPx; // drawing-buffer pixels per world unit at 1m (set per tick)
+  varying vec3 vColor;
+  varying float vFade;
+  void main() {
+    vColor = aColor;
+    vFade = aFade;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = min(aSize * (0.35 + 0.65 * aFade) * (uPx / max(0.1, -mv.z)), 96.0);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const TRAIL_FRAG = /* glsl */`
+  varying vec3 vColor;
+  varying float vFade;
+  void main() {
+    if (vFade <= 0.01) discard;
+    float d = length(gl_PointCoord - 0.5) * 2.0;
+    float a = smoothstep(1.0, 0.15, d) * vFade;
+    gl_FragColor = vec4(vColor * a, a); // additive
+  }
+`;
 
 export class ProjectilePool {
   constructor(scene) {
@@ -60,6 +119,42 @@ export class ProjectilePool {
       scene.add(light);
       this._lightSlots.push({ light, owner: null });
     }
+    this._buildTrails(scene);
+  }
+
+  // Fixed-capacity trail cloud: every pooled bullet (up to MAX_BULLETS) owns a
+  // TRAIL_LEN slice of the attribute arrays and writes its live position into a
+  // advancing ring slot each tick; fades decay globally so tails linger briefly
+  // after death. One draw call for ALL trails, nothing allocated per frame.
+  _buildTrails(scene) {
+    const n = MAX_BULLETS * TRAIL_LEN;
+    this._trailPos = new Float32Array(n * 3);
+    this._trailCol = new Float32Array(n * 3);
+    this._trailFade = new Float32Array(n);
+    this._trailSize = new Float32Array(n);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this._trailPos, 3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(this._trailCol, 3));
+    geo.setAttribute('aFade', new THREE.BufferAttribute(this._trailFade, 1));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(this._trailSize, 1));
+    this._trailMat = new THREE.ShaderMaterial({
+      uniforms: { uPx: { value: 700 } },
+      vertexShader: TRAIL_VERT, fragmentShader: TRAIL_FRAG,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this._trails = new THREE.Points(geo, this._trailMat);
+    this._trails.frustumCulled = false;
+    this._trails.layers.enable(BLOOM_LAYER);
+    scene.add(this._trails);
+  }
+
+  // Drawing-buffer pixels per world unit at 1m distance — approximated from the
+  // viewport height, camera FOV and device pixel ratio (soft glow, no precision
+  // needed). Refreshed each tick so resizes/DPR changes stay roughly right.
+  _updateTrailScale() {
+    const fovRad = (CAMERA.FOV * Math.PI) / 180;
+    this._trailMat.uniforms.uPx.value =
+      (window.innerHeight * Math.min(window.devicePixelRatio, 2)) / (2 * Math.tan(fovRad / 2));
   }
 
   // Lazily build & cache the unit geometry for a style. Elongated shapes are baked
@@ -81,11 +176,24 @@ export class ProjectilePool {
   _acquire() {
     for (const p of this.items) if (!p.active) return p;
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    mat.toneMapped = false; // core color pops pre-ACES instead of washing out
     const mesh = new THREE.Mesh(this._geoFor('sphere'), mat);
     mesh.castShadow = false;
     mesh.layers.enable(BLOOM_LAYER); // projectiles glow in the post pipeline
+    // Additive halo sprite (energy shots): sibling of the mesh, NOT a child —
+    // child sprites inherit the mesh's non-uniform style scale (a stretched
+    // tracer would squash its round glow).
+    const haloMat = new THREE.SpriteMaterial({
+      map: haloTexture(), transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false,
+    });
+    const halo = new THREE.Sprite(haloMat);
+    halo.visible = false;
+    halo.layers.enable(BLOOM_LAYER);
+    this.scene.add(halo);
     const p = {
-      active: false, mesh, mat, slot: null,
+      active: false, mesh, mat, halo, slot: null,
+      trailIdx: Math.min(this.items.length, MAX_BULLETS - 1), trailHead: 0,
       pos: new THREE.Vector3(), vel: new THREE.Vector3(),
       damage: 0, element: 'PHYSICAL', team: 'player',
       radius: 0.16, life: 0, gravity: 0,
@@ -139,6 +247,24 @@ export class ProjectilePool {
     p.sy = p.radius * style.scale[1];
     p.sz = p.radius * style.scale[2];
 
+    // Halo sprite: colored + sized per shot for glow styles, hidden for solid ones.
+    if (style.halo) {
+      p.halo.visible = true;
+      p.halo.material.color.setHex(color);
+      const hs = p.radius * style.halo;
+      p.halo.scale.set(hs, hs, 1);
+      p.halo.position.copy(p.pos);
+    } else {
+      p.halo.visible = false;
+    }
+    // Reset this bullet's trail slice (stale fade from its previous life would
+    // otherwise streak from the old death point to the new spawn point).
+    if (style.trail) {
+      const base = p.trailIdx * TRAIL_LEN;
+      this._trailFade.fill(0, base, base + TRAIL_LEN);
+      p.trailHead = 0;
+    }
+
     p.mesh.position.copy(origin);
     p.mesh.scale.set(p.sx, p.sy, p.sz);
     if (style.orient) this._orient(p); // face flight direction on spawn frame
@@ -154,6 +280,42 @@ export class ProjectilePool {
     this._dir.normalize();
     p.mesh.quaternion.setFromUnitVectors(Z_AXIS, this._dir);
     if (p.style.spin) p.mesh.quaternion.multiply(this._spin.setFromAxisAngle(Z_AXIS, p.spinPhase));
+  }
+
+  // Advance the global trail cloud one tick: fade every point down, then let each
+  // live trailing bullet stamp its position into its slice's ring slot.
+  _updateTrails(dt) {
+    const fade = this._trailFade;
+    let touched = false;
+    for (let i = 0; i < fade.length; i++) {
+      if (fade[i] > 0) { fade[i] = Math.max(0, fade[i] - dt * TRAIL_FADE); touched = true; }
+    }
+    for (const p of this.items) {
+      if (!p.active || !p.style.trail || p.trailIdx >= MAX_BULLETS) continue;
+      const base = p.trailIdx * TRAIL_LEN;
+      const i = base + p.trailHead;
+      this._trailPos[i * 3] = p.pos.x;
+      this._trailPos[i * 3 + 1] = p.pos.y;
+      this._trailPos[i * 3 + 2] = p.pos.z;
+      // Hot-core colour: bullet tint lifted toward white so the trail's head
+      // reads like sparks, not paint.
+      const c = p.mat.color;
+      this._trailCol[i * 3] = c.r + (1 - c.r) * 0.45;
+      this._trailCol[i * 3 + 1] = c.g + (1 - c.g) * 0.45;
+      this._trailCol[i * 3 + 2] = c.b + (1 - c.b) * 0.45;
+      this._trailFade[i] = 1;
+      this._trailSize[i] = p.radius * 1.5;
+      p.trailHead = (p.trailHead + 1) % TRAIL_LEN;
+      touched = true;
+    }
+    if (touched) {
+      const g = this._trails.geometry;
+      g.attributes.position.needsUpdate = true;
+      g.attributes.aColor.needsUpdate = true;
+      g.attributes.aFade.needsUpdate = true;
+      g.attributes.aSize.needsUpdate = true;
+    }
+    this._updateTrailScale();
   }
 
   update(dt, ctx) {
@@ -214,11 +376,18 @@ export class ProjectilePool {
 
       if (dead) {
         if (aoe && p.team === 'player') this._detonate(p, ctx);
+        else if (p.pos.y <= 0.05 || p.life <= 0) {
+          // Miss deaths (ground skid / burnout / range) get a small pop so even
+          // misses sparkle — hit deaths already hitSpark, AOE detonates.
+          ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+        }
         p.active = false;
         p.mesh.visible = false;
+        p.halo.visible = false;
         if (p.slot) { p.slot.light.intensity = 0; p.slot.owner = null; p.slot = null; } // return the light
       } else {
         p.mesh.position.copy(p.pos);
+        if (p.halo.visible) p.halo.position.copy(p.pos); // halo rides along (sibling, not child)
         if (p.slot) p.slot.light.position.copy(p.pos); // borrowed light rides along
         const s = p.style;
         if (s.spin) p.spinPhase += s.spin * dt;
@@ -229,6 +398,7 @@ export class ProjectilePool {
         }
       }
     }
+    this._updateTrails(dt);
   }
 
   // AOE detonation for explosive (Boomstick / Fire Bullet) and ring (Toroid) shots:
@@ -266,6 +436,7 @@ export class ProjectilePool {
   despawn(p) {
     p.active = false;
     p.mesh.visible = false;
+    p.halo.visible = false;
     if (p.slot) { p.slot.light.intensity = 0; p.slot.owner = null; p.slot = null; }
   }
 
@@ -275,7 +446,10 @@ export class ProjectilePool {
       if (!p.active) continue;
       p.active = false;
       p.mesh.visible = false;
+      p.halo.visible = false;
     }
     for (const s of this._lightSlots) { s.light.intensity = 0; s.owner = null; }
+    this._trailFade.fill(0); // wipe every comet tail instantly on level load
+    this._trails.geometry.attributes.aFade.needsUpdate = true;
   }
 }

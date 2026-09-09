@@ -11,6 +11,79 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Bullet visual redesign — comet trails, glow halos, punchy cores, miss pops
+
+**Date:** 2026-09-07 · **Files:** `src/weapons/Projectile.js`
+
+Every projectile now layers three reads instead of one flat colored shape:
+
+- **Comet trails** — ONE global additive Points cloud (fixed 64-bullet × 16-point
+  ring buffer, one draw call, zero per-frame allocation) with a custom shader:
+  per-point color lifted toward white (hot-core spark read), fade-driven size
+  taper, ~0.3s lingering tail after death so kills leave a fading streak. Trail
+  length varies per style (tracer 16, shard 14, fire 12, orb 10 …; the slow EMP
+  ring gets none). Enemy fireballs get ember trails for free — better dodge
+  readability.
+- **Additive halo sprites** on energy styles (orb, shard, fire, ring): a shared
+  radial glow texture, colored + sized per shot, positioned as a *sibling* of
+  the mesh so non-uniform style scales (stretched tracers) can't squash the
+  round glow. Solid physical shots (acorn, pellet, arrow, tracer) stay clean.
+- **Tone-punchy cores** — bullet materials are `toneMapped: false`, so colors
+  render pre-ACES and stay hot instead of washing out.
+- **Miss pops** — ground skids, burnouts and range expiries now fire a small
+  hitSpark so even misses sparkle (hit deaths already sparked; AOE detonates).
+
+Verified headless: all 8 styles fire with correct halo visibility, trails fill
+16/16 points, light budget unchanged (6, no leaks), trails fully fade after
+expiry, `clear()` wipes tails on level load, 0 console errors.
+
+## Simpler cartoon face + "confectionery lilac" hero theme
+
+**Date:** 2026-09-07 · **Files:** `src/entities/HeroModel.js`
+
+Third hero pass: fewer, bolder facial parts and a new palette theme.
+
+- **Minimal cartoon face** — authored head meshes 33→**19**: removed the
+  forehead patch, blush halo, whiskers, brows, eye iris + second catchlight,
+  and ear tufts/beads. Eyes are now solid deep-plum beans with ONE big white
+  catchlight (classic minimal-cartoon eye); ears are bare lilac+rose bubbles;
+  blush is a single flat bright sticker dot (strongly self-lit so it stays
+  rose in every light band); nose/smile/teeth slightly bolder.
+- **New theme: "confectionery lilac"** — soft lilac fur (0xc5b3e6) with plum
+  shading (0x8d6fae), warm vanilla cream, rose ear-inner/blush, honey-gold
+  energy glow (gem/tail). The violet family pops in all three biomes (mint L1,
+  complementary against L2's ember, bright against L3's dark indigo) where the
+  old honey-orange blended into Ember Hollow.
+- **Fixed a latent bug:** the blush sphere had been geometrically embedded
+  inside the cheek puff (invisible) since the previous pass — repositioned to
+  poke clearly through the cheek surface and verified by projecting its screen
+  position and sampling the exact pixels (rose 227/187/193 vs plum fur ~50).
+- All contracts re-verified: head:torso 1.43, eye height 31% of head, feet
+  +0.012 off ground, IK grip error 0.000, blink + ear-twitch fire, 0 errors.
+
+## Even cuter hero — deeper chibi proportions, baby-face eyes, blush, charm motion
+
+**Date:** 2026-09-07 · **Files:** `src/entities/HeroModel.js`
+
+Second cuteness pass on the procedural squirrel, this time against a written
+quality contract with measured before/after values (all rig/interface contracts
+preserved — IK, muzzle, one-shots, weapon swap):
+
+- **Proportions**: head-subtree:torso height 1.08→**1.43** (head ball Ø 1.24×
+  torso Ø), smaller round pear torso, chibi-stub limbs with chunkier mitts and
+  plush feet (feet no longer sink −0.03 below ground: now +0.012).
+- **Face**: eyes 0.13→**0.18u tall (30% of head height)**, re-set low and wide
+  (baby-face), each in a named eye group so it can blink; two-tone blush
+  (vivid core + soft halo — face-crop pink pixels 10→**233**); shorter rounder
+  muzzle; rounder, wider, outward-tilted koala ears; smaller calmer brows.
+- **Palette**: lighter honey fur, warmer walnut, brighter cream/pinks, warmer
+  near-black detailing, brighter amber iris.
+- **Charm motion**: periodic random blink (group squash 1→0.06→1), random ear
+  twitch, slow curious head tilt while idling, calmer deeper breathing, bigger
+  lazy tail sway with a secondary curl.
+- **Tail**: plume segments ~15% bigger — the signature squirrel sweep reads
+  even from the over-shoulder camera.
+
 ## Production visual pass: MSAA, sky gradients, ground painting, mist, film polish
 
 **Date:** 2026-09-06 · **Files:** `src/core/PostFX.js`, `src/world/SkyDome.js` (new),
