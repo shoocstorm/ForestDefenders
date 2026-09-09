@@ -319,7 +319,11 @@ export class ProjectilePool {
   }
 
   update(dt, ctx) {
-    const halfX = ARENA.WIDTH / 2, halfZ = ARENA.LENGTH / 2;
+    // Horizontal kill margin is the arena + a grace band: shots aimed at sky
+    // targets (the shootable balloon drifts just past the far edge) must be
+    // allowed to leave the play field. Lifetime still caps every shot, so the
+    // grace band costs nothing in cleanup.
+    const halfX = ARENA.WIDTH / 2 + 80, halfZ = ARENA.LENGTH / 2 + 80;
     for (const p of this.items) {
       if (!p.active) continue;
       if (p.gravity) p.vel.y -= p.gravity * dt;
@@ -350,6 +354,17 @@ export class ProjectilePool {
               dead = true;
               break;
             }
+          }
+          // Sky targets (shootable balloons): a hit starts the burn sequence in
+          // SkyDecor, pays a small gold reward, and pops the bullet. AOE shots
+          // additionally detonate in the dead-branch below — a distant flash.
+          if (!dead && ctx.shootSky?.(p.pos, p.radius)) {
+            ctx.gameManager?.addGold?.(10);
+            this._tmp.copy(p.pos);
+            ctx.damageNumbers?.spawn?.(this._tmp, '+10', '#ffd24a', true);
+            ctx.audio?.hit?.('FIRE');
+            ctx.vfx.hitSpark(p.pos, p.mat.color.getHex());
+            dead = true;
           }
         } else {
           // Enemy projectile: test the player, then any attackable animal.

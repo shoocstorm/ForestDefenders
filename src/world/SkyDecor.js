@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLOOM_LAYER } from '../config/Constants.js';
+import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
 
 // Stylized sky backdrop for the sci-fi arena, themed per biome (LEVELS_SPEC sky):
@@ -32,7 +32,9 @@ export class SkyDecor {
     this._buildStars(cfg);
     for (let i = 0; i < (cfg.comets || 0); i++) this._buildComet(cfg, accent);
     for (let i = 0; i < (cfg.ships || 0); i++) this._buildShip(cfg, accent);
-    for (let i = 0; i < (cfg.balloons || 0); i++) this._buildBalloon(cfg, accent);
+    // The FIRST balloon of each biome drifts near enough to be shootable from
+    // the arena (see _buildBalloon's `near` flag); the rest stay far backdrop.
+    for (let i = 0; i < (cfg.balloons || 0); i++) this._buildBalloon(cfg, accent, i === 0);
 
     scene.add(this.root);
   }
@@ -256,7 +258,11 @@ export class SkyDecor {
   // A hot air balloon: classic teardrop envelope with candy-stripe gore panels,
   // a glowing burner throat, and a hanging basket. Drifts slowly across the sky
   // with a gentle bob and sway; wraps in X like the ships.
-  _buildBalloon(cfg, accent) {
+  //
+  // `near` balloons drift low/close enough to be shot from the arena (see
+  // tryHit) — every biome gets exactly one. When shot they catch fire, char,
+  // lose lift and fall, then respawn fresh after a pause.
+  _buildBalloon(cfg, accent, near = false) {
     const [c1, c2] = cfg.balloonColors || [accent, 0xffffff];
     const g = new THREE.Group();
 
@@ -296,17 +302,67 @@ export class SkyDecor {
       g.add(rope);
     }
 
-    const scale = randRange(9, 15);
+    // Fire outbreak kit (hidden until shot): additive flame blobs up the
+    // envelope's crown — the burn's visible "catch fire" read.
+    const fireGroup = new THREE.Group();
+    const fireSpec = [
+      [0xff5a1a, 0.34, 0.55], [0xff8a30, 0.42, 1.0], [0xffc060, 0.3, 1.32],
+    ];
+    for (const [fc, fr, fy] of fireSpec) {
+      const blob = new THREE.Mesh(this._g(new THREE.SphereGeometry(fr, 8, 6)),
+        this._basic(fc, { transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+      blob.position.y = fy;
+      blob.layers.enable(BLOOM_LAYER);
+      fireGroup.add(blob);
+    }
+    fireGroup.visible = false;
+    g.add(fireGroup);
+
+    const scale = near ? randRange(7, 9.5) : randRange(9, 15);
     g.scale.setScalar(scale);
-    const span = 700;
+    // Near balloons wrap within the arena's own airspace (+margin) so they stay
+    // reachable from the field; far ones roam the whole 700u backdrop span.
+    const span = near ? ARENA.WIDTH + 90 : 700;
     const dir = Math.random() < 0.5 ? 1 : -1;
-    g.position.set(randRange(-span / 2, span / 2), randRange(70, 150), randRange(140, 420));
+    // Near balloons hug the arena's far edge, low enough for weapons to reach
+    // (bullet lifetime caps travel ~100-180u); far ones stay painted backdrop.
+    if (near) g.position.set(randRange(-span / 2, span / 2), randRange(30, 52), randRange(86, 118));
+    else g.position.set(randRange(-span / 2, span / 2), randRange(70, 150), randRange(140, 420));
     this.root.add(g);
     this._balloons.push({
-      obj: g, speed: randRange(4, 9) * dir, span,
+      obj: g, envelope, envMat, flame, fireGroup, near,
+      envEmissive: envMat.emissive.getHex(), // restore after charring
+      charColor: new THREE.Color(0x241008),
+      fireColor: new THREE.Color(0xff5a1a),
+      speed: randRange(4, 9) * dir, span,
       baseY: g.position.y, bob: randRange(1.2, 2.4), phase: randRange(0, 6.28),
       swayAmp: randRange(0.03, 0.07), swayPhase: randRange(0, 6.28),
+      // Hit sphere: centered on the envelope's bulk (≈0.75 local up), generous
+      // radius so lobs and long shots connect.
+      hitYOff: scale * 0.75, hitR: scale * 1.35,
+      state: 'drift', burnT: 0, fallV: 0, goneT: 0,
     });
+  }
+
+  // Player-bullet hit test (called from ProjectilePool via ctx.shootSky).
+  // Returns the balloon record on a hit (the caller kills the bullet and pays
+  // the reward); the burn sequence starts here, inside this class.
+  tryHit(pos, radius) {
+    for (const b of this._balloons) {
+      if (b.state !== 'drift') continue;
+      const dx = pos.x - b.obj.position.x;
+      const dy = pos.y - (b.obj.position.y + b.hitYOff);
+      const dz = pos.z - b.obj.position.z;
+      const rr = radius + b.hitR;
+      if (dx * dx + dy * dy + dz * dz < rr * rr) {
+        b.state = 'burn';
+        b.burnT = 0;
+        b.fallV = 0;
+        b.fireGroup.visible = true;
+        return b;
+      }
+    }
+    return null;
   }
 
   update(dt) {
@@ -329,14 +385,58 @@ export class SkyDecor {
       else if (s.obj.position.x < -half) s.obj.position.x = half;
     }
 
-    // Balloons drift + bob + sway; wrap in X.
+    // Balloons: drift + bob + sway while aloft (wrap in X); shot ones burn,
+    // char, lose lift and fall, then respawn fresh after a pause.
     for (const b of this._balloons) {
-      b.obj.position.x += b.speed * dt;
-      b.obj.position.y = b.baseY + Math.sin(this._t * 0.35 + b.phase) * b.bob;
-      b.obj.rotation.z = Math.sin(this._t * 0.6 + b.swayPhase) * b.swayAmp;
-      const half = b.span / 2;
-      if (b.obj.position.x > half) b.obj.position.x = -half;
-      else if (b.obj.position.x < -half) b.obj.position.x = half;
+      if (b.state === 'drift') {
+        b.obj.position.x += b.speed * dt;
+        b.obj.position.y = b.baseY + Math.sin(this._t * 0.35 + b.phase) * b.bob;
+        b.obj.rotation.z = Math.sin(this._t * 0.6 + b.swayPhase) * b.swayAmp;
+        const half = b.span / 2;
+        if (b.obj.position.x > half) b.obj.position.x = -half;
+        else if (b.obj.position.x < -half) b.obj.position.x = half;
+      } else if (b.state === 'burn') {
+        b.burnT += dt;
+        // Envelope chars while fire flickers up the crown; burner flares.
+        const k = Math.min(1, b.burnT / 1.8);
+        b.envMat.color.lerp(b.charColor, Math.min(1, dt * 2.2 * (0.4 + k)));
+        b.envMat.emissive.lerp(b.fireColor, Math.min(1, dt * 3));
+        b.envMat.emissiveIntensity = 0.5 + k * 0.4 + Math.sin(this._t * 23 + b.phase) * 0.25;
+        b.fireGroup.scale.setScalar(0.8 + k * 0.7 + Math.sin(this._t * 19 + b.phase) * 0.22);
+        b.flame.scale.setScalar(2.5 + Math.sin(this._t * 27) * 0.8);
+        // Losing lift: a slow sag while it burns, tipping into the fall.
+        b.obj.position.y -= (1.5 + k * 4) * dt;
+        b.obj.rotation.z = Math.sin(this._t * 2.2 + b.swayPhase) * (0.06 + k * 0.18);
+        if (b.burnT > 1.8) b.state = 'fall';
+      } else if (b.state === 'fall') {
+        b.burnT += dt;
+        // Gravity takes over — accelerating drop with a worsening wobble; the
+        // fire keeps flickering on the way down.
+        b.fallV = Math.min(38, b.fallV + 26 * dt);
+        b.obj.position.y -= b.fallV * dt;
+        b.obj.position.x += b.speed * dt * 0.4;
+        b.obj.rotation.z += Math.sin(b.burnT * 5) * dt * 0.8;
+        b.envMat.emissiveIntensity = 0.5 + Math.sin(this._t * 21 + b.phase) * 0.25;
+        b.fireGroup.scale.setScalar(0.9 + Math.sin(this._t * 17 + b.phase) * 0.25);
+        if (b.obj.position.y < -30) { b.state = 'gone'; b.goneT = 5 + Math.random() * 4; b.obj.visible = false; }
+      } else if (b.state === 'gone') {
+        b.goneT -= dt;
+        if (b.goneT <= 0) {
+          // Respawn fresh: restore the paint, reposition, drift again.
+          b.envMat.color.setHex(0xffffff);
+          b.envMat.emissive.setHex(b.envEmissive);
+          b.envMat.emissiveIntensity = 0.35;
+          b.fireGroup.visible = false;
+          b.fireGroup.scale.setScalar(1);
+          b.flame.scale.setScalar(1);
+          b.obj.rotation.z = 0;
+          const span2 = b.span / 2;
+          b.obj.position.set(randRange(-span2, span2), b.baseY, b.obj.position.z);
+          b.obj.visible = true;
+          b.state = 'drift';
+          b.burnT = 0;
+        }
+      }
     }
 
     // Comets streak and recycle.

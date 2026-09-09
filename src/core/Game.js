@@ -176,6 +176,9 @@ export class Game {
       onEnemyDied: (e) => { this.gameManager.registerEnemyDefeated(e); this.audio.death(e.element); },
       onMultiKill: (n) => this._onMultiKill(n),
       onAnimalRescued: (type) => this._onAnimalRescued(type),
+      // Sky-target hit test for player bullets (shootable balloons). Arrow
+      // closure re-reads this.arena, so it survives loadLevel rebuilds.
+      shootSky: (pos, radius) => this.arena?.sky?.tryHit?.(pos, radius),
     };
 
     // Cinematic-cel post pipeline (selective bloom + GTAO + ACES output).

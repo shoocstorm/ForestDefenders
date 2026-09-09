@@ -11,6 +11,30 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Shootable hot-air balloons — catch fire, char, fall, respawn
+
+**Date:** 2026-09-07 · **Files:** `src/world/SkyDecor.js`,
+`src/weapons/Projectile.js`, `src/core/Game.js`
+
+The sky is now interactive — a fun long-shot mini-game between waves:
+
+- Each biome's FIRST balloon drifts near enough to shoot (z 86–118, y 30–55,
+  wrapping within the arena's airspace so it stays reachable); the rest remain
+  far painted backdrop (long-range snipes on them still work).
+- Shooting one pays **+10 gold** (floating label + fire hit sound), and the
+  balloon runs a full burn sequence: envelope chars while fire flickers up the
+  crown and the burner flares → it loses lift, sags and tips → accelerating
+  fall with a worsening wobble, still burning → despawn → respawns fresh
+  (paint restored) after a 5–9s pause. AOE weapons additionally detonate a
+  distant flash.
+- Bullets now get an +80u grace band beyond the arena bounds (lifetime still
+  caps cleanup) so sky shots can leave the field; hit test is wired through
+  `ctx.shootSky` → `Arena.sky.tryHit`.
+
+Verified headless: aimed bullet connects mid-flight (tick 156), gold paid,
+burn → fall → gone → respawn cycle with restored materials, misses trigger
+nothing, direct hit test + miss test, 0 errors.
+
 ## Bullet visual redesign — comet trails, glow halos, punchy cores, miss pops
 
 **Date:** 2026-09-07 · **Files:** `src/weapons/Projectile.js`
