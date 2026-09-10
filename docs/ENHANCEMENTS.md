@@ -11,6 +11,36 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Dramatic jump kick — 3-phase choreography, swoosh crescents, impact juice
+
+**Date:** 2026-09-09 · **Files:** `src/entities/HeroModel.js`,
+`src/entities/Player.js`, `src/vfx/VFX.js`
+
+The V-key flying kick is now a set-piece move (gameplay timing/damage/collision
+unchanged — pure presentation):
+
+- **Choreography** (0.75s, was 0.6s): a readable COIL (crouch dip, hips twist
+  +0.55 rad, kick leg cocks −1.25 rad back, arms gather) → explosive EXTENSION
+  (body whips near-horizontal, hips unwind −1.05 rad through, kick leg swings a
+  2.9 rad arc up and over, support leg trails, head tracks the kick line,
+  tail counter-swings, ears pin back in the slipstream) → RECOVER with an
+  overshoot wobble and a full release of every coil offset.
+- **Twin swoosh crescents** sweep the kick plane lagging the foot — white-hot
+  lead + gold accent, additive, bloom-layer, scaling up and fading through the
+  extension (built once, pooled, hidden between kicks).
+- **Arm whip now actually renders**: it is applied AFTER the two-bone IK solve
+  as additive local rotation (the old pre-IK pose write was dead code — the
+  solver overwrote it every frame).
+- **Impact**: `VFX.melee` upgraded to a tailSwing-class recipe (twin flash
+  lights, white-hot blast cores, accent spark fan + hard white leading edge,
+  twin shockwave ripples, debris chunks); camera gets heavier shake (0.65) plus
+  an FOV punch via the weapon-recoil hook.
+
+Verified headless: leg sweep −1.25→+1.65 with 2.9 rad total travel, body twist
++0.55→−0.5, arcs visible only during 0.2–0.72s with peak opacity 1, arm whip
+1.1 rad at peak, ear pin 0.45 rad, all joints restore to rest (legR 0,
+body twist 0), player kick + melee smoke paths clean, 0 errors.
+
 ## Shootable hot-air balloons — catch fire, char, fall, respawn
 
 **Date:** 2026-09-07 · **Files:** `src/world/SkyDecor.js`,

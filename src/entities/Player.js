@@ -322,7 +322,10 @@ export class Player {
       hit = true;
     }
     ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(kickDir, 1.5).setY(1.2), 0xfff0a0, PLAYER.KICK_RANGE);
-    ctx.cameraRig?.addShake?.(0.5);
+    // Impact camera work: heavier shake than before plus an FOV punch (the
+    // same recoil hook weapons use) so the kick lands with real weight.
+    ctx.cameraRig?.addShake?.(0.65);
+    ctx.cameraRig?.addRecoil?.(0.55);
     ctx?.audio?.melee('kick');
     if (hit) ctx.juice?.hitStop?.();
   }

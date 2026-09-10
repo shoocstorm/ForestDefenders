@@ -307,11 +307,19 @@ export class VFX {
     this._burst(pos, { count: 16, color, size: 0.07, speed: 6, spread: 1.2, life: 0.3, colorVariety: 0.2 });
   }
 
-  // Melee swoosh (kick): an outward spark burst + a ground shockwave
-  // sized to the attack reach (HERO_SPEC §6.3).
+  // Melee swoosh (kick): a proper action-movie impact — twin flash lights,
+  // white-hot blast cores, a broad accent spark fan with a hard white leading
+  // edge, twin shockwave ripples and a few debris chunks (HERO_SPEC §6.3).
   melee(pos, color = 0xffffff, radius = 2.6) {
-    this._burst(pos, { count: 32, color, size: 0.10, speed: radius * 2.4, spread: 1.2, up: 0.4, life: 0.45, colorVariety: 0.15 });
-    this._shockwave(pos, color, radius * 1.5, 0.4);
+    this._flash(pos, 0xffffff, 20, radius * 2.6);
+    this._flash(pos, color, 14, radius * 2.0);
+    this._blastCore(pos, 0xffffff, radius * 0.35, 0.12);
+    this._blastCore(pos, color, radius * 0.6, 0.2);
+    this._burst(pos, { count: 44, color, size: 0.11, speed: radius * 3.0, spread: 1.1, up: 0.35, life: 0.4, colorVariety: 0.18 });
+    this._burst(pos, { count: 26, color: 0xffffff, size: 0.07, speed: radius * 4.0, spread: 1.0, up: 0.3, life: 0.22, drag: 6, colorVariety: 0.08 });
+    this._shockwave(pos, 0xffffff, radius * 1.2, 0.3);
+    this._shockwave(pos, color, radius * 1.6, 0.42);
+    this._debris(pos, color, 6, 0.07, radius * 1.8);
   }
 
   // Tail swing (R): a big, juicy 360° melee. A flat fan of low ground sparks
