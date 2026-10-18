@@ -450,14 +450,24 @@ export class Arena {
     }
     this._platformDeckY = h + 0.2;
 
-    // Slow-rotating holographic projector core hovering over the deck.
-    const core = add(new THREE.Mesh(
-      new THREE.ConeGeometry(1.6, 2.4, 6, 1, true),
-      new THREE.MeshBasicMaterial({ color: t.accent, transparent: true, opacity: 0.06,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
-    ), 0, h + 1.6, cz, false);
-    core.layers.enable(BLOOM_LAYER);
-    this._holoCores.push(core);
+    // Futuristic power tower (Hyper3D GLB) standing at the deck centre — replaces
+    // the old holographic projector cone, which occupied the same spot. The
+    // rising light rings above now read as energy pulsing off the tower.
+    const tower = clone('powerTower');
+    const tBox = new THREE.Box3().setFromObject(tower);
+    const tSize = new THREE.Vector3(); tBox.getSize(tSize);
+    const ts = 7.0 / Math.max(0.001, tSize.y);
+    tower.scale.setScalar(ts);
+    tower.position.set(0, h + 0.2 - tBox.min.y * ts, cz);
+    // Deliberately NOT on BLOOM_LAYER: the bloom pass renders the full material
+    // and this diffuse is mostly bright cyan, so the whole tower blew out into a
+    // featureless glowing column. The emissive map alone carries the seam glow.
+    tower.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    tower.userData.arenaOwned = true;
+    tower.userData.__sharedAsset = true; // clone() shares geometry/materials — see dispose()
+    this.scene.add(tower);
+    // Footprint collider so the player walks around the tower, not through it.
+    this.colliders.push({ type: 'cylinder', x: 0, z: cz, r: Math.max(tSize.x, tSize.z) * ts * 0.45 });
 
     // Corner light pylons: metal post + stacked emissive accent rings + beacon orb.
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {

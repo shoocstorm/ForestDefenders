@@ -292,7 +292,9 @@ export const ANIMALS = {
   HEDGEHOG: { type: 'HEDGEHOG', hp: 50, buff: 'SHIELD', flying: false,
     pos: [9, 0, 4], cage: true, color: 0x8a6f4a },
   BIRD: { type: 'BIRD', hp: 40, buff: 'REVEAL', flying: true,
-    pos: [0, 3.2, 4], cage: true, color: 0x4aa3d8 },
+    // Front of the deck, between the stair head and the power tower (deck centre
+    // z=4 is the tower's footprint/collider — see Arena._platform).
+    pos: [0, 3.2, 1.2], cage: true, color: 0x4aa3d8 },
   RABBIT: { type: 'RABBIT', hp: 45, buff: 'SPEED', flying: false,
     pos: [-6, 0, 26], cage: true, color: 0xd8cfc4 },
 };

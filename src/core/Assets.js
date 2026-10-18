@@ -41,6 +41,7 @@ const _cfg = {
   fern:        { outline: false, wind: { base: 0.05, freq: 2.6, amp: 0.05 }, rim: { intensity: 0.4 } },
   grass:       { outline: false, wind: { base: 0.0, freq: 3.0, amp: 0.06 }, rim: { intensity: 0.35 } },
   stoneArch:   { outline: false, rim: { intensity: 0.4 } },
+  powerTower:  { outline: false, rim: { color: 0x7ff6ff, power: 3.0, intensity: 0.6 }, emissiveBoost: 1.2 },
 };
 
 export async function loadAll(onProgress) {

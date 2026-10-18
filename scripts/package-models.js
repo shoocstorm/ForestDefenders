@@ -31,6 +31,9 @@ const MODELS = [
   { key: 'fern',         file: 'vegetation/fern.glb' },
   { key: 'grass',        file: 'vegetation/grass.glb' },
   { key: 'stoneArch',    file: 'buildings/stone_arch.glb' },
+  // Hyper3D Rodin Gen-2.5 output, slimmed: 1024px JPEG diffuse + emissive only
+  // (normal/metal-roughness maps dropped — celifyGLTF never reads them).
+  { key: 'powerTower',   file: 'buildings/power_tower.glb' },
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });

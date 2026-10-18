@@ -11,6 +11,31 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Futuristic power tower on the central platform (Hyper3D-generated GLB)
+
+**Date:** 2026-10-18 · **Files:** `assets/models/buildings/power_tower.glb` (new),
+`scripts/package-models.js`, `src/core/Assets.js`, `src/world/Arena.js`,
+`src/config/Constants.js`
+
+- New `powerTower` asset generated with Hyper3D Rodin Gen-2.5 (generation
+  `fb6dfc37-2e2b-4410-92f4-ceeef9b0b168`, ~30k-tri Raw mesh): a segmented
+  sci-fi pylon with glowing cyan conduit panels.
+- **Slimmed from 9.5 MB → 1.6 MB** before bundling: the 2048px PNG normal +
+  metal/roughness maps were dropped (`celifyGLTF` only reads `map` and
+  `emissiveMap`), and diffuse + Rodin's separate emissive texture were re-encoded
+  as 1024px JPEG and wired as `baseColorTexture`/`emissiveTexture`. It is still
+  the largest model in the bundle (bundle ~0.8 → 2.4 MB) — regenerate at a lower
+  `quality_override` if load time matters.
+- `Arena._platform()` stands it at the deck centre (7 units tall, base on the
+  deck top `h + 0.2`), tagged `__sharedAsset` so `dispose()` skips it, with a
+  ~1.06-radius cylinder collider. It **replaces the holographic projector cone**
+  that occupied the same spot; the rising deck light-rings now read as energy
+  pulsing off the tower.
+- Kept **off** `BLOOM_LAYER`: the bloom pass renders the full material and the
+  bright-cyan diffuse blew the whole tower out into a featureless column.
+- BIRD rescue cage moved from the deck centre `(0, 3.2, 4)` to `(0, 3.2, 1.2)`
+  (front of the deck, by the stair head) — it would otherwise sit inside the tower.
+
 ## Strange world objects — 4 new ambient systems
 
 **Date:** 2026-09-09 · **Files:** `src/world/FloatingRunestones.js` (new),
