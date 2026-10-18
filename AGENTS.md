@@ -10,6 +10,42 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
+## Green haze washes out the player on the central platform (bloom leaks through occluders)
+
+**Date:** 2026-10-18 · **Files:** `src/world/Arena.js`, `src/world/WillOWisps.js`,
+`src/world/PrismaticSpires.js`
+
+**Symptom:** Standing on the central platform, the deck glows as a pale mint slab and
+the hero is washed out to near-white; big soft orbs and rainbow columns crowd the
+view around the deck.
+
+**Root causes (isolated with `postfx.setMode('ao')` = bloom off, and
+`setMode('bloom')` = bloom buffer only):**
+1. **Selective bloom has no occlusion.** The bloom pass renders ONLY `BLOOM_LAYER`
+   objects on black. `_platform()`'s "edge trims" were solid `w×w` box plates — in the
+   beauty pass the deck hides all but the protruding rim, but in the bloom pass the
+   entire deck-sized plate bloomed. The arena's floor grid (also bloom-layer) likewise
+   shone straight through the platform.
+2. `WillOWisps.update()` set each wisp to `sin(...)*amp` around the **world origin**,
+   discarding its random start — all 12 orbited the platform.
+3. `PrismaticSpires` built its cluster at the world origin (comment said "stage-left
+   of the platform") — inside the deck's front edge and stairs.
+
+**Fix:** trims are hollow 4-bar frames; a black box on the bloom layer only
+(`layers.set(BLOOM_LAYER)` — invisible in the beauty pass) occludes the platform
+volume in the bloom pass; wisps drift around their own anchor, chosen so the whole
+orbit clears the platform; spires take an `origin` (default `[-15, 0, 15]`). Plus
+polish: deck rim 0.5 → 0.08, only the deck-edge seam blooms, rising rings hug the
+tower above head height.
+
+**Gotcha to remember:** With layer-based selective bloom, **anything on
+`BLOOM_LAYER` blooms in full even where opaque geometry hides it** in the final
+image. Bloom-layer meshes must be shaped like what's actually visible (frames, not
+plates hidden under a deck), or the hiding geometry needs a black bloom-layer-only
+occluder. Debug with `postfx.setMode('bloom')` to see exactly what's glowing. Also:
+an "ambient wander" that writes `pos = sin(t)*amp` (no `base +`) silently collapses
+every instance onto the world origin — which here is the platform.
+
 ## Fans spin up during play: shadow map drawn twice per frame, 37 scene lights, uncapped 120Hz render
 
 **Date:** 2026-10-18 · **Files:** `src/core/Game.js`, `src/core/PostFX.js`, `src/config/Constants.js`,

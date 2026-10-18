@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA, BLOOM_LAYER, BIOMES } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
 import { toon } from '../materials/CelMaterial.js';
@@ -92,14 +93,14 @@ export class Arena {
       }
     }
     if (this._platformRings) {
-      const riseSpeed = 1.5, riseHeight = 9.0;
+      const riseSpeed = 1.2, riseHeight = 6.0;
       const period = riseHeight / riseSpeed;
       for (const r of this._platformRings) {
         const localT = ((this._t / period) + r.phase) % 1;
         r.mesh.position.y = this._platformDeckY + localT * riseHeight;
-        const s = 1 + localT * 0.7;
+        const s = 1 + localT * 0.35;
         r.mesh.scale.set(s, s, 1);
-        r.mesh.material.opacity = Math.sin(localT * Math.PI) * 0.7;
+        r.mesh.material.opacity = Math.sin(localT * Math.PI) * 0.45;
       }
     }
     if (this.fireflies) {
@@ -300,7 +301,7 @@ export class Arena {
     // --- Strange world objects ---
     const accent = b.tech?.accent || b.ring;
     this.runestones = new FloatingRunestones(this.scene, { color: accent, count: 3 });
-    this.spires = new PrismaticSpires(this.scene, { count: 5, color: accent });
+    this.spires = new PrismaticSpires(this.scene, { count: 5, color: accent, origin: [-15, 0, 15] });
     this.wells = new SpiritWells(this.scene, { color: accent });
     this.wisps = new WillOWisps(this.scene, { color: accent, count: 12 });
   }
@@ -390,7 +391,7 @@ export class Arena {
       return mesh;
     };
     const t = this.tech;
-    const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.45 } });
+    const topMat = toon({ color: b.platform.top, rim: { color: b.platform.topRim, intensity: 0.25 } });
     const pillarMat = toon({ color: b.platform.pillar, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
     const stepMat = toon({ color: b.platform.step, rim: { color: b.platform.pillarRim, intensity: 0.4 } });
     const trimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.15 });
@@ -399,9 +400,23 @@ export class Arena {
     const rootTrimMat = new THREE.MeshToonMaterial({ color: t.accent, emissive: t.accentEmissive, emissiveIntensity: 0.05 });
 
     // Glowing accent edge-trim band (a flat emissive ring hugging a course edge).
-    const addTrim = (w, y, thick = 0.12, mat = trimMat) => {
-      const trim = add(new THREE.Mesh(new THREE.BoxGeometry(w, thick, w), mat), 0, y, cz, false);
-      trim.layers.enable(BLOOM_LAYER);
+    // Only the deck-edge seam blooms — glowing every course stacked into a
+    // haze around the player standing on the deck.
+    // Built as a HOLLOW square frame (4 bars), not a solid w×w plate: the
+    // bloom pass renders bloom-layer objects with nothing to occlude them, so
+    // a solid plate whose middle the deck hides in the beauty pass still bloomed
+    // as a full deck-sized slab — a green haze over everything on the platform.
+    const addTrim = (w, y, thick = 0.12, mat = trimMat, bloom = false) => {
+      const band = 0.5; // only the outer ~0.05–0.5 ever peeks out past the courses
+      const bars = [
+        new THREE.BoxGeometry(w, thick, band).translate(0, 0, (w - band) / 2),
+        new THREE.BoxGeometry(w, thick, band).translate(0, 0, -(w - band) / 2),
+        new THREE.BoxGeometry(band, thick, w - band * 2).translate((w - band) / 2, 0, 0),
+        new THREE.BoxGeometry(band, thick, w - band * 2).translate(-(w - band) / 2, 0, 0),
+      ];
+      const trim = add(new THREE.Mesh(mergeGeometries(bars, false), mat), 0, y, cz, false);
+      bars.forEach((g) => g.dispose());
+      if (bloom) trim.layers.enable(BLOOM_LAYER);
       return trim;
     };
 
@@ -416,19 +431,21 @@ export class Arena {
 
     // Cornice lip beneath the deck + bright seam.
     add(new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.45, 10.4), stepMat), 0, h - 0.225, cz);
-    addTrim(10.5, h + 0.01, 0.14);
+    addTrim(10.5, h + 0.01, 0.14, trimMat, true);
 
     // Deck cap (the standing surface, top at h + 0.2) with an emissive grid inlay.
     add(new THREE.Mesh(
       new THREE.BoxGeometry(10.2, 0.2, 10.2),
-      toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.5 } })
+      // Faint rim only: a flat deck seen from the player's low angle is ALL
+      // grazing angle, so a 0.5 fresnel rim lit the whole cap into a mint slab
+      // that washed out the hero standing on it. The seam trim carries the edge.
+      toon({ color: b.platform.cap, rim: { color: b.platform.topRim, intensity: 0.08 } })
     ), 0, h + 0.1, cz, false);
     const deckGrid = add(new THREE.Mesh(
       new THREE.PlaneGeometry(9.6, 9.6),
       gridMaterial(t.accent, { cell: 1.2, sizeX: 9.6, sizeZ: 9.6, scan: 0.0 })
     ), 0, h + 0.21, cz, false);
-    deckGrid.rotation.x = -Math.PI / 2;
-    deckGrid.layers.enable(BLOOM_LAYER);
+    deckGrid.rotation.x = -Math.PI / 2; // not on BLOOM_LAYER: the player stands on it
     this._techMats.push(deckGrid.material);
 
     // Light rings rising off the deck toward the sky (replaces the old ground
@@ -437,10 +454,13 @@ export class Arena {
       color: t.accent, transparent: true, opacity: 0, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
+    // Rings hug the tower (r≈1.5, just outside its collider) and start above
+    // the hero's head — the old 3.4→5.8-radius rings swept the whole deck at
+    // body height and washed the player out in bloom.
     this._platformRings = [];
-    const riseCount = 4;
+    const riseCount = 3;
     for (let i = 0; i < riseCount; i++) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.05, 8, 40), riseMat());
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.035, 8, 40), riseMat());
       ring.rotation.x = Math.PI / 2;
       ring.position.set(0, h + 0.2, cz);
       ring.layers.enable(BLOOM_LAYER);
@@ -448,7 +468,7 @@ export class Arena {
       this.scene.add(ring);
       this._platformRings.push({ mesh: ring, phase: i / riseCount });
     }
-    this._platformDeckY = h + 0.2;
+    this._platformDeckY = h + 0.2 + 1.8; // rings start above head height
 
     // Futuristic power tower (Hyper3D GLB) standing at the deck centre — replaces
     // the old holographic projector cone, which occupied the same spot. The
@@ -469,6 +489,17 @@ export class Arena {
     // Footprint collider so the player walks around the tower, not through it.
     this.colliders.push({ type: 'cylinder', x: 0, z: cz, r: Math.max(tSize.x, tSize.z) * ts * 0.45 });
 
+    // Bloom occluder: the bloom pass draws ONLY bloom-layer objects, so the
+    // arena's glowing floor grid underneath shone straight through the
+    // platform and haloed everything on the deck. A black box on the bloom
+    // layer alone (invisible in the beauty pass) masks it, like a real occluder.
+    const occluder = new THREE.Mesh(new THREE.BoxGeometry(10.4, h + 0.2, 10.4),
+      new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    occluder.position.set(0, (h + 0.2) / 2, cz);
+    occluder.layers.set(BLOOM_LAYER);
+    occluder.userData.arenaOwned = true;
+    this.scene.add(occluder);
+
     // Corner light pylons: metal post + stacked emissive accent rings + beacon orb.
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const px = sx * 4.5, pz = cz + sz * 4.5;
@@ -476,7 +507,6 @@ export class Arena {
       for (let r = 0; r < 3; r++) {
         const ring = add(new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.05, 6, 16), trimMat), px, h * 0.4 + r * 0.55, pz);
         ring.rotation.x = Math.PI / 2;
-        ring.layers.enable(BLOOM_LAYER);
       }
       const orb = add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), trimMat), px, h + 1.45, pz, false);
       orb.layers.enable(BLOOM_LAYER);

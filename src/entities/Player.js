@@ -138,7 +138,7 @@ export class Player {
     // Tail Guard Fruit buff: auto-swing the tail when an enemy enters range
     // (respects the normal tail cooldown), clearing crowders off the player.
     if (this._tailCd <= 0 && ctx?.gameManager?.timedBuffs?.TAIL_GUARD > 0 && this._enemyInRange(ctx, TAIL_GUARD.RANGE)) {
-      this._tailSwing(ctx);
+      this._tailSwing(ctx, true);
     }
 
     const axis = input.moveAxis();
@@ -316,9 +316,10 @@ export class Player {
       this._toEnemy.multiplyScalar(1 / dist);
       // Wider cone for easier hits
       if (this._toEnemy.dot(kickDir) < 0.1) continue;
-      e.takeDamage(PLAYER.KICK_DAMAGE, 'PHYSICAL', ctx);
-      // Knockback enemies AWAY from player (same direction as kick)
+      // Knockback enemies AWAY from player (same direction as kick) — BEFORE
+      // damage, which marks a killed enemy dead and would block the fling.
       e.applyKnockback?.(this._toEnemy, PLAYER.KICK_KNOCKBACK);
+      e.takeDamage(PLAYER.KICK_DAMAGE, 'PHYSICAL', ctx);
       hit = true;
     }
     ctx.vfx?.melee?.(this._aimTarget.copy(this.position).addScaledVector(kickDir, 1.5).setY(1.2), 0xfff0a0, PLAYER.KICK_RANGE);
@@ -332,11 +333,12 @@ export class Player {
 
   // Tail swing (R): 360° radial melee — flings enemies out (distance-scaled) and
   // grants brief i-frames + heavy shake (HERO_SPEC §6.3, JUICE_SPEC §12).
-  _tailSwing(ctx) {
+  _tailSwing(ctx, auto = false) {
     if (this._tailCd > 0 || !ctx?.enemies) return;
     this._tailCd = PLAYER.TAIL_COOLDOWN;
     this.model.playTail?.();
     this._invuln = Math.max(this._invuln, PLAYER.TAIL_IFRAMES);
+    let hit = false;
     for (const e of ctx.enemies) {
       if (e.dead) continue;
       this._toEnemy.subVectors(e.position, this.position); this._toEnemy.y = 0;
@@ -344,11 +346,16 @@ export class Player {
       if (dist > PLAYER.TAIL_RANGE + e.hitRadius || dist < 1e-3) continue;
       this._toEnemy.multiplyScalar(1 / dist);
       // Apply knockback FIRST, before damage (which sets dead=true and blocks knockback)
-      e.applyKnockback?.(this._toEnemy, lerp(25, 18, clamp(dist / PLAYER.TAIL_RANGE, 0, 1))); // Moderate knockback
+      e.applyKnockback?.(this._toEnemy, lerp(PLAYER.TAIL_KNOCKBACK_NEAR, PLAYER.TAIL_KNOCKBACK_FAR,
+        clamp(dist / PLAYER.TAIL_RANGE, 0, 1)));
       e.takeDamage(PLAYER.TAIL_DAMAGE, 'PHYSICAL', ctx);
+      hit = true;
     }
     ctx.vfx?.tailSwing?.(this._aimTarget.copy(this.position).setY(0.4), 0xc7e08a, PLAYER.TAIL_RANGE);
     ctx.cameraRig?.addShake?.(0.95);
     ctx?.audio?.melee('tail');
+    // Same impact freeze the kick gets — manual swings only, so Tail Guard's
+    // frequent auto-swings don't stutter the game.
+    if (hit && !auto) ctx.juice?.hitStop?.();
   }
 }

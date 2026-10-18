@@ -19,9 +19,10 @@ export const PLAYER = {
   HP_PER_LEVEL: 20,
   DAMAGE_PER_LEVEL: 0.15,
   // Melee
-  KICK_DAMAGE: 40, KICK_RANGE: 3.0, KICK_COOLDOWN: 0.7,
-  KICK_LUNGE_SPEED: 16, KICK_JUMP_VELOCITY: 8, KICK_KNOCKBACK: 35, // Jump kick: lunge forward, launch up, send enemies flying
-  TAIL_DAMAGE: 14, TAIL_RANGE: 4.0, TAIL_COOLDOWN: 0.8, TAIL_IFRAMES: 0.7, // Wider 360° sweep — clears crowders
+  KICK_DAMAGE: 65, KICK_RANGE: 3.6, KICK_COOLDOWN: 0.55,
+  KICK_LUNGE_SPEED: 16, KICK_JUMP_VELOCITY: 8, KICK_KNOCKBACK: 48, // Jump kick: lunge forward, launch up, send enemies flying
+  TAIL_DAMAGE: 32, TAIL_RANGE: 4.8, TAIL_COOLDOWN: 0.65, TAIL_IFRAMES: 0.7, // Wider 360° sweep — clears crowders
+  TAIL_KNOCKBACK_NEAR: 36, TAIL_KNOCKBACK_FAR: 26, // fling speed at point-blank → edge of range
 };
 
 export const CAMERA = {

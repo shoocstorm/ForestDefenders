@@ -16,7 +16,10 @@ const RAINBOW = [
 ];
 
 export class PrismaticSpires {
-  constructor(scene, { count = 5, color = 0x7fff9f } = {}) {
+  // `origin` places the cluster (it used to default to the world origin —
+  // inside the central platform's front edge and stairs, glowing through the deck).
+  constructor(scene, { count = 5, color = 0x7fff9f, origin = [-15, 0, 15] } = {}) {
+    const [ox, oy, oz] = origin;
     this.scene = scene;
     this._t = 0;
     this._spires = [];
@@ -44,7 +47,7 @@ export class PrismaticSpires {
       });
 
       const spire = new THREE.Mesh(crystalGeo, mat);
-      spire.position.set(x, 0, z);
+      spire.position.set(ox + x, oy, oz + z);
       spire.scale.set(1, h / 2.8, 1); // scale to desired height.
       spire.rotation.y = angle;
       spire.layers.enable(BLOOM_LAYER);
@@ -66,7 +69,7 @@ export class PrismaticSpires {
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     });
     const orb = new THREE.Mesh(orbGeo, orbMat);
-    orb.position.set(0, 1.2, 0);
+    orb.position.set(ox, oy + 1.2, oz);
     orb.layers.enable(BLOOM_LAYER);
     orb.userData.arenaOwned = true;
     scene.add(orb);
