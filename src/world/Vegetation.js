@@ -1,14 +1,18 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA, VEGETATION } from '../config/Constants.js';
-import { toon, untrackWind } from '../materials/CelMaterial.js';
+import { painted, untrackWind } from '../materials/CelMaterial.js';
+import { clone } from '../core/Assets.js';
 
-// Stylized procedural trees (threejs-procedural-vegetation, adapted to the cel look).
-// A tree is a growth hierarchy — a curved segmented trunk, branches at stratified
-// heights with permuted angles, and rounded canopy clumps — merged into two
-// geometries (bark + foliage) per tree for a tight draw-call budget. Variation is
-// deterministic from a seed (controlled variation, not species drift). Wind is
-// shader-driven canopy sway (CelMaterial wind), so update() only advances time.
+// Arena forest built from sculpted GLB trees (Hyper3D Rodin, see package-models.js).
+// Replaces the old procedural primitive trees (icosahedron blobs, umbrella discs,
+// upside-down willow cones), which didn't read as trees at a glance.
+//
+// Each tree is a clone of a cached master (shared geometry — never disposed
+// here). Materials are built fresh per Vegetation instance, one or two per
+// species, because each biome re-skins the foliage: the baked texture's green
+// pixels are hue-remapped to the biome palette on a canvas (bark stays put).
+// Wind is shader-driven canopy sway (CelMaterial wind), so update() only
+// advances time.
 
 function mulberry32(a) {
   return function () {
@@ -19,293 +23,157 @@ function mulberry32(a) {
   };
 }
 
-// Species table (length/radius/taper/branch/canopy character). Each species has
-// a `canopy` kind: 'clumps' (broadleaf-style blob clusters), 'tiers' (stacked
-// pine cones), 'umbrella' (flat acacia disc), 'bush' (low shrub), 'bare' (dead
-// branches, no foliage), 'droop' (willow strands). `paletteLeaf` selects which
-// biome palette slot re-skins the foliage ('broadleaf' | 'pine'); `keepBark`
-// pins the bark to the species default (birch white, dead grey) instead of the
-// biome bark override.
+// Species table. `height` is the world-space height range; `trunk` is the trunk
+// collider radius as a fraction of height; `leaf` picks the biome palette slot
+// ('broadleaf' | 'pine') or null to keep the baked colours (dead wood); `wind`
+// is canopy sway (`from` = fraction of model height where sway starts, `amp` in
+// world units — converted to model space per material).
 const SPECIES = {
-  BROADLEAF: { trunkH: [2.4, 3.6], baseR: 0.28, topR: 0.12, segs: 3, bend: 0.16,
-    branches: [2, 4], canopy: 'clumps', canopyCount: [4, 6], canopyR: [0.8, 1.3],
-    bark: 0x6e4a2a, leaf: 0x46962f, leaf2: 0x3a7d28, paletteLeaf: 'broadleaf' },
-  OAK: { trunkH: [3.0, 4.4], baseR: 0.38, topR: 0.16, segs: 3, bend: 0.12,
-    branches: [3, 5], canopy: 'clumps', canopyCount: [7, 10], canopyR: [1.0, 1.7],
-    bark: 0x5a3e22, leaf: 0x4f8f2a, leaf2: 0x3e7a22, paletteLeaf: 'broadleaf' },
-  PINE: { trunkH: [3.2, 4.6], baseR: 0.24, topR: 0.08, segs: 3, bend: 0.08,
-    branches: [0, 0], canopy: 'tiers', bark: 0x5e4326, leaf: 0x2f7a3a, leaf2: 0x276633,
-    paletteLeaf: 'pine' },
-  BIRCH: { trunkH: [3.8, 5.2], baseR: 0.18, topR: 0.06, segs: 4, bend: 0.06,
-    branches: [2, 3], canopy: 'clumps', canopyCount: [3, 5], canopyR: [0.5, 0.85],
-    bark: 0xe8e4dc, leaf: 0xa8c24a, leaf2: 0x8fae3a, paletteLeaf: 'broadleaf', keepBark: true },
-  ACACIA: { trunkH: [3.0, 4.2], baseR: 0.26, topR: 0.10, segs: 3, bend: 0.18,
-    branches: [0, 0], canopy: 'umbrella', bark: 0x6a4a30, leaf: 0x6a8a3a, leaf2: 0x5a7a2e,
-    paletteLeaf: 'broadleaf' },
-  SHRUB: { trunkH: [0.4, 0.9], baseR: 0.12, topR: 0.06, segs: 1, bend: 0.0,
-    branches: [0, 0], canopy: 'bush', bark: 0x4a3a20, leaf: 0x4f8a3a, leaf2: 0x3e7a2e,
-    paletteLeaf: 'broadleaf' },
-  DEAD: { trunkH: [3.4, 4.8], baseR: 0.22, topR: 0.08, segs: 4, bend: 0.22,
-    branches: [4, 6], canopy: 'bare', bark: 0x3a2a1a, leaf: 0x6a5a4a, leaf2: 0x5a4a3a,
-    paletteLeaf: 'broadleaf', keepBark: true },
-  WILLOW: { trunkH: [2.6, 3.6], baseR: 0.28, topR: 0.10, segs: 3, bend: 0.14,
-    branches: [3, 5], canopy: 'droop', bark: 0x6a4a30, leaf: 0x8aac4a, leaf2: 0x7a9c3a,
-    paletteLeaf: 'broadleaf' },
+  OAK:   { key: 'treeOak',   height: [6.5, 9.0], trunk: 0.055, leaf: 'broadleaf',
+    wind: { from: 0.45, freq: 1.5, amp: 0.08 } },
+  FIR:   { key: 'treeFir',   height: [7.0, 10.5], trunk: 0.04, leaf: 'pine',
+    wind: { from: 0.35, freq: 1.8, amp: 0.06 } },
+  BIRCH: { key: 'treeBirch', height: [7.0, 9.5], trunk: 0.03, leaf: 'broadleaf',
+    wind: { from: 0.45, freq: 2.0, amp: 0.09 } },
+  BUSH:  { key: 'treeBush',  height: [1.3, 2.1], trunk: 0.25, leaf: 'broadleaf',
+    wind: { from: 0.3, freq: 2.4, amp: 0.04 } },
+  DEAD:  { key: 'treeDead',  height: [5.5, 8.0], trunk: 0.045, leaf: null,
+    wind: { from: 0.55, freq: 1.2, amp: 0.04 } },
 };
+
+// Weighted species roll — a varied forest, broadleaf-heavy for readability.
+const TABLE = [['OAK', 26], ['FIR', 22], ['BIRCH', 14], ['BUSH', 22], ['DEAD', 6]];
+
+// The baked textures are green; palettes whose leaf hue sits near green keep
+// them as-is (the L1 look) and only get a light tint for the second variant.
+const GREEN_HUE = 0.29;
+const _hsl = { h: 0, s: 0, l: 0 };
+const _c = new THREE.Color();
+
+// Hue-remap the foliage (green-hued, saturated pixels) of a baked texture to
+// `targetHex`, preserving each pixel's relative shading. Bark/wood is untouched.
+function recolorFoliage(src, targetHex) {
+  const img = src.image;
+  const w = img.width, h = img.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  _c.setHex(targetHex).getHSL(_hsl);
+  const th = _hsl.h, ts = _hsl.s, tl = _hsl.l;
+  for (let i = 0; i < px.length; i += 4) {
+    _c.setRGB(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255).getHSL(_hsl);
+    if (_hsl.h < 0.14 || _hsl.h > 0.47 || _hsl.s < 0.2) continue;
+    // Baked foliage averages roughly s 0.6 / l 0.35 — scale toward the target.
+    _c.setHSL(th, Math.min(1, _hsl.s * ts / 0.6), Math.min(0.95, _hsl.l * tl / 0.35));
+    px[i] = _c.r * 255; px[i + 1] = _c.g * 255; px[i + 2] = _c.b * 255;
+  }
+  ctx.putImageData(data, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = src.colorSpace;
+  tex.flipY = src.flipY;
+  tex.wrapS = src.wrapS; tex.wrapT = src.wrapT;
+  tex.anisotropy = src.anisotropy;
+  return tex;
+}
 
 export class Vegetation {
   constructor(scene, palette) {
     this.scene = scene;
     this.colliders = [];
-    this.trees = [];          // { group, phase } for wind
+    this.trees = [];          // { group, phase }
     this._t = 0;
     this.rng = mulberry32(VEGETATION.SEED);
-    // Biome palette (SEASONS_SPEC) overrides the species' default leaf/bark colors
-    // so the same tree geometry re-skins per biome. Falls back to L1 greens.
-    this.palette = palette || SPECIES.BROADLEAF;
+    // Biome palette (SEASONS_SPEC) re-skins the foliage per level. Falls back to
+    // the baked greens.
+    this.palette = palette || {};
+    this._materials = [];     // owned: disposed + untracked in dispose()
+    this._textures = [];      // owned recolored canvases
+    this._species = {};       // name -> { bounds, mats: [variant, ...] }
     this._build();
   }
 
-  // --- one tree → merged bark + foliage geometry in tree-local space ---
-  _buildTree(spec, scale) {
-    const R = this.rng;
-    const bark = [];
-    const foliage = [];
-    const leafMat2 = [];
+  // Per-species prep: model-space bounds + 1–2 foliage material variants.
+  _prepSpecies(name) {
+    const spec = SPECIES[name];
+    const probe = clone(spec.key);
+    const box = new THREE.Box3().setFromObject(probe);
+    const size = box.getSize(new THREE.Vector3());
+    let srcMap = null;
+    probe.traverse((o) => { if (!srcMap && o.isMesh) srcMap = o.material.map; });
 
-    // Curved segmented trunk: walk up, bending the direction a little each section.
-    // TALL boosts only the trunk length (radius/canopy stay put) so trees read as
-    // taller, slenderer crowns — shrubs are exempt so they stay ground cover.
-    const TALL = spec.canopy === 'bush' ? 1.0 : 1.45;
-    const trunkH = (spec.trunkH[0] + R() * (spec.trunkH[1] - spec.trunkH[0])) * scale * TALL;
-    const segH = trunkH / spec.segs;
-    const p = new THREE.Vector3(0, 0, 0);
-    const d = new THREE.Vector3((R() - 0.5) * 0.18, 1, (R() - 0.5) * 0.18).normalize();
-    const q = new THREE.Quaternion();
-    const up = new THREE.Vector3(0, 1, 0);
-    const tips = []; // (point, dir) for branch/canopy attachment
-    for (let i = 0; i < spec.segs; i++) {
-      const r0 = THREE.MathUtils.lerp(spec.baseR, spec.topR, i / spec.segs) * scale;
-      const r1 = THREE.MathUtils.lerp(spec.baseR, spec.topR, (i + 1) / spec.segs) * scale;
-      const g = new THREE.CylinderGeometry(r0, r1, segH, 7, 1);
-      g.translate(0, segH / 2, 0);
-      q.setFromUnitVectors(up, d);
-      g.applyQuaternion(q);
-      g.translate(p.x, p.y, p.z);
-      bark.push(g);
-      p.addScaledVector(d, segH);
-      tips.push({ p: p.clone(), d: d.clone(), r: r1 });
-      // bend the growth direction (gnarliness), keep mostly upward
-      d.x += (R() - 0.5) * spec.bend; d.z += (R() - 0.5) * spec.bend; d.normalize();
-    }
+    const p = this.palette;
+    const leafHexes = spec.leaf ? [p[spec.leaf], p[spec.leaf + '2']].filter((v) => v != null) : [];
+    const leafHue = leafHexes.length ? (_c.setHex(leafHexes[0]).getHSL(_hsl), _hsl.h) : GREEN_HUE;
+    const recolor = srcMap && leafHexes.length && Math.abs(leafHue - GREEN_HUE) > 0.08;
+    const rim = recolor ? (p.barkRim ?? 0xbfe88a) : 0xbfe88a;
 
-    if (spec.canopy === 'tiers') {
-      // Pine: stacked rounded cones from ~40% height to the top.
-      const tiers = 4;
-      for (let i = 0; i < tiers; i++) {
-        const t = i / (tiers - 1);
-        const cr = (1.5 - t * 1.1) * scale;
-        const ch = 1.4 * scale;
-        const cy = trunkH * (0.4 + t * 0.62);
-        const g = new THREE.ConeGeometry(cr, ch, 9, 1);
-        g.translate(p.x * (1 - t), cy, p.z * (1 - t));
-        foliage.push(g);
-      }
-    } else if (spec.canopy === 'umbrella') {
-      // Acacia: flat wide canopy disc + irregular edge blobs.
-      const top = new THREE.Vector3(p.x, trunkH, p.z);
-      const r = (2.0 + R() * 0.7) * scale;
-      const main = new THREE.IcosahedronGeometry(r, 1);
-      main.scale(1.4, 0.35, 1.4);
-      main.translate(top.x, top.y + 0.25 * scale, top.z);
-      foliage.push(main);
-      const edge = 3 + Math.floor(R() * 3);
-      for (let i = 0; i < edge; i++) {
-        const a = (i / edge) * Math.PI * 2 + R() * 0.5;
-        const rr = r * (0.6 + R() * 0.4);
-        const b = new THREE.IcosahedronGeometry(r * (0.4 + R() * 0.25), 1);
-        b.scale(1.3, 0.35, 1.3);
-        b.translate(top.x + Math.cos(a) * rr, top.y + (0.1 + R() * 0.2) * scale, top.z + Math.sin(a) * rr);
-        foliage.push(b);
-      }
-    } else if (spec.canopy === 'bush') {
-      // Shrub: cluster of low blobs around the stump (no crown).
-      const base = new THREE.Vector3(0, trunkH * 0.6, 0);
-      const n = 4 + Math.floor(R() * 3);
-      for (let i = 0; i < n; i++) {
-        const a = R() * Math.PI * 2;
-        const rr = (0.2 + R() * 0.5) * scale;
-        const c = base.clone().add(new THREE.Vector3(
-          Math.cos(a) * rr, (R() - 0.2) * 0.3 * scale, Math.sin(a) * rr));
-        this._blob(foliage, leafMat2, c, (0.45 + R() * 0.35) * scale);
-      }
-    } else if (spec.canopy === 'bare') {
-      // Dead: gnarly bare branches + twigs, no foliage.
-      const nB = spec.branches[0] + Math.floor(R() * (spec.branches[1] - spec.branches[0] + 1));
-      const angOff = R() * Math.PI * 2;
-      for (let b = 0; b < nB; b++) {
-        const hT = 0.4 + (b + R() * 0.4) / Math.max(1, nB) * 0.5;
-        const base = new THREE.Vector3().copy(p).multiplyScalar(hT);
-        base.y = trunkH * hT;
-        const ang = angOff + b * (Math.PI * 2 / nB) + (R() - 0.5) * 0.8;
-        const bd = new THREE.Vector3(Math.cos(ang), 0.35 + R() * 0.3, Math.sin(ang)).normalize();
-        const bl = (1.0 + R() * 0.7) * scale;
-        const g = new THREE.CylinderGeometry(spec.topR * 0.5 * scale, spec.topR * scale, bl, 5, 1);
-        g.translate(0, bl / 2, 0);
-        q.setFromUnitVectors(up, bd); g.applyQuaternion(q);
-        g.translate(base.x, base.y, base.z);
-        bark.push(g);
-        const tip = base.clone().addScaledVector(bd, bl);
-        const bl2 = (0.5 + R() * 0.4) * scale;
-        const bd2 = bd.clone();
-        bd2.x += (R() - 0.5) * 0.7; bd2.y -= 0.25 + R() * 0.2; bd2.z += (R() - 0.5) * 0.7; bd2.normalize();
-        const g2 = new THREE.CylinderGeometry(spec.topR * 0.2 * scale, spec.topR * 0.5 * scale, bl2, 5, 1);
-        g2.translate(0, bl2 / 2, 0);
-        q.setFromUnitVectors(up, bd2); g2.applyQuaternion(q);
-        g2.translate(tip.x, tip.y, tip.z);
-        bark.push(g2);
-      }
-    } else if (spec.canopy === 'droop') {
-      // Willow: arching branches + drooping cone strands (point-down cones).
-      const nB = spec.branches[0] + Math.floor(R() * (spec.branches[1] - spec.branches[0] + 1));
-      const angOff = R() * Math.PI * 2;
-      for (let b = 0; b < nB; b++) {
-        const hT = 0.55 + (b + R() * 0.3) / Math.max(1, nB) * 0.35;
-        const base = new THREE.Vector3().copy(p).multiplyScalar(hT);
-        base.y = trunkH * hT;
-        const ang = angOff + b * (Math.PI * 2 / nB);
-        const bd = new THREE.Vector3(Math.cos(ang), 0.5, Math.sin(ang)).normalize();
-        const bl = (1.1 + R() * 0.5) * scale;
-        const g = new THREE.CylinderGeometry(spec.topR * 0.6 * scale, spec.topR * scale, bl, 6, 1);
-        g.translate(0, bl / 2, 0);
-        q.setFromUnitVectors(up, bd); g.applyQuaternion(q);
-        g.translate(base.x, base.y, base.z);
-        bark.push(g);
-        const tip = base.clone().addScaledVector(bd, bl);
-        const dr = (0.5 + R() * 0.3) * scale;
-        const dh = (1.1 + R() * 0.6) * scale;
-        const cone = new THREE.ConeGeometry(dr, dh, 8, 1);
-        cone.rotateX(Math.PI);
-        cone.translate(tip.x, tip.y - dh * 0.3, tip.z);
-        foliage.push(cone);
-      }
-      const top = new THREE.Vector3(p.x, trunkH, p.z);
-      const strands = 5 + Math.floor(R() * 3);
-      for (let i = 0; i < strands; i++) {
-        const a = (i / strands) * Math.PI * 2 + R() * 0.3;
-        const dr = (0.35 + R() * 0.2) * scale;
-        const dh = (0.9 + R() * 0.5) * scale;
-        const cone = new THREE.ConeGeometry(dr, dh, 6, 1);
-        cone.rotateX(Math.PI);
-        cone.translate(
-          top.x + Math.cos(a) * 0.5 * scale, top.y - dh * 0.2, top.z + Math.sin(a) * 0.5 * scale);
-        foliage.push(cone);
-      }
-    } else {
-      // 'clumps' (broadleaf / oak / birch): branches at stratified heights + blob crown.
-      const nB = spec.branches[0] + Math.floor(R() * (spec.branches[1] - spec.branches[0] + 1));
-      const angOff = R() * Math.PI * 2;
-      const cR = spec.canopyR || [0.8, 1.3];
-      for (let b = 0; b < nB; b++) {
-        const hT = 0.55 + (b + R() * 0.4) / Math.max(1, nB) * 0.4; // stratified slot
-        const base = new THREE.Vector3().copy(p).multiplyScalar(hT);
-        base.y = trunkH * hT;
-        const ang = angOff + b * (Math.PI * 2 / nB) + (R() - 0.5) * 0.6; // permuted slot
-        const bd = new THREE.Vector3(Math.cos(ang), 0.8, Math.sin(ang)).normalize();
-        const bl = (0.8 + R() * 0.6) * scale;
-        const g = new THREE.CylinderGeometry(spec.topR * 0.7 * scale, spec.topR * scale, bl, 6, 1);
-        g.translate(0, bl / 2, 0);
-        q.setFromUnitVectors(up, bd); g.applyQuaternion(q);
-        g.translate(base.x, base.y, base.z);
-        bark.push(g);
-        // canopy blob at the branch tip
-        const tip = base.clone().addScaledVector(bd, bl);
-        this._blob(foliage, leafMat2, tip, (cR[0] + R() * (cR[1] - cR[0]) * 0.6) * scale);
-      }
-      // crown clump around the trunk top
-      const top = new THREE.Vector3(p.x, trunkH, p.z);
-      const cc = spec.canopyCount || [4, 6];
-      const blobs = cc[0] + Math.floor(R() * (cc[1] - cc[0] + 1));
-      for (let i = 0; i < blobs; i++) {
-        const o = new THREE.Vector3((R() - 0.5), (R() - 0.2), (R() - 0.5)).multiplyScalar(0.9 * scale);
-        this._blob(foliage, leafMat2, top.clone().add(o), (cR[0] + R() * (cR[1] - cR[0])) * scale);
-      }
-    }
+    // Variants: recolored biomes use both palette slots; green biomes reuse the
+    // baked texture with a neutral and a slightly cooler/darker tint.
+    const variants = recolor
+      ? leafHexes.map((hex) => ({ map: recolorFoliage(srcMap, hex), color: 0xffffff, own: true }))
+      : [{ map: srcMap, color: 0xffffff }, ...(spec.leaf ? [{ map: srcMap, color: 0xd6e2cc }] : [])];
 
-    const barkGeo = mergeGeometries(bark, false);
-    // DEAD trees produce no foliage → empty array. mergeGeometries can't merge
-    // nothing, so return null and let _build skip the leaf mesh.
-    const leafGeo = foliage.length ? mergeGeometries(foliage, false) : null;
-    bark.forEach((g) => g.dispose());
-    foliage.forEach((g) => g.dispose());
-    return { barkGeo, leafGeo, trunkR: spec.baseR * scale, trunkH };
-  }
-
-  _blob(list, _m, center, r) {
-    const g = new THREE.IcosahedronGeometry(r, 1);
-    // squash slightly + jitter verts a touch for a hand-made look
-    g.scale(1, 0.85, 1);
-    g.translate(center.x, center.y, center.z);
-    list.push(g);
-  }
-
-  _outline(mesh) {
-    const o = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({ color: 0x12200f, side: THREE.BackSide }));
-    o.scale.setScalar(1.035);
-    mesh.add(o);
+    const mats = variants.map((v) => {
+      if (v.own) this._textures.push(v.map);
+      // Typical scale ≈ mid height / model height; wind amp is model-space.
+      const midH = (spec.height[0] + spec.height[1]) / 2;
+      const m = painted({
+        map: v.map, color: v.color,
+        rim: { color: rim, intensity: 0.35 },
+        wind: {
+          base: box.min.y + size.y * spec.wind.from,
+          freq: spec.wind.freq + this.rng() * 0.4,
+          amp: spec.wind.amp * size.y / midH,
+        },
+      });
+      this._materials.push(m);
+      return m;
+    });
+    return { box, size, mats };
   }
 
   _build() {
     const lane = 3.5;
     const count = 60; // Reduced tree density for clearer arena visibility
-    const p = this.palette;
-    // Weighted species roll — a varied low-poly forest, not species drift.
-    const table = [
-      ['BROADLEAF', 16], ['PINE', 16], ['OAK', 14], ['BIRCH', 10],
-      ['ACACIA', 8], ['SHRUB', 14], ['DEAD', 6], ['WILLOW', 12],
-    ];
-    const totalW = table.reduce((s, [, w]) => s + w, 0);
+    for (const [name] of TABLE) this._species[name] = this._prepSpecies(name);
+    const totalW = TABLE.reduce((s, [, w]) => s + w, 0);
+    const platformClear = (x, z) => Math.abs(x) < 8 && z > -7 && z < 12;
+
     for (let i = 0; i < count; i++) {
-      let r = this.rng() * totalW, specName = table[0][0];
-      for (const [name, w] of table) { if ((r -= w) <= 0) { specName = name; break; } }
+      let r = this.rng() * totalW, specName = TABLE[0][0];
+      for (const [name, w] of TABLE) { if ((r -= w) <= 0) { specName = name; break; } }
       const spec = SPECIES[specName];
-      const scale = 0.85 + this.rng() * 0.7;
-      const side = this.rng() < 0.5 ? -1 : 1;
-      const x = side * (lane + this.rng() * (ARENA.WIDTH / 2 - lane - 1.2));
-      const z = -ARENA.LENGTH / 2 + 4 + this.rng() * (ARENA.LENGTH - 12);
+      const sp = this._species[specName];
+      // Reroll (deterministically) out of the central platform's footprint +
+      // stairs — the sculpted canopies are wide enough to swallow the deck.
+      let x, z, tries = 0;
+      do {
+        const side = this.rng() < 0.5 ? -1 : 1;
+        x = side * (lane + this.rng() * (ARENA.WIDTH / 2 - lane - 1.2));
+        z = -ARENA.LENGTH / 2 + 4 + this.rng() * (ARENA.LENGTH - 12);
+      } while (platformClear(x, z) && ++tries < 10);
+      if (platformClear(x, z)) continue;
+      const height = spec.height[0] + this.rng() * (spec.height[1] - spec.height[0]);
+      const s = height / Math.max(0.001, sp.size.y);
 
-      const { barkGeo, leafGeo, trunkR, trunkH } = this._buildTree(spec, scale);
-      const group = new THREE.Group();
-      group.position.set(x, 0, z);
+      const group = clone(spec.key);
+      group.scale.setScalar(s);
+      group.position.set(x, -sp.box.min.y * s, z);
       group.rotation.y = this.rng() * Math.PI * 2;
-
-      // Bark: biome palette overrides unless the species pins its bark
-      // (birch white, dead grey are signature traits kept across biomes).
-      const barkColor = spec.keepBark ? spec.bark : (p.bark ?? spec.bark);
-      const barkRim = p.barkRim ?? 0x88aa60;
-      const barkMesh = new THREE.Mesh(barkGeo, toon({ color: barkColor, rim: { color: barkRim, intensity: 0.3 } }));
-      barkMesh.castShadow = true; barkMesh.receiveShadow = true;
-      this._outline(barkMesh);
-      group.add(barkMesh);
-
-      // Foliage: dead trees produce none. Otherwise the species' paletteLeaf slot
-      // ('broadleaf' | 'pine') re-skins per biome, falling back to species defaults.
-      if (leafGeo) {
-        const pk = spec.paletteLeaf || 'broadleaf';
-        const pk2 = pk + '2';
-        const leafC = this.rng() < 0.5 ? (p[pk] ?? spec.leaf) : (p[pk2] ?? spec.leaf2);
-        const leafMesh = new THREE.Mesh(leafGeo, toon({
-          color: leafC, rim: { color: 0xbfe88a, intensity: 0.45 },
-          wind: { base: trunkH * 0.45, freq: 1.5 + this.rng() * 0.6, amp: 0.07 },
-        }));
-        leafMesh.castShadow = true;
-        this._outline(leafMesh);
-        group.add(leafMesh);
-      }
+      const mat = sp.mats[Math.floor(this.rng() * sp.mats.length)];
+      group.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = mat;
+        o.castShadow = true;
+        o.receiveShadow = true;
+      });
 
       this.scene.add(group);
       this.trees.push({ group, phase: this.rng() * Math.PI * 2 });
-      this.colliders.push({ type: 'cylinder', x, z, r: Math.max(0.4, trunkR * 1.4) });
+      this.colliders.push({ type: 'cylinder', x, z, r: Math.max(0.4, height * spec.trunk) });
     }
   }
 
@@ -314,26 +182,17 @@ export class Vegetation {
   update(dt) { this._t += dt; }
 
   dispose() {
-    // Remove all tree groups from the scene and dispose their geometries/materials.
-    // Foliage materials carry `wind` (see toon() call above) and register
-    // themselves in CelMaterial's module-level _windMaterials Set for the
-    // per-frame sway update — untrackWind() drops that reference too, or every
-    // level reload leaks another batch of dead materials into that Set forever.
-    for (const t of this.trees) {
-      this.scene.remove(t.group);
-      t.group.traverse((c) => {
-        if (c.isMesh) {
-          c.geometry?.dispose?.();
-          if (Array.isArray(c.material)) {
-            c.material.forEach((m) => { m?.dispose?.(); untrackWind(m); });
-          } else {
-            c.material?.dispose?.();
-            untrackWind(c.material);
-          }
-        }
-      });
-    }
+    // Tree clones share geometry with the cached master asset (Assets.clone) —
+    // only remove them; disposing geometry would corrupt the next level's trees.
+    // The per-biome materials + recolored textures ARE owned here. Wind
+    // materials register in CelMaterial's module-level _windMaterials Set, so
+    // untrackWind() is required or every level reload leaks them.
+    for (const t of this.trees) this.scene.remove(t.group);
+    for (const m of this._materials) { m.dispose(); untrackWind(m); }
+    for (const tex of this._textures) tex.dispose();
     this.trees.length = 0;
     this.colliders.length = 0;
+    this._materials.length = 0;
+    this._textures.length = 0;
   }
 }

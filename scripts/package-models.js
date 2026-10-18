@@ -34,6 +34,13 @@ const MODELS = [
   // Hyper3D Rodin Gen-2.5 output, slimmed: 1024px JPEG diffuse + emissive only
   // (normal/metal-roughness maps dropped — celifyGLTF never reads them).
   { key: 'powerTower',   file: 'buildings/power_tower.glb' },
+  // Arena forest (Vegetation.js) — Hyper3D Rodin Gen-2.5, slimmed the same way
+  // (512px JPEG diffuse only).
+  { key: 'treeOak',      file: 'trees/oak_tree.glb' },
+  { key: 'treeFir',      file: 'trees/fir_tree.glb' },
+  { key: 'treeBirch',    file: 'trees/birch_tree.glb' },
+  { key: 'treeDead',     file: 'trees/dead_tree.glb' },
+  { key: 'treeBush',     file: 'vegetation/leafy_bush.glb' },
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });

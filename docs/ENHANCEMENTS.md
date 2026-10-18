@@ -11,6 +11,33 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Arena forest rebuilt from sculpted GLB trees (Hyper3D-generated)
+
+**Date:** 2026-10-18 · **Files:** `src/world/Vegetation.js` (rewritten),
+`assets/models/trees/{oak,fir,birch,dead}_tree.glb` + `assets/models/vegetation/leafy_bush.glb` (new),
+`scripts/package-models.js`, `src/core/Assets.js`
+
+- The procedural primitive trees (icosahedron blob crowns, flat "umbrella" acacia
+  discs, upside-down willow cones) didn't read as trees. Replaced with 5 Hyper3D
+  Rodin Gen-2.5 species — **oak, fir, birch, leafy bush, dead tree** — at a low
+  poly budget (3–5k quality target), slimmed to a single 512px JPEG diffuse
+  each (~0.35–1.1 MB per GLB; bundle 2.4 → 5.6 MB). Same 60-tree count, same
+  seeded layout, weighted OAK 26 / FIR 22 / BUSH 22 / BIRCH 14 / DEAD 6.
+- **Per-biome re-skin kept:** foliage pixels (green hue band, saturated) of the
+  baked texture are hue-remapped on a canvas to the biome palette's
+  `broadleaf`/`pine` slots (L2 autumn reds/oranges, L3 teal); bark is
+  untouched. Green palettes (L1) skip the remap and use the baked texture with a
+  second tinted variant for variety. Remapped canvases + per-biome wind
+  materials are owned by `Vegetation` and disposed/`untrackWind`-ed on reload;
+  the GLB geometry is shared with the Assets master and never disposed.
+- Wind sway kept (CelMaterial wind; base/amp converted to model space per
+  species). Trees are now **outline-free** like the other GLB props — the
+  inverted-hull outline doesn't follow the wind sway, so a swaying canopy
+  slid out of its own outline.
+- Trees now reroll out of the central platform's footprint + stairs
+  (`|x| < 8, -7 < z < 12`) — the wide canopies otherwise swallowed the deck.
+- Draw calls drop: 1 mesh per tree (was bark + foliage + 2 outline meshes).
+
 ## Futuristic power tower on the central platform (Hyper3D-generated GLB)
 
 **Date:** 2026-10-18 · **Files:** `assets/models/buildings/power_tower.glb` (new),
