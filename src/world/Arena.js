@@ -11,6 +11,10 @@ import { SkyDome } from './SkyDome.js';
 import { GroundFog } from './GroundFog.js';
 import { gridMaterial, forceFieldMaterial } from './TechFX.js';
 import { fireflyMaterial } from '../materials/DriftParticles.js';
+import { FloatingRunestones } from './FloatingRunestones.js';
+import { PrismaticSpires } from './PrismaticSpires.js';
+import { SpiritWells } from './SpiritWells.js';
+import { WillOWisps } from './WillOWisps.js';
 
 // --- Deterministic value noise for the ground's vertex-painted variation ---
 function _hash2(x, z) {
@@ -55,6 +59,10 @@ export class Arena {
     this.sky?.update(dt);
     this.skyDome?.update(dt);
     this.mist?.update(dt, this._t);
+    this.runestones?.update(dt);
+    this.spires?.update(dt);
+    this.wells?.update(dt);
+    this.wisps?.update(dt);
     // Advance every tech shader (grid + force-field panels).
     if (this._techMats) for (const m of this._techMats) {
       if (m.userData.__uTime) m.userData.__uTime.value = this._t;
@@ -140,12 +148,20 @@ export class Arena {
     this.sky?.dispose();
     this.skyDome?.dispose();
     this.mist?.dispose();
+    this.runestones?.dispose();
+    this.spires?.dispose();
+    this.wells?.dispose();
+    this.wisps?.dispose();
     this.vegetation = null;
     this.water = null;
     this.lanterns = null;
     this.sky = null;
     this.skyDome = null;
     this.mist = null;
+    this.runestones = null;
+    this.spires = null;
+    this.wells = null;
+    this.wisps = null;
   }
 
   // Tag objects so dispose() can find and remove them on a biome switch.
@@ -280,6 +296,13 @@ export class Arena {
     for (let i = 0; i < 3; i++) this._spawnRing(randRange(-9, 9), ARENA.LENGTH / 2 - randRange(7, 14));
 
     this._fireflies();
+
+    // --- Strange world objects ---
+    const accent = b.tech?.accent || b.ring;
+    this.runestones = new FloatingRunestones(this.scene, { color: accent, count: 3 });
+    this.spires = new PrismaticSpires(this.scene, { count: 5, color: accent });
+    this.wells = new SpiritWells(this.scene, { color: accent });
+    this.wisps = new WillOWisps(this.scene, { color: accent, count: 12 });
   }
 
   // Energy containment perimeter: a low dark-metal rail, emissive accent posts

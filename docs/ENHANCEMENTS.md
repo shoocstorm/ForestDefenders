@@ -11,6 +11,34 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Strange world objects — 4 new ambient systems
+
+**Date:** 2026-09-09 · **Files:** `src/world/FloatingRunestones.js` (new),
+`src/world/PrismaticSpires.js` (new), `src/world/SpiritWells.js` (new),
+`src/world/WillOWisps.js` (new), `src/world/Arena.js`
+
+Four new ambient world-building systems add surreal, magical detail to every
+biome (wired into Arena constructor/update/dispose, biome-accent-coloured):
+
+- **Floating Runestones** (3 clusters of 3 hovering stones near the boss
+  landmark): dark stone bodies with additive rune faces that pulse on the
+  bloom layer. Each cluster bobs gently and orbits its vertical axis.
+- **Prismatic Spires** (5 tapered hexagonal crystal pillars, stage-left of the
+  platform): additive blending with colour that cycles through the rainbow
+  spectrum over time, gentle sway, pulsing opacity, plus a central glow orb.
+- **Spirit Wells** (2 ground-level vortex pools near the pond): spinning disc
+  with additive spiral pattern + a rising particle Points cloud of ethereal
+  wisps that drift upward, orbit gently, and wrap when they exceed the well
+  height.
+- **Will-o'-Wisps** (12 wandering glowing orbs across the arena): small
+  emissive bloom spheres with additive halos, drifting in unique sinuous 3D
+  paths (independent x/y/z sine frequencies per wisp), wrapping at arena
+  bounds. Zero point lights — pure material glow.
+
+All 4 systems follow the standard pattern (constructor/update/dispose, shared
+geometry, no per-frame allocation, BLOOM_LAYER for glow). Verified headless:
+all counts correct, animation running, dispose + rebuild clean, 0 errors.
+
 ## Backflip kick — acrobatic inversion with rising swoosh
 
 **Date:** 2026-09-09 · **Files:** `src/entities/HeroModel.js`,
