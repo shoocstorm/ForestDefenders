@@ -438,7 +438,7 @@ export const QUALITY = {
           polish: { vignette: 0.28, grain: 0.030, saturation: 1.04, contrast: 1.02 } },
 };
 export const POST = {
-  BLOOM_STRENGTH: 0.9, BLOOM_RADIUS: 0.5, BLOOM_THRESHOLD: 0.0, // selective: threshold 0 (bloom layer only)
+  BLOOM_STRENGTH: 0.8, BLOOM_RADIUS: 0.5, BLOOM_THRESHOLD: 0.0, // selective: threshold 0 (bloom layer only)
   AO_RADIUS: 0.5, AO_INTENSITY: 1.0,
   GODRAY_STRENGTH: 0.45,
 };

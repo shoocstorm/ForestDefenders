@@ -275,7 +275,9 @@ export class Arena {
     const gridMat = gridMaterial(this.tech.accent, { cell: 4.0, sizeX: ARENA.WIDTH, sizeZ: ARENA.LENGTH });
     const grid = new THREE.Mesh(gridGeo, gridMat);
     grid.position.y = 0.03;
-    grid.layers.enable(BLOOM_LAYER);
+    // Not bloomed: the whole-arena grid on the bloom layer spread a green haze
+    // over the ground (and, unoccluded in the bloom pass, through everything
+    // standing on it). Its lines are emissive enough to read crisply without.
     grid.userData.arenaOwned = true;
     this._techMats.push(gridMat);
     this.scene.add(grid);

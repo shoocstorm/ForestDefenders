@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 
+// Beacon-orb glow (was 1.6 — the runway pylons nearest the camera bloomed into
+// big halos beside the player).
+const ORB_E = 1.1;
+
 // Light pylons alternating along the central runway (sci-fi reskin of the old
 // fairy lanterns). Each is a sleek beacon: a metal base, a slim post, a few
 // stacked emissive accent rings, and a glowing beacon orb on top. Every pylon
@@ -62,13 +66,12 @@ export class Lanterns {
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.position.y = 0.7 + r * 0.5;
         ring.rotation.x = Math.PI / 2;
-        ring.layers.enable(BLOOM_LAYER);
-        g.add(ring);
+        g.add(ring); // emissive only, not bloomed — 3 haloed rings per pylon read as a glow smear up close
       }
 
       // Beacon orb — its own material so each can pulse independently.
       const orb = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({
-        color: litColor, emissive: litEmissive, emissiveIntensity: 1.6,
+        color: litColor, emissive: litEmissive, emissiveIntensity: ORB_E,
       }));
       orb.position.y = 2.35;
       orb.layers.enable(BLOOM_LAYER);
@@ -85,9 +88,9 @@ export class Lanterns {
         const light = new THREE.PointLight(lightColor, baseI, 11, 2);
         light.position.y = 2.35;
         g.add(light);
-        this.lit.push({ orb, light, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI });
+        this.lit.push({ orb, light, phase: Math.random() * Math.PI * 2, baseE: ORB_E, baseI });
       } else {
-        this.lit.push({ orb, light: null, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI: 0 });
+        this.lit.push({ orb, light: null, phase: Math.random() * Math.PI * 2, baseE: ORB_E, baseI: 0 });
       }
 
       scene.add(g);

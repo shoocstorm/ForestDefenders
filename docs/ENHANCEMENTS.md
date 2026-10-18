@@ -11,6 +11,27 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Lighting / bloom fine-tune — arena-wide glow cleanup
+
+**Date:** 2026-10-18 · **Files:** `src/world/Arena.js`, `src/world/Lanterns.js`,
+`src/world/SpiritWells.js`, `src/world/WillOWisps.js`, `src/world/PrismaticSpires.js`,
+`src/config/Constants.js` (the platform bloom-leak bug itself is in `AGENTS.md`)
+
+Audited with `postfx.setMode('bloom')` from the spawn end, mid-field and boss end.
+Rule applied: bloom is for small focal accents (orbs, seams, rings, landmark,
+spawn rings, pickups) — never for big surfaces near the player.
+
+- **Floor grid off the bloom layer** — the whole-arena grid bloomed into a green
+  ground haze (and shone through everything standing on it). Lines stay emissive.
+- **Runway pylons:** the 3 shaft rings no longer bloom; beacon-orb glow 1.6 → 1.1
+  (nearest pylons haloed beside the player). Fin + orb still bloom.
+- **Spirit wells:** vortex disc off bloom, opacity pulse 0.28±0.1 → 0.2±0.07.
+- **Central platform:** only the deck-edge seam blooms; deck rim 0.5 → 0.08;
+  rising rings hug the tower above head height (3, r 1.5, peak opacity 0.45).
+- **Will-o'-wisps** anchored away from the platform, halo pulse dimmer;
+  **prismatic spires** moved beside the platform.
+- Global `BLOOM_STRENGTH` 0.9 → 0.8.
+
 ## Perf pass — draw-call merging for rigs, props, landmarks and clouds
 
 **Date:** 2026-10-18 · **Files:** `src/materials/CelMaterial.js`, `src/entities/HeroModel.js`,

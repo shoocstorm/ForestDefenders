@@ -32,13 +32,12 @@ export class SpiritWells {
 
       // Vortex disc — additive spiral pattern.
       const discMat = new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.35,
+        color, transparent: true, opacity: 0.26,
         blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
         side: THREE.DoubleSide,
       });
       const disc = new THREE.Mesh(discGeo, discMat);
-      disc.layers.enable(BLOOM_LAYER);
-      group.add(disc);
+      group.add(disc); // not bloomed — a 2.2-radius additive pad bloomed into a bright ground blob
 
       // Rising particle cloud — small glowing Points drifting upward from the
       // well centre, fading out as they rise.
@@ -87,7 +86,7 @@ export class SpiritWells {
       // Spin the vortex disc.
       w.disc.rotation.y = this._t * 0.8;
       // Pulse disc opacity.
-      w.discMat.opacity = 0.28 + Math.sin(this._t * 1.6 + w.pos.x) * 0.1;
+      w.discMat.opacity = 0.2 + Math.sin(this._t * 1.6 + w.pos.x) * 0.07;
 
       // Animate rising particles: each particle drifts upward, wrapping
       // back to the ground when it exceeds the well height.
