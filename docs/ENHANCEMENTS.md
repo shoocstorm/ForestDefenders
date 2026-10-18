@@ -11,6 +11,35 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Backflip kick — acrobatic inversion with rising swoosh
+
+**Date:** 2026-09-09 · **Files:** `src/entities/HeroModel.js`,
+`src/entities/Player.js`, `src/audio/SFX.js`, `src/vfx/VFX.js`
+
+The V-key kick is now a dramatic backflip — the hero crouches, inverts fully
+backward (body.rotation.x reaches −1.75 rad / 100°), kicks overhead with the
+right leg, and lands with a small bounce. Same hit timing and damage, different
+presentation.
+
+- **Choreography** (0.85s, 3 phases): COIL (crouch dip, body leans forward,
+  legs bend −0.45 rad) → FLIP (body rises 0.5 units off the ground, inverts
+  backward, kicking leg swings up to 2.15 rad local = 37° above world-horizontal
+  at the apex, support leg trails behind, head tilts back −0.4 rad, tail
+  counter-swings forward, arms fling up) → LAND (body rotates forward, legs
+  swing down, smooth release to locomotion).
+- **Swoosh crescents**: repositioned from the hip to overhead — torus radius
+  increased to 0.52, arcs sweep from low-forward through overhead at the flip
+  peak (frame 28, 0.47s) to behind, visible 0.17–0.78s.
+- **Sound** (SFX.js): replaced the old 0.1s noise pop with a layered backflip
+  SFX — rising bandpass noise sweep (air motion), highpass body layer, tonal
+  triangle pitch sweep (the flip's rising arc), and a delayed (160ms) impact
+  thump with a bright crack on landing. Three-component whoosh + two-component
+  impact, all synth, no external files.
+
+Verified headless: body inversion −1.75 rad, lift 0.51 units, leg swing 2.6
+rad, arc sweep 0.17–0.78s with peak opacity 1, full restore (bodyX 0, legR 0,
+kickExt 0), 0 errors.
+
 ## Dramatic jump kick — 3-phase choreography, swoosh crescents, impact juice
 
 **Date:** 2026-09-09 · **Files:** `src/entities/HeroModel.js`,

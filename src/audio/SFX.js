@@ -315,7 +315,20 @@ export class SFX {
   melee(kind) {
     if (!this.audio?.ctx) return;
     if (kind === 'kick') {
-      this._noise({ dur: 0.1, gain: 0.2, filter: 'bandpass', freq: 600, q: 2 });
+      // Backflip kick: rising airy swoosh as the body inverts, then a hard
+      // impact thump on landing. Three layers build the whoosh — a rising
+      // bandpass sweep for air motion, a bright highpass body, and a tonal
+      // core that pitches up through the flip.
+      this._noise({ dur: 0.28, gain: 0.18, filter: 'bandpass', freq: 280, q: 0.7, sweep: 2200, attack: 0.03 });
+      this._noise({ dur: 0.20, gain: 0.10, filter: 'highpass', freq: 1400, q: 0.6, sweep: -800 });
+      this._tone({ freq: 220, type: 'triangle', dur: 0.26, sweep: 380, gain: 0.14, detune: 25 });
+      // Landing impact (delayed ~160ms — the moment the feet reconnect).
+      setTimeout(() => {
+        if (!this.audio?.ctx) return;
+        this._tone({ freq: 90, type: 'sine', dur: 0.18, sweep: -40, gain: 0.28, detune: 15 });
+        this._noise({ dur: 0.10, gain: 0.16, filter: 'lowpass', freq: 700, q: 1.0, sweep: -400 });
+        this._tone({ freq: 520, type: 'triangle', dur: 0.08, sweep: -300, gain: 0.09 }); // crack
+      }, 160);
     } else { // tail — big juicy whoosh + low impact thump
       // Rising-then-falling airy whoosh: bandpass noise sweeps up through the
       // swing, capturing the "vwoomp" of the tail cutting the air.

@@ -28,7 +28,7 @@ const HIP_Y = 0.40;          // hip pivot height (legs hang below to the ground)
 const SHOT_DUR = 0.26;       // recoil one-shot length (s)
 const JUMP_POP = 0.18;       // takeoff knee-pop decay window (s)
 const SWITCH_DUR = 0.4;      // weapon-swap dip
-const KICK_DUR = 0.75;      // kick one-shot (3-phase choreography, see update)
+const KICK_DUR = 0.85;      // backflip kick one-shot (crouch → flip → land)
 const TAIL_DUR = 0.7;        // tail-swing spin one-shot
 
 // Palette — "confectionery lilac": soft lilac fur with plum shading, warm
@@ -325,12 +325,12 @@ export class HeroModel {
     mesh(new THREE.SphereGeometry(0.07, 10, 8), GLOWMAT(GLOW, 0.9), tail, [0, 0.71, -0.085]);
 
     // --- Kick swoosh arcs (pooled once, hidden between kicks): twin additive
-    // crescents centred on the kicking hip, swept through the kick plane with a
-    // trailing lag so they read as the foot's motion trail. White-hot lead
-    // crescent + gold accent behind it, both on the bloom layer. ---
-    const arcGeo = new THREE.TorusGeometry(0.46, 0.05, 6, 26, 2.1);
-    arcGeo.rotateY(Math.PI / 2); // lie in the leg's YZ sweep plane
-    arcGeo.rotateX(-0.9);        // bias the crescent into the down→forward travel quadrant
+    // crescents that sweep the backflip's leg path — starting low in front,
+    // arcing up and over the body, finishing behind. White-hot lead crescent
+    // + gold accent, both on the bloom layer. ---
+    const arcGeo = new THREE.TorusGeometry(0.52, 0.06, 6, 26, 2.1);
+    arcGeo.rotateY(Math.PI / 2); // lie in the leg's YZ sweep plane (backflip plane)
+    arcGeo.rotateX(-0.45);       // bias the crescent from low-front to high-back
     const arcMat = (c) => {
       const m = new THREE.MeshBasicMaterial({
         color: c, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
@@ -340,8 +340,8 @@ export class HeroModel {
     };
     this._kickArcWhite = new THREE.Mesh(arcGeo, arcMat(0xffffff));
     this._kickArcGold = new THREE.Mesh(arcGeo.clone(), arcMat(0xffd166));
-    for (const [arc, tilt] of [[this._kickArcWhite, 0.12], [this._kickArcGold, 0.3]]) {
-      arc.position.set(0.06, HIP_Y + 0.02, 0);
+    for (const [arc, tilt] of [[this._kickArcWhite, 0.15], [this._kickArcGold, 0.35]]) {
+      arc.position.set(0, HIP_Y + 0.05, -0.06); // centred above hip, slightly back
       arc.rotation.y = tilt;
       arc.visible = false;
       arc.layers.enable(BLOOM_LAYER);
@@ -521,53 +521,56 @@ export class HeroModel {
     this.rig.gun.rotation.x = -recoil * 0.32 + sw * 0.6;
     this.rig.bolt.position.z = this._boltRestZ + recoil * 0.06; // bolt slides back
 
-    // Jump kick (V) — 3-phase choreography for maximum drama:
-    //   1. COIL (0→0.28): deep crouch, hips twist back, kick leg cocks high
-    //      behind, arms gather — readable anticipation.
-    //   2. EXTENSION (0.28→1): explosive unwinding — body whips near-horizontal
-    //      with a counter-twist, kick leg extends up and over, swoosh crescents
-    //      sweep the kick plane, arms whip back AFTER the IK solve (additive),
-    //      ears pin back, tail counter-swings.
-    //   3. RECOVER: the extension envelope returns through zero, so every joint
-    //      eases back to its locomotion pose (plus a small overshoot wobble).
+    // Backflip kick (V) — 3-phase acrobatic choreography:
+    //   1. COIL (0→0.2): deep crouch, body dips, legs bend back — loading the
+    //      spring for the explosive upward launch.
+    //   2. FLIP (0.2→0.55): body rises and inverts backward (rotation.x goes
+    //      negative), both legs swing up — kicking leg extends overhead, support
+    //      leg trails behind. The swoosh crescents sweep the full overhead arc.
+    //   3. LAND (0.55→1): body rotates forward, legs swing back down, small
+    //      bounce on contact. Every offset eases cleanly to the locomotion pose.
     this._kickExt = 0;
     this._kickWind = 0;
     if (this._kickT > 0) {
       const kt = 1 - this._kickT / KICK_DUR; // 0→1 over the clip
-      // Coil envelope: rises through the wind-up, holds through the extension,
-      // then eases out over the last 30% so every coil offset (crouch dip, hip
-      // twist, cocked leg) releases back to the locomotion pose by clip end —
-      // nothing may hold a static offset after the one-shot or the hero slowly
-      // "leans" after every kick.
-      const wind = kt < 0.28
-        ? Math.sin((kt / 0.28) * (Math.PI / 2))
-        : 1 - Math.pow(Math.max(0, (kt - 0.7) / 0.3), 1.5);
-      const ext = kt >= 0.28 ? Math.sin(((kt - 0.28) / 0.72) * Math.PI) : 0;
-      const wobble = kt >= 0.28 ? Math.sin(((kt - 0.28) / 0.72) * Math.PI * 2) * (1 - ext) * 0.25 : 0;
-      this._kickExt = ext;
+      // Coil envelope: rises sharply through the crouch, holds through the
+      // flip, then eases out over the last 40% — every offset must be zero
+      // by clip end or the hero leans permanently.
+      const wind = kt < 0.20
+        ? Math.sin((kt / 0.20) * (Math.PI / 2))
+        : 1 - Math.pow(Math.max(0, (kt - 0.6) / 0.4), 1.5);
+      // Flip envelope: peak at 0.55 (apex of the inversion), zero at start/end.
+      const flip = kt >= 0.20 && kt <= 0.95
+        ? Math.sin(((kt - 0.20) / 0.75) * Math.PI)
+        : 0;
+      const land = kt > 0.80 ? (kt - 0.80) / 0.20 : 0;
+      this._kickExt = flip;
       this._kickWind = wind;
-      // Kick leg: cocks way back in the coil, then swings up and OVER (a high
-      // flying kick — foot finishes above head height at the peak).
-      this.rig.legR.rotation.x = -wind * 1.25 + ext * 2.9 + wobble;
-      // Support leg: bends under the crouch, then trails back for balance.
-      this.rig.legL.rotation.x = wind * -0.3 - ext * 0.55;
-      // Body: coil back + crouch dip, then whip forward to near-horizontal
-      // with a hip twist that sells the spin.
-      this.rig.body.rotation.x += -wind * 0.32 + ext * 1.5;
-      this.rig.body.rotation.y = wind * 0.55 - ext * 1.05;
-      this.rig.body.rotation.z += ext * 0.38 + wobble * 0.4;
-      this.rig.body.position.y += -wind * 0.07 + ext * 0.05;
-      // Swoosh crescents: sweep the kick plane lagging the foot, white-hot
-      // lead + gold accent, scaling up and fading out through the extension.
-      const sweep = -wind * 1.25 + ext * 2.9; // mirrors the kick leg's path
-      this._kickArcWhite.rotation.x = sweep - 0.45;
-      this._kickArcGold.rotation.x = sweep - 0.8;
-      const sc = 0.85 + ext * 0.75;
+      // Kicking leg: bends back in the crouch, then swings up and OVER — the
+      // foot reaches well above the head at the apex of the inversion.
+      this.rig.legR.rotation.x = -wind * 0.45 + flip * 2.6;
+      // Support leg: bends under the crouch, trails behind at the flip peak,
+      // then returns.
+      this.rig.legL.rotation.x = wind * -0.35 + flip * 1.4;
+      // Body: dips in the crouch, then inverts fully backward at the flip
+      // peak (rotation.x goes negative = the hero flips back), then swings
+      // forward on landing.
+      this.rig.body.rotation.x += -wind * 0.25 - flip * 1.5 + land * 0.5;
+      this.rig.body.rotation.y = wind * 0.15 - flip * 0.25;
+      this.rig.body.rotation.z += flip * 0.12;
+      // Lift: body rises off the ground during the flip.
+      this.rig.body.position.y += -wind * 0.05 + flip * 0.15 - land * 0.04;
+      // Swoosh crescents: sweep the backflip leg arc, starting low in front,
+      // arcing up and over the body at the flip peak, finishing behind.
+      const sweep = -0.25 - wind * 0.25 - flip * 1.25; // mirrors the leg path
+      this._kickArcWhite.rotation.x = sweep - 0.15;
+      this._kickArcGold.rotation.x = sweep - 0.4;
+      const sc = 0.8 + flip * 0.85;
       this._kickArcWhite.scale.setScalar(sc);
       this._kickArcGold.scale.setScalar(sc * 1.12);
-      this._kickArcWhite.material.opacity = Math.pow(ext, 0.65);
-      this._kickArcGold.material.opacity = Math.pow(ext, 0.65) * 0.7;
-      const arcsOn = ext > 0.02;
+      this._kickArcWhite.material.opacity = Math.pow(flip, 0.6);
+      this._kickArcGold.material.opacity = Math.pow(flip, 0.6) * 0.7;
+      const arcsOn = flip > 0.02;
       this._kickArcWhite.visible = arcsOn;
       this._kickArcGold.visible = arcsOn;
     } else if (this._kickArcWhite.visible) {
@@ -581,17 +584,21 @@ export class HeroModel {
 
     // Kick arm whip — applied AFTER the IK solve (the solver owns the shoulder
     // quaternions, so any pose written before it was dead code): additive local
-    // rotation throws the gun-arms back for counter-rotation momentum.
+    // rotation throws the gun-arms back during the backflip for counter-fling.
     if (this._kickExt > 0) {
-      this.rig.armL.rotateX(-this._kickExt * 1.1);
-      this.rig.armR.rotateX(-this._kickExt * 0.85);
+      this.rig.armL.rotateX(this._kickExt * 0.9);
+      this.rig.armR.rotateX(this._kickExt * 0.75);
     }
 
     // Head: subtle counter-bob + look-into-run + idle tilt, plus kick tracking
-    // down the kick line at the extension peak (this line OWNS head rotation —
-    // contributions must fold in here or they get overwritten).
-    this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m + this._kickExt * 0.55;
-    this.rig.head.rotation.z = Math.sin(this._t * 0.85) * 0.06 * (1 - m) - this._kickExt * 0.2;
+    // (head tilts back during the flip inversion, forward on landing — this
+    // line OWNS head rotation — contributions must fold in here or they get
+    // overwritten).
+    this.rig.head.rotation.x = -lean * 0.4 + Math.sin(ph * 2) * 0.02 * m
+      - this._kickExt * 0.6   // head tilts back during flip
+      + this._kickWind * 0.2; // head dips forward in the crouch
+    this.rig.head.rotation.z = Math.sin(this._t * 0.85) * 0.06 * (1 - m)
+      - this._kickExt * 0.15;
 
     // Blink: squash the whole eye group (ball + catchlight together) in a
     // quick close/open. Periodic and random — the single cheapest "alive" cue.
@@ -625,8 +632,8 @@ export class HeroModel {
     // Tail: lazy oversized idle sway with a secondary curl, streams up/out at
     // speed, flares on jump.
     const tailSway = Math.sin(this._t * 1.8 + ph) * lerp(0.18, 0.32, m);
-    this.rig.tail.rotation.z = tailSway + this._kickExt * 0.55; // kick follow-through
-    this.rig.tail.rotation.y = Math.sin(this._t * 1.3) * 0.08 * (1 - m * 0.5) - this._kickExt * 0.3;
+    this.rig.tail.rotation.z = tailSway - this._kickExt * 0.5; // tail swings forward during flip (counter-balance)
+    this.rig.tail.rotation.y = Math.sin(this._t * 1.3) * 0.08 * (1 - m * 0.5) + this._kickExt * 0.2;
     this.rig.tail.rotation.x = -lean * 0.6 - air * 0.4 + Math.sin(this._t * 1.4) * 0.05;
 
     // Tail swing (R): 3 fast full-body spins with the tail flared huge (JUICE §12).
