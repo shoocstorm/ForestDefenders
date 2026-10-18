@@ -41,7 +41,9 @@ const FUR_LIGHT = 0xdcccf2;  // pale lilac highlights (tail tip)
 const CREAM    = 0xfff6e0;   // warm vanilla belly
 const PINK     = 0xffc9d6;   // rose ear inner
 const BLUSH    = 0xffaebf;   // rosy cheek blush
-const DARK     = 0x35243d;   // deep plum detailing (eyes, smile)
+const DARK     = 0x35243d;   // deep plum detailing (pupils, nose, smile)
+const IRIS     = 0x6a3fa0;   // violet iris
+const LEATHER  = 0x5b3a52;   // plum-leather ranger belt
 const METAL    = 0x3a3d44;
 const WOOD     = 0x6e4a26;
 const GLOW     = 0xffd166;   // honey-gold energy glow (gem, tail tip)
@@ -159,6 +161,10 @@ export class HeroModel {
     belly.scale.set(0.95, 1.15, 0.6);
     const bellySpot = mesh(new THREE.SphereGeometry(0.04, 8, 6), T(0xfff7e5), body, [0, 0.17, -0.165]);
     bellySpot.scale.set(1.2, 0.95, 0.35);
+    // Ranger belt + gold buckle — gives the little hero a "kit" read.
+    const belt = mesh(new THREE.TorusGeometry(0.172, 0.024, 6, 20), T(LEATHER), body, [0, 0.035, -0.005], [Math.PI / 2, 0, 0]);
+    belt.scale.set(1.04, 0.98, 1);
+    mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), T(GLOW, { emissiveIntensity: 0.4 }), body, [0, 0.035, -0.185]);
 
     // Ranger scarf — a chunky soft collar that breaks the neck silhouette,
     // with a glowing energy gem set at the throat (the hero's "core").
@@ -169,22 +175,36 @@ export class HeroModel {
     gem.userData.__outline = true; // keep the gem reading as pure light
     this.rig.gem = gem;
 
-    // --- Head pivot. Minimal cartoon face: an oversized round head, cream
-    // cheek puffs, a round muzzle, solid bean eyes with a single big
-    // catchlight, one soft blush dot per cheek, simple bubble ears and the
-    // buck-teeth signature. Deliberately spare — every part left earns its
-    // silhouette. ---
+    // --- Head pivot. Chibi squirrel face — the species reads from: tall
+    // pointed ears with dark tip tufts (round bubble ears read as koala/bear),
+    // a forward cream muzzle, fluffy side cheek tufts, a forehead cowlick, and
+    // big layered eyes (white + iris + pupil, so they read as eyes rather than
+    // panda patches). Plus blush and the buck-teeth signature. ---
     const head = new THREE.Group();
     head.position.set(0, 0.415, -0.03);
     body.add(head);
     this.rig.head = head;
     const headBall = mesh(new THREE.SphereGeometry(0.24, 20, 15), T(FUR), head, [0, 0.005, 0]);
     headBall.name = 'headBall';
-    headBall.scale.set(1.02, 1.0, 0.96);
-    // Chubby cream cheeks — the chipmunk/squirrel "stuffed" look.
+    headBall.scale.set(1.04, 0.96, 0.98);
+    // Forehead cowlick: three swept spikes of darker fur.
+    for (const [x, y, z, rx, rz, h] of [
+      [0, 0.225, -0.03, -0.55, 0, 0.12],
+      [-0.045, 0.215, 0.0, -0.35, 0.35, 0.095],
+      [0.045, 0.215, 0.0, -0.35, -0.35, 0.095],
+    ]) {
+      const spike = mesh(new THREE.ConeGeometry(0.038, h, 7), T(FUR_DARK), head, [x, y, z], [rx, 0, rz]);
+      spike.scale.set(1, 1, 0.7);
+    }
+    // Chubby cream cheeks — the chipmunk/squirrel "stuffed" look — each with a
+    // fluffy fur tuft flaring sideways to widen the face like a squirrel's.
     for (const sx of [-1, 1]) {
       const cheek = mesh(new THREE.SphereGeometry(0.11, 12, 9), T(CREAM), head, [sx * 0.085, -0.07, -0.14]);
       cheek.scale.set(1.25, 1.0, 0.95);
+      for (const [dy, len, tilt] of [[0.0, 0.1, 1.75], [-0.05, 0.08, 2.05]]) {
+        mesh(new THREE.ConeGeometry(0.04, len, 6), T(CREAM), head,
+          [sx * 0.215, -0.07 + dy, -0.07], [0, 0, -sx * tilt]);
+      }
       // One soft blush dot per cheek — a cartoon sticker blush. Pushed far
       // enough out of the cheek puff to clearly poke through its surface
       // (an embedded blush sphere renders invisible behind the cheek shell),
@@ -194,45 +214,59 @@ export class HeroModel {
       blush.name = sx < 0 ? 'blushL' : 'blushR';
       blush.scale.set(1.05, 0.85, 0.5);
     }
-    const snout = mesh(new THREE.SphereGeometry(0.085, 12, 10), T(CREAM), head, [0, -0.065, -0.185]);
-    snout.scale.set(1.3, 0.85, 0.95);
-    const nose = mesh(new THREE.SphereGeometry(0.034, 9, 8), T(DARK), head, [0, -0.042, -0.262]);
-    nose.scale.set(1.3, 0.9, 0.8);
+    // Muzzle pushed forward (a short rodent snout, not a flat bear face).
+    const snout = mesh(new THREE.SphereGeometry(0.085, 12, 10), T(CREAM), head, [0, -0.07, -0.2]);
+    snout.scale.set(1.2, 0.82, 1.1);
+    const nose = mesh(new THREE.SphereGeometry(0.034, 9, 8), T(DARK), head, [0, -0.04, -0.287]);
+    nose.scale.set(1.35, 0.85, 0.8);
     // Simple "w" smile from two small capsules.
     for (const sx of [-1, 1]) {
       const smile = mesh(new THREE.CapsuleGeometry(0.008, 0.052, 3, 6), T(DARK), head,
-        [sx * 0.03, -0.105, -0.252], [0, 0, sx * 0.72]);
+        [sx * 0.03, -0.105, -0.283], [0, 0, sx * 0.72]);
       smile.userData.__outline = true;
     }
-    // Eyes: solid deep-plum beans with ONE big white catchlight — the classic
-    // minimal cartoon eye. Each in a named group (scale.y = blink).
+    // Eyes: layered chibi eyes — white sclera (inked outline), big violet iris,
+    // dark pupil, two catchlights — angled out along the head's curve. Each in
+    // a named group (scale.y = blink).
     this.eyes = [];
     for (const sx of [-1, 1]) {
       const eye = new THREE.Group();
       eye.name = sx < 0 ? 'eyeL' : 'eyeR';
-      eye.position.set(sx * 0.095, 0.015, -0.185);
+      eye.position.set(sx * 0.098, 0.02, -0.19);
+      eye.rotation.y = -sx * 0.25;
       head.add(eye);
       this.eyes.push(eye);
-      const ball = mesh(new THREE.SphereGeometry(0.072, 14, 12), T(DARK), eye, [0, 0, 0]);
-      ball.scale.set(0.98, 1.28, 0.75);
-      const glint = mesh(new THREE.SphereGeometry(0.026, 6, 6), GLINT, eye, [-sx * 0.022, 0.04, -0.045]);
-      glint.userData.__outline = true;
-      glint.castShadow = false;
-      // Round bubble ears — lilac shell + rose inner, nothing else.
+      const sclera = mesh(new THREE.SphereGeometry(0.075, 14, 12), T(0xffffff, { emissiveIntensity: 0.45 }), eye, [0, 0, 0]);
+      sclera.scale.set(0.9, 1.2, 0.6);
+      const iris = mesh(new THREE.SphereGeometry(0.056, 14, 12), T(IRIS, { emissiveIntensity: 0.5 }), eye, [0, -0.006, -0.02]);
+      iris.scale.set(0.95, 1.15, 0.5);
+      const pupil = mesh(new THREE.SphereGeometry(0.034, 10, 8), T(DARK), eye, [0, -0.006, -0.036]);
+      pupil.scale.set(0.95, 1.15, 0.45);
+      for (const part of [iris, pupil]) part.userData.__outline = true; // inked by the sclera's outline only
+      for (const [gx, gy, gr] of [[-sx * 0.02, 0.03, 0.021], [sx * 0.018, -0.03, 0.01]]) {
+        const glint = mesh(new THREE.SphereGeometry(gr, 6, 6), GLINT, eye, [gx, gy, -0.056]);
+        glint.userData.__outline = true;
+        glint.castShadow = false;
+      }
+      // Tall pointed squirrel ears — flattened cones with a rose inner and a
+      // dark fur tuft on the tip, splayed outward. The base sinks into the head.
       const ear = new THREE.Group();
-      ear.position.set(sx * 0.135, 0.225, 0.01);
-      ear.rotation.set(0.08, 0, sx * 0.22);
+      ear.position.set(sx * 0.125, 0.185, 0.025);
+      ear.rotation.set(0.12, 0, -sx * 0.28);
       head.add(ear);
-      const earOuter = mesh(new THREE.SphereGeometry(0.09, 12, 9), T(FUR), ear, [0, 0.02, 0]);
-      earOuter.scale.set(0.92, 1.1, 0.55);
-      const earInner = mesh(new THREE.SphereGeometry(0.058, 10, 8), T(PINK), ear, [0, 0.012, -0.02]);
-      earInner.scale.set(0.82, 1.0, 0.35);
+      const earOuter = mesh(new THREE.ConeGeometry(0.088, 0.19, 10), T(FUR), ear, [0, 0.09, 0]);
+      earOuter.scale.set(1, 1, 0.72);
+      const earInner = mesh(new THREE.ConeGeometry(0.055, 0.13, 8), T(PINK), ear, [0, 0.075, -0.03]);
+      earInner.scale.set(1, 1, 0.4);
+      earInner.userData.__outline = true;
+      const tuft = mesh(new THREE.ConeGeometry(0.032, 0.09, 6), T(FUR_DARK), ear, [sx * 0.012, 0.2, 0], [0, 0, -sx * 0.25]);
+      tuft.scale.set(1, 1, 0.7);
       if (sx < 0) { this.rig.earL = ear; this._earLz = ear.rotation.z; }
       else { this.rig.earR = ear; this._earRz = ear.rotation.z; }
     }
     // Prominent buck teeth — the squirrel signature, two front incisors.
     for (const sx of [-1, 1]) {
-      const tooth = mesh(new THREE.BoxGeometry(0.026, 0.042, 0.016), T(0xfffef2), head, [sx * 0.015, -0.135, -0.248]);
+      const tooth = mesh(new THREE.BoxGeometry(0.026, 0.042, 0.016), T(0xfffef2), head, [sx * 0.015, -0.152, -0.258]);
       tooth.rotation.z = sx * 0.04;
     }
 
@@ -300,29 +334,62 @@ export class HeroModel {
     // Build the default silhouette; Player calls setWeapon() with the real def.
     this._buildGunMeshes(null);
 
-    // --- Bushy tail: oversized curled plume with cream puffs along the inner
-    // arc. Even bigger relative to the body — the signature squirrel sweep. ---
+    // --- Bushy tail: a big S-curve plume swept back, up past the head and
+    // curling forward at the tip — THE squirrel silhouette. Biased to one side
+    // so it peeks out beside the head from the front (directly behind, it was
+    // hidden and the hero read as a bear/koala). ONE smooth tapered tube (a
+    // stack of outlined spheres read as a segmented caterpillar), fat in the
+    // middle, with a gentle twisted fur ripple; vertex colours run dark at the
+    // root → lilac → pale at the tip, with a cream underside on the inner arc. ---
     const tail = new THREE.Group();
     tail.position.set(0, 0.08, 0.155);
     body.add(tail);
     this.rig.tail = tail;
-    const segs = [
-      { p: [0, 0.00, 0.05], r: 0.115, c: FUR_DARK, s: [1.0, 0.9, 1.0] },
-      { p: [0.015, 0.12, 0.14], r: 0.175, c: FUR, s: [1.12, 1.0, 0.95] },
-      { p: [0.005, 0.30, 0.17], r: 0.235, c: FUR_DARK, s: [1.15, 1.05, 1.0] },
-      { p: [-0.01, 0.49, 0.105], r: 0.245, c: FUR, s: [1.2, 1.0, 0.95] },
-      { p: [-0.005, 0.63, -0.035], r: 0.19, c: FUR_LIGHT, s: [1.1, 0.95, 0.92] },
-    ];
-    for (const s of segs) {
-      const puff = mesh(new THREE.SphereGeometry(s.r, 14, 10), T(s.c), tail, s.p);
-      puff.scale.set(...s.s);
+    const tailCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.0, 0.03),
+      new THREE.Vector3(0.03, 0.16, 0.19),
+      new THREE.Vector3(0.08, 0.4, 0.24),
+      new THREE.Vector3(0.12, 0.62, 0.15),
+      new THREE.Vector3(0.14, 0.78, -0.01),
+      new THREE.Vector3(0.12, 0.8, -0.12),
+    ]);
+    const TS = 48, RS = 16; // tubular / radial segments
+    const tailGeo = new THREE.TubeGeometry(tailCurve, TS, 1, RS, false);
+    // Radius profile: thin root (sinks into the rump) → fat plume → rounded tip.
+    const tailR = (u) => 0.09 + 0.15 * Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.92) + 0.04 * Math.sin(u * Math.PI);
+    const pos = tailGeo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const cDark = new THREE.Color(FUR_DARK), cFur = new THREE.Color(FUR), cLight = new THREE.Color(FUR_LIGHT);
+    const cCream = new THREE.Color(CREAM), cv = new THREE.Color();
+    const P = new THREE.Vector3(), Tn = new THREE.Vector3(), v = new THREE.Vector3(), inner = new THREE.Vector3();
+    for (let i = 0; i <= TS; i++) {
+      const u = i / TS;
+      tailCurve.getPointAt(u, P);
+      tailCurve.getTangentAt(u, Tn);
+      inner.set(0, Tn.z, -Tn.y).normalize(); // toward the body side of the arc (YZ plane)
+      for (let j = 0; j <= RS; j++) {
+        const k = i * (RS + 1) + j;
+        v.fromBufferAttribute(pos, k).sub(P); // unit radial offset
+        const theta = (j / RS) * Math.PI * 2;
+        const ripple = 1 + 0.07 * Math.sin(theta * 5 + u * 22); // twisted fur tufts
+        pos.setXYZ(k, ...v.clone().multiplyScalar(tailR(u) * ripple).add(P).toArray());
+        // Colour: root → body → tip gradient, cream on the inner arc mid-run.
+        if (u < 0.35) cv.copy(cDark).lerp(cFur, u / 0.35);
+        else cv.copy(cFur).lerp(cLight, Math.max(0, (u - 0.6) / 0.4));
+        const innerW = THREE.MathUtils.smoothstep(v.dot(inner), 0.35, 0.8) * Math.sin(Math.min(1, u * 1.3) * Math.PI);
+        cv.lerp(cCream, innerW * 0.9);
+        cols[k * 3] = cv.r; cols[k * 3 + 1] = cv.g; cols[k * 3 + 2] = cv.b;
+      }
     }
-    for (const p of [[0, 0.23, 0.035], [0, 0.43, -0.005], [0, 0.57, -0.095]]) {
-      const stripe = mesh(new THREE.SphereGeometry(0.075, 10, 8), T(CREAM), tail, p);
-      stripe.scale.set(1.4, 0.8, 0.45);
-    }
+    tailGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    tailGeo.computeVertexNormals();
+    mesh(tailGeo, toon({ color: 0xffffff, vertexColors: true, emissive: FUR, emissiveIntensity: 0.22 }), tail);
+    // Round off the tip (the tube is open-ended).
+    const tipR = tailR(1);
+    mesh(new THREE.SphereGeometry(tipR, 12, 10), T(FUR_LIGHT), tail, tailCurve.getPointAt(1).toArray());
     // Warm glow tip caps the tail with a magical firefly-like accent.
-    mesh(new THREE.SphereGeometry(0.07, 10, 8), GLOWMAT(GLOW, 0.9), tail, [0, 0.71, -0.085]);
+    mesh(new THREE.SphereGeometry(0.07, 10, 8), GLOWMAT(GLOW, 0.9), tail,
+      tailCurve.getPointAt(1).add(new THREE.Vector3(0, 0.02, -0.1)).toArray());
 
     // --- Kick swoosh arcs (pooled once, hidden between kicks): twin additive
     // crescents that sweep the backflip's leg path — starting low in front,

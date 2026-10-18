@@ -363,7 +363,7 @@ export class Gallery {
     this.roleEl.style.display = 'inline-block';
 
     // Same model-building path the game itself uses — feet normalized to
-    // local y=0 for every type (GLB-cloned Wood Shroom and procedural alike).
+    // local y=0 for every type.
     // buildMushroom() already bakes its own scale/position onto the returned
     // group (to reach its gameplay height with feet at y=0); wrap it in an
     // outer group rather than overwriting that transform, so the two scale

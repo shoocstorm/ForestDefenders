@@ -13,9 +13,8 @@ if (!process.argv[2]) {
 const OUT_DIR = join(ROOT, process.argv[2]);
 
 const MODELS = [
-  { key: 'woodShroom',   file: 'mushrooms/wood_mushroom.glb' },
-  // fireShroom & earthShroom are procedural now (their GLBs were >2MB each) —
-  // see src/entities/enemies/ProceduralMushroom.js.
+  // All six elemental shrooms (incl. Wood) are procedural — see
+  // src/entities/enemies/ProceduralMushroom.js.
   { key: 'bossShroom',   file: 'mushrooms/boss_mushroom.glb' },
   { key: 'glowShroom',   file: 'mushrooms/glow_mushroom.glb' },
   { key: 'groveTree',    file: 'trees/grove_tree.glb' },

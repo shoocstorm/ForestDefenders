@@ -12,11 +12,11 @@ import { buildProceduralMushroom } from './ProceduralMushroom.js';
 // and face the player's -Z game-forward convention (180° Y flip) so the existing
 // facing-yaw math in EnemyBase is unchanged.
 
-// Fire, Earth, Water, Ice & Metal have no GLB — route them to the procedural builder.
-const PROCEDURAL = new Set(['FIRE_SHROOM', 'EARTH_SHROOM', 'WATER_SHROOM', 'ICE_SHROOM', 'METAL_SHROOM']);
+// All six elemental enemies use the procedural builder (one consistent chibi
+// sculpt). Wood moved off its GLB so it matches the other five.
+const PROCEDURAL = new Set(['WOOD_SHROOM', 'FIRE_SHROOM', 'EARTH_SHROOM', 'WATER_SHROOM', 'ICE_SHROOM', 'METAL_SHROOM']);
 
 const TYPE = {
-  WOOD_SHROOM:  { asset: 'woodShroom', height: 1.25 },
   BOSS_SHROOM:  { asset: 'bossShroom', height: 2.6 },
   GLOW_SHROOM:  { asset: 'glowShroom', height: 1.0 },
 };
@@ -24,7 +24,7 @@ const TYPE = {
 export function buildMushroom(type) {
   if (PROCEDURAL.has(type)) return buildProceduralMushroom(type);
 
-  const cfg = TYPE[type] || TYPE.WOOD_SHROOM;
+  const cfg = TYPE[type] || TYPE.GLOW_SHROOM;
   const group = clone(cfg.asset);
 
   // Normalize: feet at y=0, target height, face -Z.

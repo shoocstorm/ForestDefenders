@@ -11,6 +11,38 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Hero + enemy model refinement — polished chibi sculpts (procedural)
+
+**Date:** 2026-10-18 · **Files:** `src/entities/HeroModel.js`,
+`src/entities/enemies/ProceduralMushroom.js`, `src/entities/enemies/MushroomModel.js`,
+`scripts/package-models.js`, `src/core/Assets.js`, `src/ui/Gallery.js`
+
+Kept the lilac chibi direction and every rig/clip interface; re-sculpted the
+shapes so the species read at a glance.
+
+- **Hero (read as a koala/bear → now a squirrel):** tall pointed ears with dark
+  tip tufts + rose inner (were round bubble ears); layered eyes — white
+  sclera, violet iris, pupil, two catchlights, angled along the head curve (solid
+  dark beans read as panda patches); forward muzzle (smile/teeth moved out with
+  it); fluffy side cheek tufts; a 3-spike forehead cowlick; plum-leather belt +
+  gold buckle. **Tail** rebuilt as ONE tapered `TubeGeometry` along an S-curve
+  (back → up past the head → tip curls forward), biased sideways so it peeks
+  beside the head, with a twisted fur ripple and vertex-colour gradient (dark
+  root → lilac → pale tip, cream inner arc). The old stack of outlined spheres
+  drew ink lines between every puff and read as a segmented caterpillar.
+- **Enemies:** cap is now a lathed dome that bulges past the gill line and
+  curls under at the rim (was a half-sphere bowl); stem is a lathed chubby bulb
+  (was a straight cylinder); gills a double-sided lathed underside; faces get
+  white eyes with glaring pupils, capsule brows and two fangs (black dots
+  vanished at range); spots seat on the actual cap surface. Non-glow parts get
+  the hero's self-lit floor (emissive = colour, 0.22) so the camera-facing
+  stem/face doesn't collapse into the cel shadow band — kept out of the
+  hit-flash list.
+- **Wood Shroom moved to the procedural builder** (new `WOOD_SHROOM` config +
+  `leaves` sapling prop) so all six elemental enemies share one sculpt quality;
+  the unused `woodShroom` GLB was dropped from the bundle. Node names
+  (`Hips`/`Cap`/`LegL/R`/`ArmL/R`) are unchanged, so all clips still bind.
+
 ## Arena forest rebuilt from sculpted GLB trees (Hyper3D-generated)
 
 **Date:** 2026-10-18 · **Files:** `src/world/Vegetation.js` (rewritten),

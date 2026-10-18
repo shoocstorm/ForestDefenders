@@ -16,6 +16,13 @@ import { toon, addOutlines } from '../../materials/CelMaterial.js';
 
 // --- Per-type look & proportions (natural units; height-normalized after build) ---
 const TYPE = {
+  WOOD_SHROOM: {
+    height: 1.25,
+    legH: 0.20, stemH: 0.50, stemRtop: 0.29, stemRbot: 0.40, capR: 0.62, capSquashY: 0.74,
+    stemColor: 0xe2d2a8, capColor: 0x4f9a3a, spotColor: 0xd8f59a,
+    capEmissive: 0x3e8a2a, capEmInt: 0.3, gillEmissive: 0x9fe86a, gillEmInt: 0.35,
+    arm: 'slim', prop: 'leaves', accent: 0x8fe04a,
+  },
   FIRE_SHROOM: {
     height: 1.30,
     legH: 0.20, stemH: 0.52, stemRtop: 0.30, stemRbot: 0.42, capR: 0.62, capSquashY: 0.78,
@@ -59,9 +66,14 @@ export function buildProceduralMushroom(type) {
   const emissives = [];
 
   // Helper: cel-toon mesh with shadows; tracks emissive materials for hit-flash.
+  // Parts without their own glow get a self-lit floor (same trick as the
+  // hero) so the camera-facing side of the stem — usually in the cel shadow
+  // band — doesn't collapse to near-black and swallow the face. The floor
+  // isn't a "glow", so it stays out of the hit-flash list.
   const part = (geo, color, opts = {}) => {
-    const mat = toon({ color, emissive: opts.emissive ?? 0x000000,
-      emissiveIntensity: opts.emissiveIntensity ?? 0, rim: opts.rim });
+    const glow = opts.emissiveIntensity != null;
+    const mat = toon({ color, emissive: glow ? (opts.emissive ?? 0x000000) : color,
+      emissiveIntensity: glow ? opts.emissiveIntensity : 0.22, rim: opts.rim, side: opts.side });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
     if ((opts.emissiveIntensity ?? 0) > 0.01) emissives.push(mat);
@@ -94,40 +106,68 @@ export function buildProceduralMushroom(type) {
     hips.add(leg);
   }
 
-  // --- Stem (stubby, wider at the base) ---
-  const stem = part(new THREE.CylinderGeometry(cfg.stemRtop, cfg.stemRbot, cfg.stemH, 16), cfg.stemColor);
-  stem.position.y = cfg.stemH / 2;
+  // --- Stem: a chubby lathed bulb (belly bulge, slight waist, flared neck) —
+  // a straight cylinder read as a can, this reads as a cute mushroom body. ---
+  const H = cfg.stemH, rB = cfg.stemRbot, rT = cfg.stemRtop;
+  const stemProfile = [
+    [0, 0], [rB * 0.82, 0], [rB * 1.0, H * 0.1], [rB * 1.06, H * 0.32],
+    [rB * 0.98, H * 0.55], [rT * 1.02, H * 0.78], [rT * 1.1, H * 0.94], [rT * 0.9, H], [0, H],
+  ];
+  const stemR = (y) => { // radius of the profile at height y (linear interp)
+    for (let i = 1; i < stemProfile.length; i++) {
+      const [x0, y0] = stemProfile[i - 1], [x1, y1] = stemProfile[i];
+      if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * ((y - y0) / (y1 - y0));
+    }
+    return rT;
+  };
+  const stem = part(new THREE.LatheGeometry(stemProfile.map(([x, y]) => new THREE.Vector2(x, y)), 20), cfg.stemColor);
   hips.add(stem);
 
-  // --- Cartoon face on the stem front (+Z) ---
-  const faceY = cfg.stemH * 0.62;
-  const faceZ = cfg.stemRtop + (cfg.stemRbot - cfg.stemRtop) * 0.35;
+  // --- Cartoon face on the stem front (+Z): white eyes with a dark pupil
+  // (solid black dots vanished at range), heavy angled brows, a snarl and two
+  // little fangs — menacing but still chibi. ---
+  const faceY = H * 0.6;
+  const faceZ = stemR(faceY) - 0.02;
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x120a06 });
+  const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   for (const sx of [-1, 1]) {
-    const eye = part(new THREE.SphereGeometry(0.11, 12, 10), 0x0a0a0a);
-    noOutline(eye);
-    eye.position.set(sx * 0.16, faceY, faceZ);
-    eye.scale.z = 0.55;
+    const eye = new THREE.Object3D();
+    eye.position.set(sx * 0.15, faceY, faceZ);
+    eye.rotation.y = sx * 0.3; // follow the stem's curve
     hips.add(eye);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    noOutline(glint);
-    glint.position.set(sx * 0.19, faceY + 0.04, faceZ + 0.05);
-    hips.add(glint);
-    // Angry brow (tilted toward the nose) sells the mutant menace.
-    const brow = part(new THREE.BoxGeometry(0.16, 0.04, 0.05), 0x1a1208);
-    brow.position.set(sx * 0.16, faceY + 0.13, faceZ + 0.02);
-    brow.rotation.z = sx * 0.5;
+    const sclera = part(new THREE.SphereGeometry(0.105, 12, 10), 0xfffdf4, { emissive: 0xfffdf4, emissiveIntensity: 0.35 });
+    sclera.scale.set(0.95, 1.1, 0.5);
+    eye.add(sclera);
+    const pupil = noOutline(new THREE.Mesh(new THREE.SphereGeometry(0.062, 10, 8), pupilMat));
+    pupil.position.set(-sx * 0.022, -0.012, 0.035); // cross-eyed glare at the target
+    pupil.scale.set(1, 1.15, 0.5);
+    eye.add(pupil);
+    const glint = noOutline(new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), glintMat));
+    glint.position.set(-sx * 0.005, 0.02, 0.064);
+    eye.add(glint);
+    // Angry brow (tilted toward the nose), sitting on the eye's upper lid.
+    const brow = part(new THREE.CapsuleGeometry(0.03, 0.15, 3, 8), 0x2a1a10);
+    brow.position.set(sx * 0.15, faceY + 0.105, faceZ + 0.04);
+    brow.rotation.z = Math.PI / 2 + sx * 0.45;
     hips.add(brow);
+    // Fangs at the mouth corners.
+    const fang = noOutline(part(new THREE.ConeGeometry(0.022, 0.06, 5), 0xfffdf4));
+    fang.position.set(sx * 0.05, faceY - 0.2, faceZ + 0.02);
+    fang.rotation.x = Math.PI;
+    hips.add(fang);
   }
-  const mouth = part(new THREE.TorusGeometry(0.08, 0.02, 8, 14, Math.PI), 0x2a1410);
+  const mouth = part(new THREE.TorusGeometry(0.075, 0.022, 8, 14, Math.PI), 0x2a1410);
   noOutline(mouth);
-  mouth.position.set(0, faceY - 0.16, faceZ + 0.02);
+  mouth.position.set(0, faceY - 0.15, faceZ + 0.01);
   mouth.rotation.x = Math.PI; // upper arc → snarl
   hips.add(mouth);
 
-  // --- Gills ring under the cap (faint inner glow) ---
-  const gills = part(new THREE.CylinderGeometry(cfg.capR * 0.92, cfg.stemRtop * 1.4, 0.14, 18),
-    0xf0e4cf, { emissive: cfg.gillEmissive, emissiveIntensity: cfg.gillEmInt });
-  gills.position.y = cfg.stemH + 0.02;
+  // --- Gills: the cap's underside, a shallow cone from the stem neck out to
+  // the rim with a faint inner glow (double-sided: seen from below + inside). ---
+  const gills = part(new THREE.LatheGeometry([
+    new THREE.Vector2(rT * 0.95, 0), new THREE.Vector2(cfg.capR * 0.6, 0.05), new THREE.Vector2(cfg.capR * 0.93, 0.07),
+  ], 24), 0xf0e4cf, { emissive: cfg.gillEmissive, emissiveIntensity: cfg.gillEmInt, side: THREE.DoubleSide });
+  gills.position.y = H - 0.02;
   hips.add(gills);
 
   // --- Arms (pivot at shoulders; rest pose hangs down) ---
@@ -158,21 +198,31 @@ export function buildProceduralMushroom(type) {
   cap.userData.baseY = capBaseY;
   hips.add(cap);
 
-  const dome = part(new THREE.SphereGeometry(cfg.capR, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+  // Lathed mushroom cap: a soft dome that bulges out past the gill line and
+  // curls under at the rim (a plain half-sphere read as a bowl/helmet).
+  // capSurface(t): t=0 crown → t=1 rim edge; also used to seat the spots.
+  const capH = cfg.capR * cfg.capSquashY;
+  const capSurface = (t) => {
+    const a = t * Math.PI / 2;
+    return new THREE.Vector2(cfg.capR * Math.pow(Math.sin(a), 0.8), capH * Math.cos(a) * (1 - 0.06 * t) + 0.02);
+  };
+  const capPts = [new THREE.Vector2(cfg.capR * 0.9, -0.03), new THREE.Vector2(cfg.capR * 1.0, -0.01)];
+  for (let i = 16; i >= 0; i--) capPts.push(capSurface(i / 16)); // lathe wants bottom → top
+  capPts[capPts.length - 1].x = 0;
+  const dome = part(new THREE.LatheGeometry(capPts, 28),
     cfg.capColor, { emissive: cfg.capEmissive, emissiveIntensity: cfg.capEmInt });
-  dome.scale.y = cfg.capSquashY;
   cap.add(dome);
 
-  // Glowing polka dots scattered over the dome.
+  // Glowing polka dots seated on the cap surface, facing outward.
   const dotMat = new THREE.MeshBasicMaterial({ color: cfg.spotColor });
   for (let i = 0; i < 9; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const p = 0.35 + Math.random() * 0.85;
+    const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5;
+    const t = i === 0 ? 0.05 : 0.3 + Math.random() * 0.5;
+    const s = capSurface(t);
     const dot = noOutline(new THREE.Mesh(new THREE.SphereGeometry(0.06 + Math.random() * 0.05, 8, 8), dotMat));
-    dot.position.set(Math.sin(p) * Math.cos(a) * cfg.capR,
-      Math.cos(p) * cfg.capR * cfg.capSquashY, Math.sin(p) * Math.sin(a) * cfg.capR);
-    dot.scale.z = 0.4;
-    dot.lookAt(dot.position.clone().multiplyScalar(2));
+    dot.position.set(Math.cos(a) * s.x, s.y, Math.sin(a) * s.x);
+    dot.scale.z = 0.35;
+    dot.lookAt(dot.position.clone().multiplyScalar(2).setY(s.y * 2 + 0.2));
     cap.add(dot);
   }
 
@@ -211,7 +261,20 @@ export function buildProceduralMushroom(type) {
 
 // --- Element prop on the cap ---
 function buildProp(cfg, cap, part, emissives) {
-  if (cfg.prop === 'flame') {
+  if (cfg.prop === 'leaves') {
+    // Wood Shroom: a sapling sprout on the crown — twig + two leaf blades.
+    const top = cfg.capR * cfg.capSquashY;
+    const twig = part(new THREE.CylinderGeometry(0.025, 0.035, 0.22, 6), 0x6e4a26);
+    twig.position.y = top + 0.1;
+    cap.add(twig);
+    for (const sx of [-1, 1]) {
+      const leaf = part(new THREE.SphereGeometry(0.13, 10, 6), 0x6cc23a, { emissive: 0x3e8a2a, emissiveIntensity: 0.35 });
+      leaf.scale.set(0.45, 0.12, 1);
+      leaf.position.set(sx * 0.1, top + 0.2, 0);
+      leaf.rotation.set(0, Math.PI / 2, sx * 0.5);
+      cap.add(leaf);
+    }
+  } else if (cfg.prop === 'flame') {
     // A licking flame crown — three emissive cones, animated by the idle clip.
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
