@@ -36,7 +36,9 @@ export class Animal {
     this._mixer = built.mixer;
     this.group.add(this.model);
 
-    // Danger glow — reddens and brightens as HP drops while exposed.
+    // The animal's ONE PointLight: soft gold rescue-beacon glow while caged,
+    // then the danger glow (reddens + brightens as HP drops) once exposed. The
+    // two never overlap, and every scene light costs every lit fragment.
     this.glow = new THREE.PointLight(0xff3020, 0, 5, 2);
     this.glow.position.y = 0.6;
     this.group.add(this.glow);
@@ -84,11 +86,8 @@ export class Animal {
       beacon.add(ring);
       if (ring.layers) ring.layers.enable(BLOOM_LAYER);
     }
-    const beaconLight = new THREE.PointLight(0xffd87a, 1.4, 6, 2);
-    beacon.add(beaconLight);
     cage.add(beacon);
     this.beacon = beacon;
-    this._beaconLight = beaconLight;
     this._beaconRings = beacon.children.filter((c) => c.isMesh && c.geometry.type === 'TorusGeometry');
 
     this.cage = cage;
@@ -112,7 +111,7 @@ export class Animal {
   free(ctx) {
     if (this.state !== 'CAGED') return;
     this.state = 'RESCUED';
-    if (this.cage) { this.group.remove(this.cage); this.cage = null; this.halo = null; this.beacon = null; this._beaconLight = null; this._beaconRings = null; }
+    if (this.cage) { this.group.remove(this.cage); this.cage = null; this.halo = null; this.beacon = null; this._beaconRings = null; this.glow.intensity = 0; }
 
     // Buff for the level + instant reward (gold + HP heal).
     ctx.gameManager.grantBuff(this.buff);
@@ -173,8 +172,12 @@ export class Animal {
     if (this.beacon) {
       this.beacon.position.y = 2.0 + Math.sin(this._t * 2) * 0.12;
       this.beacon.rotation.y = this._t * 0.8;
+      // The animal's single PointLight doubles as the beacon's soft gold glow
+      // while caged (the danger glow below only runs once it's FREE).
       const pulse = 0.5 + Math.sin(this._t * 4) * 0.5;
-      if (this._beaconLight) this._beaconLight.intensity = 0.9 + pulse * 1.2;
+      this.glow.color.setHex(0xffd87a);
+      this.glow.position.y = this.beacon.position.y;
+      this.glow.intensity = 0.9 + pulse * 1.2;
       if (this._beaconRings) {
         this._beaconRings[0].rotation.x = this._t * 1.6;
         this._beaconRings[1].rotation.z = -this._t * 1.2;
@@ -182,8 +185,12 @@ export class Animal {
     }
 
     // Danger glow when exposed and hurt.
-    const danger = this.state === 'FREE' ? (1 - this.health.percent) : 0;
-    this.glow.intensity = damp(this.glow.intensity, danger * 6, 8, dt);
+    if (!this.beacon) {
+      const danger = this.state === 'FREE' ? (1 - this.health.percent) : 0;
+      this.glow.color.setHex(0xff3020);
+      this.glow.position.y = 0.6;
+      this.glow.intensity = damp(this.glow.intensity, danger * 6, 8, dt);
+    }
 
     this.group.position.copy(this.position);
   }

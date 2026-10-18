@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 import { randRange, randInt } from '../util/MathUtils.js';
 
@@ -90,28 +91,35 @@ export class SkyDecor {
     // Match the balloon envelope's emissive floor so clouds stay bright and
     // readable even when the scene sun shades their underside.
     const cloudColor = new THREE.Color(cfg.cloud || 0xeef3f7).lerp(new THREE.Color(0xffffff), 0.28);
+    // Opaque + front-side: the puffs are closed spheres, and the old 0.95-opacity
+    // double-sided material drew every lobe twice with blended overdraw across
+    // a big slice of the sky for no visible difference.
     const mat = this._m(new THREE.MeshLambertMaterial({
-      color: cloudColor, emissive: cloudColor, emissiveIntensity: 0.35,
-      transparent: true, opacity: 0.95, fog: false, side: THREE.DoubleSide,
+      color: cloudColor, emissive: cloudColor, emissiveIntensity: 0.35, fog: false,
     }));
-    const puffGeo = this._g(new THREE.SphereGeometry(1, 16, 12));
+    const puffGeo = new THREE.SphereGeometry(1, 16, 12);
+    const _lobe = new THREE.Object3D();
     for (let i = 0; i < n; i++) {
-      const cloud = new THREE.Group();
+      // Each cloud's lobes are merged into ONE mesh (they only ever move
+      // together) — was one draw call per lobe, 6–10 per cloud.
+      const lobeGeos = [];
       const lobes = randInt(6, 10);
       for (let j = 0; j < lobes; j++) {
-        const lobe = new THREE.Mesh(puffGeo, mat);
         // Scatter lobes in a horizontal cluster with some vertical variation.
         const spread = 24;
-        lobe.position.set(
+        _lobe.position.set(
           randRange(-spread, spread),
           randRange(-2, 5),
           randRange(-spread * 0.6, spread * 0.6)
         );
         // Flatten spheres for a puffy, cushion-like cloud shape.
         const baseSize = randRange(10, 18);
-        lobe.scale.set(baseSize, baseSize * 0.55, baseSize * 0.7);
-        cloud.add(lobe);
+        _lobe.scale.set(baseSize, baseSize * 0.55, baseSize * 0.7);
+        _lobe.updateMatrix();
+        lobeGeos.push(puffGeo.clone().applyMatrix4(_lobe.matrix));
       }
+      const cloud = new THREE.Mesh(this._g(mergeGeometries(lobeGeos, false)), mat);
+      lobeGeos.forEach((g) => g.dispose());
       // Scatter clouds broadly across the sky dome: use spherical coordinates
       // to position them at varying heights, azimuths, and distances.
       const spanX = 640;

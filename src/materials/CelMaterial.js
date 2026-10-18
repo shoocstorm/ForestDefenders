@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Cel-shaded NPR material system (CEL_SHADER_ART_STYLE_SPEC).
 //
@@ -60,7 +61,7 @@ export function untrackWind(mat) {
 }
 
 // --- Fresnel rim injection (world-space) + optional wind sway ---
-function injectExtras(mat, { rim, wind } = {}) {
+function injectExtras(mat, { rim, wind, vcolEmissive } = {}) {
   mat.userData = mat.userData || {};
   rim = { color: 0xffffff, power: 3.2, intensity: 0.55, ...rim };
 
@@ -104,6 +105,13 @@ function injectExtras(mat, { rim, wind } = {}) {
         `  outgoingLight += uRimColor * rim; }\n` +
         `#include <opaque_fragment>`);
 
+    // Merged vertex-coloured parts (mergeCelParts): the self-lit floor follows
+    // each vertex's own colour, exactly as the separate per-part materials did.
+    if (vcolEmissive) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * vColor.rgb;');
+    }
+
     shader.uniforms.uRimColor = { value: new THREE.Color(rim.color) };
     shader.uniforms.uRimPower = { value: rim.power };
     shader.uniforms.uRimIntensity = { value: rim.intensity };
@@ -117,18 +125,19 @@ function injectExtras(mat, { rim, wind } = {}) {
       _windMaterials.add(mat);
     }
   };
+  if (vcolEmissive) mat.customProgramCacheKey = () => 'cel-vcol-emissive';
   return mat;
 }
 
 // Cel-toon material for procedural geometry (hard bands).
 export function toon(opts = {}) {
   const { color = 0xffffff, emissive = 0x000000, emissiveIntensity = 0, map = null,
-          rim, transparent = false, wind, side, vertexColors = false } = opts;
+          rim, transparent = false, wind, side, vertexColors = false, vcolEmissive = false } = opts;
   const params = { color, emissive, emissiveIntensity, map, transparent, vertexColors,
     gradientMap: gradientMap() };
   if (side !== undefined) params.side = side;
   const m = new THREE.MeshToonMaterial(params);
-  return injectExtras(m, { rim, wind });
+  return injectExtras(m, { rim, wind, vcolEmissive });
 }
 
 // Hand-painted PBR material for textured GLB meshes (real light + baked art).
@@ -266,4 +275,64 @@ export function flashEmissive(materials, baseIntensities, amount) {
     materials[i].emissive = materials[i].emissive ?? new THREE.Color(0xffffff);
     materials[i].emissiveIntensity = (baseIntensities[i] ?? 0) + amount;
   }
+}
+
+// Draw-call reducer for procedural pivot rigs (hero, mushroom enemies). Under
+// each node, the plain self-lit toon parts — emissive == colour at a shared
+// floor intensity, front-sided, opaque, not vertex-coloured — are merged into
+// ONE vertex-coloured mesh (colour baked per vertex, emissive floor follows it
+// via vcolEmissive). Pivots/nodes stay put, so animation is untouched; only
+// leaf meshes merge. Skipped: glow materials, parts flagged
+// `userData.__outline` (outline-skipped tiny features) or `userData.noMerge`
+// (meshes code animates directly), materials in `skipMats` (e.g. an enemy's
+// hit-flash list), and anything under `skipRoots`.
+// Call BEFORE addOutlines so each merged mesh gets one outline, not N.
+const _keepAttrs = ['position', 'normal'];
+export function mergeCelParts(root, { skipRoots = [], skipMats = [] } = {}) {
+  const skipMat = new Set(skipMats);
+  const nodes = [];
+  root.traverse((o) => { if (!o.isMesh) nodes.push(o); });
+  const skip = new Set();
+  for (const r of skipRoots) r?.traverse((o) => skip.add(o));
+  let merged = 0;
+  for (const node of nodes) {
+    if (skip.has(node)) continue;
+    const buckets = new Map();
+    for (const c of node.children) {
+      const m = c.material;
+      if (!c.isMesh || c.userData.__outline || c.userData.noMerge || c.children.length || skipMat.has(c.material)) continue;
+      if (!m?.isMeshToonMaterial || m.transparent || m.vertexColors || m.map || m.side !== THREE.FrontSide) continue;
+      if (!m.emissive.equals(m.color)) continue; // a real glow tint, not the floor
+      const key = m.emissiveIntensity.toFixed(3) + '|' + c.castShadow;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(c);
+    }
+    for (const parts of buckets.values()) {
+      if (parts.length < 2) continue;
+      const geos = parts.map((c) => {
+        c.updateMatrix();
+        const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (!_keepAttrs.includes(name)) g.deleteAttribute(name);
+        g.applyMatrix4(c.matrix);
+        const col = c.material.color, n = g.attributes.position.count;
+        const arr = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+        return g;
+      });
+      const geo = mergeGeometries(geos, false);
+      geos.forEach((g) => g.dispose());
+      if (!geo) continue;
+      const src = parts[0];
+      const mat = toon({ color: 0xffffff, vertexColors: true, vcolEmissive: true,
+        emissive: 0xffffff, emissiveIntensity: src.material.emissiveIntensity });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = src.castShadow;
+      mesh.receiveShadow = parts.some((p) => p.receiveShadow);
+      for (const p of parts) { node.remove(p); p.material.dispose(); }
+      node.add(mesh);
+      merged += parts.length - 1;
+    }
+  }
+  return merged;
 }

@@ -462,10 +462,16 @@ export const AO_QUALITY = {
 export const GRAPHICS = {
   DEFAULT: 'HIGH',
   ORDER: ['HIGH', 'BALANCED', 'PERFORMANCE'], // cycle order for the Settings toggle
-  HIGH:        { label: 'High',        pixelRatio: 2,   post: 'full', ao: 'HIGH', shadowMap: 4096 },
+  // High caps at 1.5× (was 2×): with 4× MSAA on the composer targets the edge
+  // quality is near-identical, and every pass (lighting, post) costs ~44% less
+  // on retina laptops — 2× was the main reason the fans spun up.
+  HIGH:        { label: 'High',        pixelRatio: 1.5, post: 'full', ao: 'HIGH', shadowMap: 4096 },
   BALANCED:    { label: 'Balanced',    pixelRatio: 1.5, post: 'full', ao: 'LOW',  shadowMap: 2048 },
   PERFORMANCE: { label: 'Performance', pixelRatio: 1,   post: 'none', ao: 'OFF',  shadowMap: 1024 },
 };
+// Render frame cap (fps). The sim is a fixed 60Hz step, so rendering faster on
+// 120/144Hz displays only redraws identical states at double GPU cost.
+export const FRAME_CAP = 60;
 export const BLOOM_LAYER = 1; // objects on this layer glow (boss, rings, lanterns, spores)
 
 export const VEGETATION = { SEED: 1337 }; // deterministic procedural variation

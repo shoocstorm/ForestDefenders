@@ -182,7 +182,16 @@ export class PostFX {
   setPostEnabled(on) { this.postEnabled = on; }
 
   render() {
-    if (!this.postEnabled || this.mode === 'nopost') { this.renderer.render(this.scene, this.camera); return; }
+    // Shadow map: one update per frame (renderer.shadowMap.autoUpdate is off —
+    // see Game). It must happen on the BEAUTY render: the bloom pass restricts
+    // camera.layers to the bloom layer, and WebGLShadowMap culls casters by the
+    // camera's layers, so a shadow update there would bake an almost-empty map.
+    const shadows = this.renderer.shadowMap;
+    if (!this.postEnabled || this.mode === 'nopost') {
+      shadows.needsUpdate = true;
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     // Animated grain (wrapped to keep float precision inside the hash).
     if (this.polishPass) this.polishPass.material.uniforms.uTime.value = (performance.now() * 0.001) % 10;
@@ -202,6 +211,10 @@ export class PostFX {
     // 'ao' debug zeroes bloom to inspect contact AO in isolation.
     this.combine.material.uniforms.uStrength.value =
       this.mode === 'ao' ? 0 : QUALITY[this.quality].bloomScale;
+    // The final composer's first pass is the RenderPass (beauty) — it consumes
+    // this flag; three clears it after the update, so GTAO's own scene render
+    // reuses the same map instead of re-drawing it.
+    shadows.needsUpdate = true;
     this.finalComposer.render();
   }
 
@@ -212,7 +225,9 @@ export class PostFX {
     // resize and preset changes) or the bloom chain keeps rendering at the
     // construction-time ratio: up to 4x the intended pixels on high-DPR screens.
     const pr = this.renderer.getPixelRatio();
-    this.bloomComposer.setPixelRatio(pr);
+    // The bloom-layer render only feeds a blur, so it runs at ≤1× CSS
+    // resolution — on a retina screen that's ¼ of the pixels for an identical glow.
+    this.bloomComposer.setPixelRatio(Math.min(pr, 1));
     this.finalComposer.setPixelRatio(pr);
     this.bloomComposer.setSize(w, h);
     // Bloom blur mips deliberately capped at CSS resolution (not effective

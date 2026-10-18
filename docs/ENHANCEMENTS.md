@@ -11,6 +11,27 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Perf pass — draw-call merging for rigs, props, landmarks and clouds
+
+**Date:** 2026-10-18 · **Files:** `src/materials/CelMaterial.js`, `src/entities/HeroModel.js`,
+`src/entities/enemies/ProceduralMushroom.js`, `src/core/Assets.js`, `src/world/SkyDecor.js`
+(GPU/light/shadow fixes from the same pass are in `AGENTS.md`)
+
+- **`mergeCelParts(root, { skipRoots, skipMats })`** (CelMaterial): under each
+  pivot node, plain self-lit toon parts sharing an emissive-floor intensity are
+  merged into one vertex-coloured mesh; the new `vcolEmissive` toon option makes
+  the emissive floor follow the vertex colour, so the look is unchanged. Runs
+  before `addOutlines`, so outlines shrink too. Hero: ~116 → 60 meshes (gun
+  subtree, gem and bolt excluded — they're rebuilt/animated). Mushroom enemies
+  merge everything except hit-flash glow parts.
+- **`mergeStatic`** (Assets, opt-in `_merge` set): multi-mesh static GLBs are
+  merged per source material at load — crate 21 → 3, crystal 7 → 3, ancient tree
+  36 → a few, boss-landmark mushroom (face parts in `outlineSkip` stay separate).
+- Clouds: each cloud's 6–10 lobes merged into one opaque front-sided mesh (was a
+  transparent double-sided draw per lobe).
+- Measured (L1, High, wave 1): draw calls/frame 2488 → 1835, scene meshes
+  1664 → 1102, outline meshes 304 → 128, shadow casters 582 → 380.
+
 ## Hero + enemy model refinement — polished chibi sculpts (procedural)
 
 **Date:** 2026-10-18 · **Files:** `src/entities/HeroModel.js`,

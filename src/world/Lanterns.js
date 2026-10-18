@@ -7,10 +7,10 @@ import { ARENA, BLOOM_LAYER } from '../config/Constants.js';
 // is emissive (orb + rings on the bloom layer) and pulses gently — the orbs
 // and rings are the runway's main bloom accents.
 //
-// Dynamic point lights are thinned to every OTHER pylon (brighter, slightly
-// wider): ~20 always-on PointLights tax every lit fragment on screen, and with
-// decay-2 falloff each light only pools a few units around its own base — the
-// unlit pylons still read as lit via their pulsing emissive + bloom.
+// Dynamic point lights are thinned to every FOURTH pylon (brighter, wider):
+// three.js evaluates every scene light for every lit fragment, and with decay-2
+// falloff each light only pools a few units around its own base — the unlit
+// pylons still read as lit via their pulsing emissive + bloom.
 export class Lanterns {
   constructor(scene, pal) {
     this.scene = scene;
@@ -79,10 +79,10 @@ export class Lanterns {
 
       // Dynamic light on alternating pylons only (see class comment) — kept
       // ones run brighter/wider so their pool reads the same as before.
-      const keepLight = this.lit.length % 2 === 0;
-      const baseI = keepLight ? lightI * 1.35 : 0;
+      const keepLight = this.lit.length % 4 === 0;
+      const baseI = keepLight ? lightI * 1.6 : 0;
       if (keepLight) {
-        const light = new THREE.PointLight(lightColor, baseI, 9, 2);
+        const light = new THREE.PointLight(lightColor, baseI, 11, 2);
         light.position.y = 2.35;
         g.add(light);
         this.lit.push({ orb, light, phase: Math.random() * Math.PI * 2, baseE: 1.6, baseI });

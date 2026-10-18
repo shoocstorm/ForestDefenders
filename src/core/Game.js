@@ -6,7 +6,7 @@ import { PostFX } from './PostFX.js';
 import { Arena } from '../world/Arena.js';
 import { fallingParticleMaterial } from '../materials/DriftParticles.js';
 import { Player } from '../entities/Player.js';
-import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES, GRAPHICS } from '../config/Constants.js';
+import { CAMERA, AIM_ASSIST, BUFFS, ECONOMY, CAMPAIGN, BIOMES, GRAPHICS, FRAME_CAP } from '../config/Constants.js';
 import { Juice } from '../systems/Juice.js';
 import { GameManager } from '../systems/GameManager.js';
 import { EnemyManager } from '../systems/EnemyManager.js';
@@ -48,6 +48,11 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Every renderer.render() re-draws the shadow map when autoUpdate is on —
+    // and a post-stack frame renders the scene more than once (bloom-layer pass
+    // + beauty pass). PostFX flags needsUpdate exactly once per frame, right
+    // before the beauty render (see PostFX.render).
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.7; // [from 1.5] 1.5 blew out highlights and
     // washed the cel shading flat; 0.7 restores contrast and mood.
@@ -292,8 +297,21 @@ export class Game {
     this._rafHandle = requestAnimationFrame(this._raf);
   }
 
-  _raf() {
+  _raf(now) {
     this._rafHandle = requestAnimationFrame(this._raf);
+    // Frame cap: on 120/144Hz displays rAF fires 2× as often as the 60Hz fixed
+    // sim, so every other frame re-rendered the full post stack for an
+    // identical simulation state — doubling GPU load (and fan noise) for
+    // nothing. Skip the whole frame until a cap interval has elapsed; the
+    // remainder carry keeps the average on target at odd refresh rates.
+    const minMs = 1000 / FRAME_CAP;
+    if (this._lastFrameAt !== undefined) {
+      const elapsed = now - this._lastFrameAt;
+      if (elapsed < minMs - 1) return;
+      this._lastFrameAt = now - (elapsed % minMs);
+    } else {
+      this._lastFrameAt = now;
+    }
     const realDt = Math.min(this.clock.getDelta(), 0.1);
 
     this.juice.update(realDt);

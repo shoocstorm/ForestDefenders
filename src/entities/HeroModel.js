@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER } from '../config/Constants.js';
-import { toon, addOutlines } from '../materials/CelMaterial.js';
+import { toon, addOutlines, mergeCelParts } from '../materials/CelMaterial.js';
 import { damp, lerp, clamp } from '../util/MathUtils.js';
 
 // Hero "Squirrel" — fully PROCEDURAL pivot rig (no GLB). Built from cel-shaded
@@ -417,6 +417,12 @@ export class HeroModel {
       root.add(arc);
     }
 
+    // Collapse each pivot's plain parts into one vertex-coloured mesh (~60
+    // separate part meshes + outlines → a fraction). The gun subtree is rebuilt
+    // per weapon, and the gem/bolt are animated directly, so they stay as-is.
+    gem.userData.noMerge = true;
+    bolt.userData.noMerge = true;
+    mergeCelParts(root, { skipRoots: [gun] });
     addOutlines(root, { thickness: 0.014 });
 
     // Cache rest transforms we overlay animation onto.

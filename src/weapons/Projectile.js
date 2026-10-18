@@ -23,7 +23,7 @@ import { ARENA, BLOOM_LAYER, CAMERA } from '../config/Constants.js';
 // shots, and (3) a comet trail rendered as ONE global Points cloud — a fixed
 // 64-bullet × 16-point ring buffer, zero allocation per frame, one draw call.
 // Trails linger ~0.3s after a bullet dies, so kills/expiry leave a fading streak.
-const LIGHT_BUDGET = 6;
+const LIGHT_BUDGET = 3; // every scene light costs every lit fragment — keep it tight
 const MAX_BULLETS = 64;   // trail-slice capacity (bullets past this skip trails)
 const TRAIL_LEN = 16;     // points per bullet's trail
 const TRAIL_FADE = 1 / 0.3; // alpha decay rate → ~0.3s visible tail

@@ -10,6 +10,48 @@
 > refine a feature/asset/visual, append to `docs/ENHANCEMENTS.md`. Newest entry on top in
 > both. This running history is how future agents avoid re-deriving past decisions.
 
+## Fans spin up during play: shadow map drawn twice per frame, 37 scene lights, uncapped 120Hz render
+
+**Date:** 2026-10-18 · **Files:** `src/core/Game.js`, `src/core/PostFX.js`, `src/config/Constants.js`,
+`src/entities/Animal.js`, `src/vfx/VFX.js`, `src/weapons/Projectile.js`, `src/world/Lanterns.js`
+(+ draw-call merging logged in `docs/ENHANCEMENTS.md`)
+
+**Symptom:** Laptop fans run flat-out while playing on the default High preset.
+
+**Root causes (measured with a headless probe — renderer.info per frame, light/mesh census):**
+1. **Shadow map rendered on every `renderer.render()`** (`shadowMap.autoUpdate` default).
+   A post-stack frame renders the scene twice (bloom-layer pass + beauty), so the
+   4096² PCF-soft shadow pass ran 2×/frame — and the bloom pass's copy was garbage
+   anyway: `WebGLShadowMap` culls casters by the **main camera's layers**, which the
+   bloom pass has narrowed to `BLOOM_LAYER`.
+2. **37 PointLights in the scene** (20 lit + 17 pooled at intensity 0). three.js
+   compiles every scene light into every lit shader and loops all of them per
+   fragment — intensity 0 is not free (same lesson as the bullet-light entry below).
+3. **No frame cap**: on 120Hz ProMotion displays rAF ran the full post stack twice
+   per 60Hz sim step, re-rendering identical states.
+4. High preset at pixel ratio 2 (+4× MSAA), bloom-layer render at full retina res.
+
+**Fix:**
+- `renderer.shadowMap.autoUpdate = false`; `PostFX.render()` sets `needsUpdate = true`
+  exactly once, immediately before the **beauty** render (final composer's
+  RenderPass, or the direct render when post is off). GTAO's later scene render
+  reuses that map.
+- Lights 37 → 22: VFX flash pool fixed at 4 (steals the flash nearest expiry instead
+  of growing — growth also changed the light count → recompile), bullet light budget
+  6 → 3, lantern lights every 4th pylon (brighter/wider), each rescue animal uses ONE
+  light for both its caged beacon glow and its post-release danger glow (never on
+  at the same time).
+- `FRAME_CAP = 60` in `Game._raf` (skips whole frames, remainder-carry keeps odd
+  refresh rates on average).
+- High preset pixel ratio 2 → 1.5; bloom composer pixel ratio capped at 1.
+
+**Gotcha to remember:** With a multi-render post stack, treat the shadow map as a
+per-frame resource you update **once, on the beauty pass** — never leave
+`autoUpdate` on, and never let a layer-restricted pass (bloom/selective) trigger
+the update, because shadow casters are culled by the *viewing* camera's layers.
+And count scene lights after adding any "pool": every pooled light is a per-
+fragment loop iteration in every lit material, lit or not.
+
 ## Two GPU-cost bugs: per-bullet PointLights that grow the scene's light count, and a stale pixel ratio on the bloom composer
 
 **Date:** 2026-09-06 · **Files:** `src/weapons/Projectile.js`, `src/systems/PlantManager.js`,

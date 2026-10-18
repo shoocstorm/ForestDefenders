@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+const FLASH_LIGHTS = 4; // muzzle/hit/explosion flash lights (fixed pool)
 import { BLOOM_LAYER } from '../config/Constants.js';
 
 // Lightweight particle/light VFX manager. Each effect is a short-lived additive
@@ -43,7 +45,11 @@ export class VFX {
     // shader of every lit material — at the Machine Gun's ~12.5 shots/s that meant a
     // recompile storm and the firing freeze. Now we only toggle intensity. The pool
     // grows on demand (when more flashes overlap than exist) and then stays put.
-    for (let i = 0; i < 8; i++) this._spawnPoolLight();
+    // FIXED size: three.js evaluates every scene light (even at intensity 0)
+    // for every lit fragment, so idle pool slots aren't free. When all are
+    // busy, the flash nearest expiry is stolen instead of growing the pool
+    // (growth would also change the light count → full shader recompile).
+    for (let i = 0; i < FLASH_LIGHTS; i++) this._spawnPoolLight();
   }
 
   _spawnPoolLight() {
@@ -178,7 +184,7 @@ export class VFX {
   _flash(pos, color, intensity, range) {
     let e = null;
     for (const l of this.lights) if (l.life <= 0) { e = l; break; }
-    if (!e) e = this._spawnPoolLight();
+    if (!e) for (const l of this.lights) if (!e || l.life < e.life) e = l;
     e.light.color.setHex(color);
     e.light.distance = range;
     e.light.position.copy(pos);

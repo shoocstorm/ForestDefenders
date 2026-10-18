@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { celifyGLTF } from '../materials/CelMaterial.js';
 import { loadBundle as _loadBundle } from './ModelBundle.js';
@@ -50,6 +52,57 @@ const _cfg = {
   treeBush:    { outline: false },
 };
 
+// Static props whose GLB is split into many small meshes (a crate is 21 parts
+// for ~500 triangles). Every part is its own draw call in the beauty pass, the
+// shadow pass and — once celified — its outline, multiplied by every clone in
+// the arena. Merge them into one mesh per source material at load time.
+// Only for assets nothing addresses by mesh, and whose clips (if any) are never
+// played — the arena's static landmark uses (boss mushroom, ancient trees).
+// Merging re-bases wind sway's mesh-local Y mask to the model root, which for
+// the ancient tree means "trunk still, everything above 1 unit sways".
+// Meshes named in a model's `outlineSkip` stay separate so they keep that skip.
+const _merge = new Set(['rock', 'mossStump', 'pathStone', 'crystalRock', 'supplyCrate', 'stoneArch',
+  'ancientTree', 'bossShroom']);
+
+const _mtx = new THREE.Matrix4();
+function mergeStatic(root, keepNames = []) {
+  const meshes = [];
+  const keep = (m) => keepNames.some((k) => m.name.toLowerCase().includes(k));
+  root.traverse((o) => { if (o.isMesh && !keep(o)) meshes.push(o); });
+  if (meshes.length < 2 || meshes.some((m) => m.isSkinnedMesh || Array.isArray(m.material))) return;
+  root.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map(); // material uuid + attribute set → { material, geos }
+  for (const m of meshes) {
+    let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    _mtx.multiplyMatrices(toRoot, m.matrixWorld);
+    g.applyMatrix4(_mtx);
+    // A mirrored node transform flips triangle winding — swap two corners back.
+    if (_mtx.determinant() < 0) {
+      for (const attr of Object.values(g.attributes)) {
+        const a = attr.array, n = attr.itemSize;
+        for (let t = 0; t < attr.count; t += 3) for (let k = 0; k < n; k++) {
+          const i1 = (t + 1) * n + k, i2 = (t + 2) * n + k;
+          const tmp = a[i1]; a[i1] = a[i2]; a[i2] = tmp;
+        }
+      }
+    }
+    for (const name of Object.keys(g.attributes)) {
+      if (!['position', 'normal', 'uv', 'color'].includes(name)) g.deleteAttribute(name);
+    }
+    g.morphAttributes = {};
+    const key = m.material.uuid + '|' + Object.keys(g.attributes).sort().join(',');
+    if (!buckets.has(key)) buckets.set(key, { material: m.material, geos: [] });
+    buckets.get(key).geos.push(g);
+  }
+  for (const m of meshes) m.removeFromParent();
+  for (const { material, geos } of buckets.values()) {
+    const merged = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (merged) root.add(new THREE.Mesh(merged, material));
+  }
+}
+
 export async function loadAll(onProgress) {
   const bundle = await _loadBundle();
   const keys = [...bundle.keys()];
@@ -57,6 +110,7 @@ export async function loadAll(onProgress) {
   await Promise.all(keys.map((key) => new Promise((resolve, reject) => {
     _loader.parse(bundle.get(key), '', (gltf) => {
       const cfg = _cfg[key] || {};
+      if (_merge.has(key)) mergeStatic(gltf.scene, cfg.outlineSkip);
       const { box } = celifyGLTF(gltf.scene, cfg);
       _cache.set(key, { scene: gltf.scene, animations: gltf.animations || [], box });
       done++;

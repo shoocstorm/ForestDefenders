@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, addOutlines } from '../../materials/CelMaterial.js';
+import { toon, addOutlines, mergeCelParts } from '../../materials/CelMaterial.js';
 
 // Procedural mutant-mushroom enemies (ENEMIES_SPEC §9: enemies are built from
 // primitives, only the hero uses an authored GLB). Fire & Earth shrooms ship as
@@ -230,6 +230,9 @@ export function buildProceduralMushroom(type) {
 
   // Outline opaque parts (tiny features were pre-flagged to skip). Shares geometry,
   // children of the animated nodes so outlines track the rig.
+  // Collapse each node's plain parts into one vertex-coloured mesh (≈45 draw
+  // calls + outlines per enemy → a handful). Glow/hit-flash parts stay separate.
+  mergeCelParts(group, { skipMats: emissives });
   addOutlines(group, { thickness: 0.012 });
 
   // Normalize: feet to y=0, scale to gameplay height. (Built front-on +Z already.)
