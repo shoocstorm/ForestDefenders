@@ -94,7 +94,10 @@ export const WEAPONS = {
     damage: 5, cooldown: 0.08, recoil: 0.16, automatic: true,
     projectileSpeed: 48, projectileRadius: 0.12, spread: 0.05, bullet: 'tracer',
     color: 0xffe07a, muzzleColor: 0xffb13a,
-    ammo: { type: 'overheat', perShot: 5, cool: 38, lockout: 2 },
+    // Tolerant overheat: 3 heat/shot ≈ 33 shots (~2.7s) of sustained fire from
+    // cold (was 20 / ~1.6s); cools at 55/s once released (full vent ≈ 1.8s);
+    // a 1.25s lockout if you do max it out (was 2s).
+    ammo: { type: 'overheat', perShot: 3, cool: 55, lockout: 1.25 },
   },
   BOOM: {
     id: 'BOOM', name: 'Boomstick', element: 'FIRE', mode: 'explosive',
