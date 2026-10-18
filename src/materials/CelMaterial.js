@@ -220,7 +220,7 @@ export function addOutlines(root, { color = 0x14140e, thickness = 0.018, skip = 
 //  - opts.scaleBias: scale all geometry (applied to root by caller usually).
 export function celifyGLTF(root, opts = {}) {
   const { outline = true, wind = null, rim = { color: 0xffffff, power: 3.4, intensity: 0.5 },
-          emissiveBoost = 1.0 } = opts;
+          emissiveBoost = 1.0, selfLit = 0 } = opts;
   const meshes = [];
   const emissives = [];
   const box = new THREE.Box3();
@@ -232,9 +232,13 @@ export function celifyGLTF(root, opts = {}) {
     const src = o.material;
     const color = src.color ? src.color.clone() : new THREE.Color(0xffffff);
     const map = src.map || null;
-    const emMap = src.emissiveMap || null;
+    // selfLit: a textured model with no glow of its own gets its albedo map as
+    // a faint emissive floor, so faces turned away from the sun don't sink into
+    // the cel shadow band (same idea as the hero/enemy emissive floor).
+    const lit = selfLit > 0 && !src.emissiveMap && map;
+    const emMap = lit ? map : (src.emissiveMap || null);
     const emColor = src.emissive ? src.emissive.clone() : new THREE.Color(0x000000);
-    const emInt = (src.emissiveIntensity ?? 0) * emissiveBoost;
+    const emInt = lit ? selfLit : (src.emissiveIntensity ?? 0) * emissiveBoost;
 
     const mat = painted({
       color, map,

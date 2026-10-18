@@ -51,13 +51,15 @@ const _cfg = {
   treeDead:    { outline: false },
   treeBush:    { outline: false },
   // Hunter's cabin homestead — static environment, outline-free like other props.
-  huntersCabin:   { outline: false, rim: { intensity: 0.3 } },
-  cabinStumpAxe:  { outline: false, rim: { intensity: 0.3 } },
-  cabinFirewood:  { outline: false, rim: { intensity: 0.3 } },
-  cabinJerryCan:  { outline: false, rim: { intensity: 0.3 } },
-  cabinCrate:     { outline: false, rim: { intensity: 0.3 } },
-  cabinBarrels:   { outline: false, rim: { intensity: 0.3 } },
-  cabinGenerator: { outline: false, rim: { intensity: 0.3 } },
+  // selfLit: the door faces the runway (+X) while every biome's sun comes from
+  // −X, so the front wall sat fully in the cel shadow band.
+  huntersCabin:   { outline: false, rim: { intensity: 0.3 }, selfLit: 0.42 },
+  cabinStumpAxe:  { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
+  cabinFirewood:  { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
+  cabinJerryCan:  { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
+  cabinCrate:     { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
+  cabinBarrels:   { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
+  cabinGenerator: { outline: false, rim: { intensity: 0.3 }, selfLit: 0.3 },
 };
 
 // Static props whose GLB is split into many small meshes (a crate is 21 parts
