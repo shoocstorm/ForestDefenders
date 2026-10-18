@@ -50,6 +50,14 @@ const _cfg = {
   treeBirch:   { outline: false },
   treeDead:    { outline: false },
   treeBush:    { outline: false },
+  // Hunter's cabin homestead — static environment, outline-free like other props.
+  huntersCabin:   { outline: false, rim: { intensity: 0.3 } },
+  cabinStumpAxe:  { outline: false, rim: { intensity: 0.3 } },
+  cabinFirewood:  { outline: false, rim: { intensity: 0.3 } },
+  cabinJerryCan:  { outline: false, rim: { intensity: 0.3 } },
+  cabinCrate:     { outline: false, rim: { intensity: 0.3 } },
+  cabinBarrels:   { outline: false, rim: { intensity: 0.3 } },
+  cabinGenerator: { outline: false, rim: { intensity: 0.3 } },
 };
 
 // Static props whose GLB is split into many small meshes (a crate is 21 parts

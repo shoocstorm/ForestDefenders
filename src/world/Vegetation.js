@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ARENA, VEGETATION } from '../config/Constants.js';
 import { painted, untrackWind } from '../materials/CelMaterial.js';
 import { clone } from '../core/Assets.js';
+import { HuntersCabin } from './HuntersCabin.js';
 
 // Arena forest built from sculpted GLB trees (Hyper3D Rodin, see package-models.js).
 // Replaces the old procedural primitive trees (icosahedron blobs, umbrella discs,
@@ -140,7 +141,8 @@ export class Vegetation {
     const count = 60; // Reduced tree density for clearer arena visibility
     for (const [name] of TABLE) this._species[name] = this._prepSpecies(name);
     const totalW = TABLE.reduce((s, [, w]) => s + w, 0);
-    const platformClear = (x, z) => Math.abs(x) < 8 && z > -7 && z < 12;
+    // Also keep the hunter's cabin yard clear (+3 for the wide canopies).
+    const platformClear = (x, z) => (Math.abs(x) < 8 && z > -7 && z < 12) || HuntersCabin.blocks(x, z, 3);
 
     for (let i = 0; i < count; i++) {
       let r = this.rng() * totalW, specName = TABLE[0][0];

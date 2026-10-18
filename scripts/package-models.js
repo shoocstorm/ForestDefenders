@@ -40,6 +40,16 @@ const MODELS = [
   { key: 'treeBirch',    file: 'trees/birch_tree.glb' },
   { key: 'treeDead',     file: 'trees/dead_tree.glb' },
   { key: 'treeBush',     file: 'vegetation/leafy_bush.glb' },
+  // Hunter's cabin homestead (HuntersCabin.js) — converted from the Hyper3D
+  // USDZ scene in buildings/hunters_cabin/source/ (Z-up → Y-up, 1024px cabin /
+  // 512px prop textures as JPEG).
+  { key: 'huntersCabin',     file: 'buildings/hunters_cabin/hunters_cabin.glb' },
+  { key: 'cabinStumpAxe',    file: 'buildings/hunters_cabin/chopping_stump_axe.glb' },
+  { key: 'cabinFirewood',    file: 'buildings/hunters_cabin/firewood_logs.glb' },
+  { key: 'cabinJerryCan',    file: 'buildings/hunters_cabin/jerry_can.glb' },
+  { key: 'cabinCrate',       file: 'buildings/hunters_cabin/wooden_crate.glb' },
+  { key: 'cabinBarrels',     file: 'buildings/hunters_cabin/oil_barrels.glb' },
+  { key: 'cabinGenerator',   file: 'buildings/hunters_cabin/generator.glb' },
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });

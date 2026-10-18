@@ -480,6 +480,11 @@ export const BLOOM_LAYER = 1; // objects on this layer glow (boss, rings, lanter
 
 export const VEGETATION = { SEED: 1337 }; // deterministic procedural variation
 
+// Hunter's cabin homestead (HuntersCabin.js): west side of the spawn end, door
+// turned to face the runway (+X). `clear` is the keep-out radius trees and
+// scatter props reroll away from, so nothing spawns inside the yard.
+export const HUNTERS_CABIN = { pos: [-17, -46], rotY: Math.PI / 2, height: 4.6, clear: 6.5 };
+
 // ===========================================================================
 // M6 — Biome palettes (LEVELS_SPEC §2 + SEASONS_SPEC), 3-level campaign. Each
 // biome drives the Arena re-skin: sky/fog/lights, ground/path/trees, water,

@@ -16,6 +16,7 @@ import { FloatingRunestones } from './FloatingRunestones.js';
 import { PrismaticSpires } from './PrismaticSpires.js';
 import { SpiritWells } from './SpiritWells.js';
 import { WillOWisps } from './WillOWisps.js';
+import { HuntersCabin } from './HuntersCabin.js';
 
 // --- Deterministic value noise for the ground's vertex-painted variation ---
 function _hash2(x, z) {
@@ -154,6 +155,7 @@ export class Arena {
     this.wells?.dispose();
     this.wisps?.dispose();
     this.vegetation = null;
+    this.cabin = null;
     this.water = null;
     this.lanterns = null;
     this.sky = null;
@@ -287,6 +289,8 @@ export class Arena {
     for (const c of this.vegetation.colliders) this.colliders.push(c);
     this.water = new Water(this.scene, ...b.water.pos, b.water.radius, b.water);
     this.lanterns = new Lanterns(this.scene, b.lantern);
+    this.cabin = new HuntersCabin(this.scene);
+    for (const c of this.cabin.colliders) this.colliders.push(c);
     this.sky = new SkyDecor(this.scene, b);
     this.skyDome = new SkyDome(this.scene, b, b.skyDecor?.bodyPos);
     this.mist = new GroundFog(this.scene, b.mist);
@@ -756,7 +760,7 @@ export class Arena {
 
     // Keep-clear zone around the central platform (dais + steps + corner pylons +
     // flanking trees) so random scatter doesn't pile props onto/beside it.
-    const platformClear = (x, z) => Math.abs(x) < 11 && z > -6.5 && z < 10.5;
+    const platformClear = (x, z) => (Math.abs(x) < 11 && z > -6.5 && z < 10.5) || HuntersCabin.blocks(x, z, 1);
 
     // Sci-fi scatter: procedural tech debris + a few crystal/crate clones that
     // already read industrial. Big props push cylinder colliders like before.

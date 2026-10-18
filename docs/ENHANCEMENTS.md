@@ -11,6 +11,33 @@ performance gotchas, which live in [`AGENTS.md`](../AGENTS.md).
 
 <!-- Append newest entry to the top. -->
 
+## Hunter's cabin homestead (converted from a Hyper3D USDZ scene)
+
+**Date:** 2026-10-18 · **Files:** `src/world/HuntersCabin.js` (new),
+`assets/models/buildings/hunters_cabin/*.glb` (new), `assets/models/buildings/hunters_cabin/source/`
+(renamed sources), `scripts/usda2glb.py` (new), `scripts/package-models.js`, `src/core/Assets.js`,
+`src/config/Constants.js`, `src/world/Arena.js`, `src/world/Vegetation.js`
+
+- The `assets/models/hunter's cabin/` drop was 7 auto-segmented USDZ objects named
+  `object_0000…0006`. Identified by rendering each (the embedded semantic labels
+  were partly wrong — "flashlight" is a generator, "suitcase" a jerry can, "bench"
+  split firewood, "wooden box" a chopping stump with an axe) and renamed:
+  `hunters_cabin`, `chopping_stump_axe`, `firewood_logs`, `jerry_can`,
+  `wooden_crate`, `oil_barrels`, `generator`. Sources moved (git mv) to
+  `buildings/hunters_cabin/source/<name>.usdz` + `<name>.transform.json`.
+- `scripts/usda2glb.py` converts each `sim_ready.usda` (Z-up, triangulated,
+  face-varying normals/UVs) to a Y-up GLB with de-duplicated vertices and a JPEG
+  texture (1024px cabin, 512px props): `python3 -I scripts/usda2glb.py <usda>
+  <png> <out.glb> <texSize> <workdir>`. ~0.4–1 MB per GLB; bundle +~4 MB.
+- The source `transform_matrix.json` placements are image-reconstruction space
+  with no shared ground plane, so `HuntersCabin.js` lays the yard out itself:
+  cabin 4.6 tall (door ≈ 1.3 vs the 1.05-tall hero), stump + axe and firewood by
+  the door, crate + jerry can on one side, generator on the other, barrels on
+  the back corner — all feet-on-ground. Placed via `HUNTERS_CABIN` at (-17, -46)
+  west of the spawn-end runway, door turned to face it. Cylinder colliders for
+  the cabin footprint and the bigger props; trees and scatter props reroll out
+  of its `clear` radius.
+
 ## Lighting / bloom fine-tune — arena-wide glow cleanup
 
 **Date:** 2026-10-18 · **Files:** `src/world/Arena.js`, `src/world/Lanterns.js`,
