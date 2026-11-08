@@ -6,7 +6,8 @@
   "description": "Forest Defender: Mushroom Mayhem — Three.js re-implementation",
   "scripts": {
     "dev": "bun scripts/package-models.js src && bun scripts/package-icons.js && bun ./index.html",
-    "build": "rm -rf dist && bun scripts/package-models.js src && bun scripts/package-icons.js && bun build ./src/main.js --outdir dist --minify --asset-naming=[name].[ext] && sed 's|src=\"./src/main.js\"|src=\"./main.js\"|' index.html > dist/index.html && rm -f src/models.bundle src/icons.bundle"
+    "build": "rm -rf dist && bun scripts/package-models.js src && bun scripts/package-icons.js && bun build ./src/main.js --outdir dist --minify --asset-naming=[name].[ext] && sed 's|src=\"./src/main.js\"|src=\"./main.js\"|' index.html > dist/index.html && rm -f src/models.bundle src/icons.bundle",
+    "deploy": "firebase deploy"
   },
   "dependencies": {
     "firebase": "^12.15.0",

@@ -1,4 +1,5 @@
 import './ui/Theme.js'; // injects the shared sci-fi UI skin (must load first)
+import './firebase.js'; // Firebase app + Analytics (non-blocking)
 import { Game } from './core/Game.js';
 import { loadAll } from './core/Assets.js';
 import { CAMPAIGN } from './config/Constants.js';

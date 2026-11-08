@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "forest-defenders",
     "public": "dist",
     "ignore": [
       "firebase.json",
